@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings | X REDRO</title>
+  <link rel="stylesheet" href="css/settings.css">
+    <link rel="stylesheet" href="css/alert.css" />
+</head>
+<body>
+<script>
+  (function () {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      document.body.dataset.theme = savedTheme;
+    }
+  })();
+</script>
+  
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <img src="assets/logo.png" class="logo" />
+
+    <!-- Desktop links -->
+    <div class="nav-links desktop-only">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="orders.html">Orders</a>
+      <a href="indexF.html">Form Builder</a>
+      <a class="active" href="settings.html">Settings</a>
+    </div>
+    <div class="desktop-only">
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <svg id="themeIconD" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+    <!-- Burger button -->
+    <button class="burger" aria-label="Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="orders.html">Orders</a>
+    <a href="indexF.html">Form Builder</a>
+    <a class="active" href="settings.html">Settings</a>
+
+   <div class="mobile-theme-toggle"> 
+     <span>Theme</span>
+     <div class="theme-toggle" onclick="toggleTheme()">
+      <svg id="themeIconM" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+     </div>
+   </div>
+  </div>
+</nav>  
+<main class="settings">
+
+  <h1>Settings</h1>
+
+  <!-- PROFILE -->
+  <section>
+    <h2>Profile</h2>
+
+    <label>Username</label>
+    <input id="username" disabled>
+
+    <label>Email</label>
+    <input id="email" disabled>
+    </br>
+    <div class="inline-edit">
+      <button class="danger" id="userUpdate"><svg xmlns="http://www.w3.org/2000/svg" height="10px" viewBox="0 -960 960 960" width="10px" ><path fill="currentColor" d="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z"/></svg> Edit</button>
+      <button id="updateAccount">Update account</button>
+    </div>
+  </section>
+
+  <!-- SUBSCRIPTION -->
+  <section>
+    <h2>Subscription</h2>
+
+    <div class="subscription-row">
+      <span>7 days</span>
+      <button onclick="buySubscription(7)">Buy Subscription</button>
+    </div>
+
+    <div class="subscription-row">
+      <span>30 days</span>
+      <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+  </section>
+  
+  <!-- SYSTEM STATUS -->
+  <section>
+    <h2>System Status</h2>
+
+    <div class="status-row">
+      <span>Orders system</span>
+      <span class="status ok">● Active</span>
+    </div>
+
+    <div class="status-row">
+      <span>Form availability</span>
+      <span class="status ok">● Live</span>
+    </div>
+
+    <div class="status-row">
+      <span>Dashboard</span>
+      <span class="status ok">● Operational</span>
+    </div>
+  </section>
+
+  <!-- ACCOUNT -->
+  <section>
+    <h2>Account</h2>
+    
+    <button class="danger" onclick="logout()">Log out</button>
+    <button onclick="openPasswordModal()">Change Password</button>
+  </section>
+
+</main>
+
+<div id="toast-container"></div>
+
+<!-- PASSWORD MODAL -->
+<div id="passwordModal" class="modal hidden" onclick="closePasswordModal(event)">
+  <div class="modal-content" onclick="event.stopPropagation()" style="text-align: left">
+    <h3>Change Password</h3>
+
+    <label>Current password</label>
+    <input id="currentPassword" type="password" placeholder="••••••••">
+
+    <label>New password</label>
+    <input id="newPassword" type="password" placeholder="••••••••">
+    </br>
+    <div class="actions">
+      <button class="danger" onclick="closePasswordModal()">Cancel</button>
+      <button onclick="changePassword()">Update</button>
+    </div>
+  </div>
+</div>
+
+<div id="subscriptionModal" class="modal hidden">
+  <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
+  <div class="subscribe">
+  <h2>Your subscription has expired</h2>
+  <div class="subscribe-row">
+      <span>7 days</span>
+      <button onclick="buySubscription(7)">Buy Subscription</button>
+    </div>
+
+    <div class="subscribe-row">
+      <span>30 days</span>
+      <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+   </div>     
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+<script src="js/settings.js"></script>
+<script src="js/themeF.js"></script>
+<script src="js/alert.js"></script>
+<script>
+  const burger = document.querySelector('.burger');
+  const mobileMenu = document.querySelector('.mobile-menu');
+
+  burger.addEventListener('click', () => {
+    mobileMenu.classList.toggle('open');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email Verification | X redro</title>
+  <link rel="stylesheet" href="css/alert.css">
+  <link rel="stylesheet" href="css/stylesE.css">
+</head>
+<body>
+
+<div class="page">
+  <div class="card">
+    
+    <!-- IMAGE HEADING -->
+    <img src="assets/logo.png" class="logo" alt="X REDRO">
+    
+    <h2>Verification email sent.</h2>
+    <label>Please check your inbox.</label>
+
+    <button class="primary-btn hidden" id="resendVerifyBtn" onclick="resendVerification()"> Resend verification email </button>
+
+    <div id="resendCountdown"></div>
+    
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+<script src="js/alert.js"></script>
+<script src="js/authE.js" defer></script>
+</body>
+</html>

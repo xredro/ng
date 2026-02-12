@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign up</title>
+  <link rel="stylesheet" href="css/stylesE.css">
+    <link rel="stylesheet" href="css/alert.css" />
+</head>
+<body>
+
+<div class="page">
+  <div class="card">
+
+    <img src="assets/logo.png" class="logo" alt="X REDRO">
+
+    <h2>Sign up</h2>
+
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="signupEmail">
+    </div>
+
+    <div class="field">
+      <label>Password</label>
+      <div class="input-wrapper">
+        <input type="password" id="signupPassword">
+        <div class="toggle-password" onclick="togglePassword('signupPassword', this)">
+          <img src="assets/eye.svg">
+        </div>
+      </div>
+    </div>
+
+    <button class="primary-btn" onclick="signup()">Create account</button>
+
+    <div class="divider"><a href="login.html"><span>Already created an account</span></a></div>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+<script src="js/authE.js"></script>
+<script src="js/alert.js"></script>
+</body>
+</html>

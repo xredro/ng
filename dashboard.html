@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard | X REDRO</title>
+  <link rel="stylesheet" href="css/alert.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+<script>
+  (function () {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      document.body.dataset.theme = savedTheme;
+    }
+  })();
+</script>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <img src="assets/logo.png" class="logo" />
+
+    <!-- Desktop links -->
+    <div class="nav-links desktop-only">
+      <a class="active" href="dashboard.html">Dashboard</a>
+      <a href="orders.html">Orders</a>
+      <a href="indexF.html">Form Builder</a>
+      <a href="settings.html">Settings</a>
+    </div>
+    <div class="desktop-only">
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <svg id="themeIconD" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+    <!-- Burger button -->
+    <button class="burger" aria-label="Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu">
+    <a class="active" href="dashboard.html">Dashboard</a>
+    <a href="orders.html">Orders</a>
+    <a href="indexF.html">Form Builder</a>
+    <a href="settings.html">Settings</a>
+
+   <div class="mobile-theme-toggle"> 
+     <span>Theme</span>
+     <div class="theme-toggle" onclick="toggleTheme()">
+      <svg id="themeIconM" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+     </div>
+   </div>
+  </div>
+</nav>
+
+<main class="dashboard">
+
+  <h1>Dashboard</h1>
+
+  <section id="stats" class="stats">
+    <div>
+      <span id="totalOrders">0</span>
+      <p>Total Orders</p>
+    </div>
+    <div>
+      <span id="deliveredOrders">0</span>
+      <p>Delivered Orders</p>
+    </div>
+    <div>
+      <span id="paidOrders">0</span>
+      <p>Paid Orders</p>
+    </div>
+    <div>
+      <span id="pendingOrders">0</span>
+      <p>Pending Payments</p>
+    </div>
+  </section>
+  
+  <!-- ATTENTION STATUS -->
+  <section id="attentionStatus" class="attention-status hidden">
+    <span id="attentionIcon">⚠</span>
+    <p id="attentionText">0 orders awaiting action</p>
+  </section>
+
+  <section id="subscription" class="subscription">
+    <span>Subscription Plans</span>
+    <strong id="planDays">0 days</strong>
+    <span>Expires in</span>
+    <strong id="expiresIn">0 days</strong>
+    <!-- <button id="buySubscription">Buy Subscription</button> -->
+  </section>
+  
+  <!-- FORM STATUS -->
+  <section class="form-status">
+    <div>
+      <p class="label">Order Form Link</p>
+      <strong>Always live</strong>
+    </div>
+    <button class="copybtn" onclick="copyFormLink()">Copy link</button>
+  </section>
+
+  <section id="latestOrders">
+    <h2>Last 3 Orders</h2>
+    <div id="ordersList"></div>
+  </section>
+  
+  <!-- SYSTEM STATUS -->
+  <section class="system-status">
+    <span class="dot"></span>
+    <p id="systemText">All services operational</p>
+  </section>
+
+</main>
+
+<div id="subscriptionModal" class="modal hidden">
+  <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
+  <div class="subscribe">
+  <h2>Your subscription has expired</h2>
+  <div class="subscribe-row">
+      <span>7 days</span>
+      <button onclick="buySubscription(7)">Buy Subscription</button>
+    </div>
+
+    <div class="subscribe-row">
+      <span>30 days</span>
+      <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+   </div>     
+</div>
+
+<div id="toast-container"></div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+<script src="js/alert.js"></script>
+<script src="js/themeF.js"></script>
+<script src="js/dashboard.js"></script>
+<script>
+  const burger = document.querySelector('.burger');
+  const mobileMenu = document.querySelector('.mobile-menu');
+
+  burger.addEventListener('click', () => {
+    mobileMenu.classList.toggle('open');
+  });
+</script>
+  
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Form Builder | X REDRO</title>
+  <link rel="stylesheet" href="css/form.shared.css">
+  <link rel="stylesheet" href="css/stylesF.css" />
+  <link rel="stylesheet" href="css/alert.css" />
+</head>
+<body>
+<script>
+  (function () {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      document.body.dataset.theme = savedTheme;
+    }
+  })();
+</script>
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <img src="assets/logo.png" class="logo" />
+
+    <!-- Desktop links -->
+    <div class="nav-links desktop-only">
+      <a href="dashboard.html">Dashboard</a>
+      <a href="orders.html">Orders</a>
+      <a class="active" href="indexF.html">Form Builder</a>
+      <a href="settings.html">Settings</a>
+    </div>
+    <div class="desktop-only">
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <svg id="themeIconD" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+
+    <!-- Burger button -->
+    <button class="burger" aria-label="Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu">
+    <a href="dashboard.html">Dashboard</a>
+    <a href="orders.html">Orders</a>
+    <a class="active" href="indexF.html">Form Builder</a>
+    <a href="settings.html">Settings</a>
+
+   <div class="mobile-theme-toggle"> 
+     <span>Theme</span>
+     <div class="theme-toggle" onclick="toggleTheme()">
+      <svg id="themeIconM" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+     </div>
+   </div>
+  </div>
+</nav>
+<!-- MAIN -->
+<main class="container">
+
+  <div class="page-header">
+    <h1>Form Builder</h1>
+
+    <div class="actions">
+      <input id="formLinkInput" readonly>
+      <button onclick="copyFormLink()">Copy link</button>
+      <button type="button" onclick="openPreview(event)">Preview Form</button>
+    </div>
+  </div>
+
+  <!-- TITLE -->
+  <h3>Title</h3>
+  <section class="card">
+    
+    <div class="row">
+      <div>
+        <p>Heading</p>
+        <input id="titleInput" placeholder="My Business Name" oninput="formTitle = this.value">
+      </div>
+      <div>
+        <p>sub Heading</p>
+        <input id="subtitleInput" placeholder="Select your order" oninput="formSubtitle = this.value">
+      </div>
+    </div>
+  </section>
+
+  <!-- INPUT FIELDS -->
+  <div class="section-header">
+    <h3 style="display: inline-block; margin-right: 10px;">Input Fields</h3>
+    <button class="add-btn" id="addFieldBtn" onclick="toggleAddMenu(this)" style="display: inline-block">+</button>
+  </div>
+  <section class="inputCard">
+    <div id="fields" class="fields"></div>
+  </section>
+
+  <button class="save" onclick="saveForm()">Save Form</button>
+
+</main>
+
+<!-- ADD MENU -->
+<div id="addMenu" class="add-menu hidden">
+  <div onclick="addField('text')">Text Input</div><hr>
+  <div onclick="addField('number')">Number Input</div><hr>
+  <div onclick="addField('textarea')">Text Area</div><hr>
+  <div onclick="addField('dropdown')">Drop-down Menu</div><hr>
+  <div onclick="addField('product')">Product Listing</div>
+</div>
+
+<div id="previewOverlay" class="overlay hidden">
+  <div class="overlay-content">
+
+    <!-- Close button OUTSIDE preview theme -->
+    <span class="close" onclick="closePreview()">×</span>
+
+    <!-- Theme-isolated preview -->
+    <div class="preview-theme">
+      <div class="preview-card">
+
+        <!-- This is where JS injects the form -->
+        <div id="previewForm"></div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<div id="subscriptionModal" class="modal hidden">
+  <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
+  <div class="subscribe">
+  <h2>Your subscription has expired</h2>
+  <div class="subscribe-row">
+      <span>7 days</span>
+      <button onclick="buySubscription(7)">Buy Subscription</button>
+    </div>
+
+    <div class="subscribe-row">
+      <span>30 days</span>
+      <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+   </div>     
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+<script src="appwrite.js"></script>
+<script src="js/themeF.js"></script>
+<script src="js/builderF.js"></script>
+<script src="js/alert.js"></script>
+<script>
+  const burger = document.querySelector('.burger');
+  const mobileMenu = document.querySelector('.mobile-menu');
+
+  burger.addEventListener('click', () => {
+    mobileMenu.classList.toggle('open');
+  });
+</script>
+</script>
+</body>
+</html>
