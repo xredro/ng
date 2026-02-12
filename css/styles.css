@@ -1,0 +1,298 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f8f9f8;
+  --text: #111111;
+  --muted: #6b6b6b;
+  --border: #e5e5e5;
+  --accent: #9cff00;
+  --accent-dark: #7ed800;
+  --dark: #0f1110;
+  --radius: 20px;
+}
+
+/* RESET */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* NAV */
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: #fff;
+}
+
+.nav-inner {
+  max-width: 1200px;
+  margin: auto;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  height: 38px;
+}
+
+.nav-actions a {
+  text-decoration: none;
+  font-size: 14px;
+  margin-left: 20px;
+  font-weight: 500;
+}
+
+.login {
+  color: var(--text);
+}
+
+.signup {
+  background: var(--accent);
+  color: #111;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  transition: 0.3s ease;
+}
+
+.signup:hover {
+  background: var(--accent-dark);
+}
+
+/* CONTAINER */
+.container {
+  max-width: 1000px;
+  margin: auto;
+  padding: 80px 20px;
+}
+
+.containerPadding {
+  padding-left: 32px;
+}
+/* HERO */
+.hero {
+  position: relative;
+  text-align: center;
+  padding: 100px 20px 80px 20px;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background:
+    linear-gradient(
+      135deg,
+      rgba(156,255,0,0.1),
+      rgba(0,0,0,0.05)
+    ),
+    url("../assets/deliveryMan.jpg");
+
+  background-size: cover;
+  background-position: center;
+  opacity: 0.25;
+  z-index: 0;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hero h1 {
+  font-size: 44px;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.hero-sub {
+  max-width: 650px;
+  margin: auto;
+  color: var(--muted);
+  margin-bottom: 30px;
+}
+
+/* Primary Button */
+.btn-primary {
+  display: inline-block;
+  background: var(--dark);
+  color: #fff;
+  padding: 14px 28px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: 0.3s ease;
+  box-shadow: 0 0 0 rgba(156,255,0,0);
+}
+
+.btn-primary:hover {
+  background: #000;
+  box-shadow: 0 0 20px rgba(156,255,0,0.4);
+}
+
+/* Accent Underline Highlight */
+.highlight {
+  color: var(--accent);
+}
+
+/* SECTIONS */
+.section {
+  border-top: 1px solid var(--border);
+}
+
+.section.alt {
+  background: var(--surface);
+}
+
+/* Dark Support Section */
+.section.dark {
+  background: var(--dark);
+  color: #fff;
+  border-top: none;
+}
+
+.section.dark .muted {
+  color: #aaa;
+}
+
+.section.dark .btn-primary {
+  background: var(--accent);
+  color: #111;
+}
+
+.section.dark .btn-primary:hover {
+  background: var(--accent-dark);
+}
+
+/* GRID */
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.center {
+  text-align: center;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 14px;
+}
+
+/* CARD */
+.card {
+  background: #fff;
+  padding: 30px;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+  border: 1px solid var(--border);
+  transition: 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 10px 35px rgba(156,255,0,0.15);
+}
+
+/* LIST */
+.feature-list {
+  margin-top: 20px;
+}
+
+.feature-list li {
+  margin-bottom: 10px;
+  padding-left: 18px;
+  position: relative;
+}
+
+.feature-list li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  position: absolute;
+  left: 0;
+  top: 8px;
+}
+
+/* PRICING */
+.pricing {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin: 40px 0;
+}
+
+.price-card {
+  background: #fff;
+  padding: 30px 40px;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+  border: 1px solid var(--border);
+  transition: 0.3s ease;
+}
+
+.price-card.featured {
+  border: 2px solid var(--accent);
+  box-shadow: 0 10px 40px rgba(156,255,0,0.2);
+}
+
+.price {
+  font-size: 30px;
+  font-weight: 800;
+  margin-top: 10px;
+  color: var(--accent);
+}
+
+/* FAQ */
+.faq-item {
+  margin-top: 20px;
+}
+
+.faq-item h4 {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+/* FOOTER */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 30px 20px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+  background: #fff;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+
+  .hero h1 {
+    font-size: 32px;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .pricing {
+    flex-direction: column;
+    align-items: center;
+  }
+
+}

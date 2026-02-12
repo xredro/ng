@@ -1,0 +1,396 @@
+/* ================================
+   DESIGN TOKENS (AUTH PAGES)
+================================ */
+
+:root {
+  /* Brand */
+  --accent: #9cff00;
+  --accent-soft: rgba(156, 255, 0, 0.12);
+
+  /* Backgrounds */
+  --bg-page: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-input: #fafafa;
+  --surface-elevated: #ffffff;
+  
+  /* Text */
+  --text-primary: #111111;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* Borders & Lines */
+  --border-default: #e5e7eb;
+  --border-focus: #9cff00;
+
+  /* Radius */
+  --radius-card: 16px;
+  --radius-input: 10px;
+  --radius-btn: 12px;
+  --radius-lg: 18px;
+  
+  --card: #ffffff;
+  --cards: #fefefe;
+  
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 32px;
+  
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 40px;
+  
+  /* Shadows */
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.06);
+
+  /* Typography */
+  --font-base: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ================================
+   RESET
+================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: var(--font-base);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-page);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+/* ================================
+   LAYOUT
+================================ */
+
+.page {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px;
+}
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: 32px 26px 34px;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+/* ================================
+   HEADER
+================================ */
+
+.logo {
+  height: 40px;
+  margin-bottom: 22px;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 22px;
+  letter-spacing: -0.01em;
+}
+
+/* ================================
+   FORM FIELDS
+================================ */
+
+.field {
+  text-align: left;
+  margin-bottom: 18px;
+}
+
+.field label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+input {
+  width: 100%;
+  height: 46px;
+  padding: 0 42px 0 14px;
+  font-size: 14px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border-default);
+  background: var(--bg-input);
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ================================
+   PASSWORD TOGGLE
+================================ */
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.toggle-password img {
+  width: 18px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.toggle-password:hover img {
+  opacity: 0.8;
+}
+
+/* ================================
+   PRIMARY BUTTON
+================================ */
+
+.primary-btn {
+  width: 100%;
+  height: 46px;
+  margin-top: 10px;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(156, 255, 0, 0.25);
+}
+
+.primary-btn:active {
+  transform: translateY(0);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ================================
+   DIVIDER
+================================ */
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 22px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-default);
+}
+
+.divider span {
+  margin: 0 12px;
+}
+
+/* ================================
+   LINKS
+================================ */
+
+.link {
+  margin-top: 18px;
+  font-size: 12.5px;
+}
+
+.link a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link a:hover {
+  text-decoration: underline;
+}
+
+.subscribe {
+  display: inline;
+  background: var(--bg);
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-2xl);
+  font-size: 14px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+  border-radius: var(--radius-lg);
+}
+  
+.subscribe button {
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface-elevated);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+
+.subscribe h2 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+/* ---------- MODAL ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  width: 300px;
+  text-align: center;
+}
+
+.modal-content h3 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+.modal-content button {
+  margin: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface-elevated);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* ================================
+   MOBILE OPTIMIZATION – AUTH PAGES
+================================ */
+@media (max-width: 600px) {
+
+  body {
+    align-items: flex-start;
+  }
+
+  /* ---------- PAGE ---------- */
+  .page {
+    padding: 32px 16px;
+  }
+
+  /* ---------- CARD ---------- */
+  .card {
+    padding: 28px 22px 30px;
+    border-radius: var(--radius-lg);
+  }
+
+  h2 {
+    font-size: 20px;
+    margin-bottom: 18px;
+  }
+
+  /* ---------- FORM ---------- */
+  .field {
+    margin-bottom: 20px;
+  }
+
+  .field label {
+    font-size: 13px;
+  }
+
+  input {
+    height: 52px;
+    font-size: 15px;
+    padding-left: 16px;
+  }
+
+  /* ---------- PASSWORD TOGGLE ---------- */
+  .toggle-password {
+    right: 14px;
+  }
+
+  .toggle-password img {
+    width: 20px;
+  }
+
+  /* ---------- PRIMARY BUTTON ---------- */
+  .primary-btn {
+    height: 52px;
+    font-size: 16px;
+    margin-top: 14px;
+  }
+
+  /* ---------- DIVIDER ---------- */
+  .divider {
+    margin: 26px 0;
+  }
+
+  /* ---------- LINKS ---------- */
+  .link {
+    font-size: 13px;
+    margin-top: 20px;
+  }
+
+  /* ---------- MODAL ---------- */
+  .modal-content {
+    width: calc(100% - 32px);
+    padding: var(--space-4);
+  }
+
+  .modal-content button {
+    width: 100%;
+    margin: var(--space-2) 0;
+  }
+}

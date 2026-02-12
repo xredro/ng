@@ -1,0 +1,504 @@
+/* =========================
+   THEME VARIABLES
+========================= */
+:root {
+  --bg: #fafafa;
+  --card: #ffffff;
+  --cards: #fefefe;
+  --text: #111111;
+  --text-secondary: #6b6b6b;
+  --muted: #777777;
+  --border: #e5e5e5;
+  --surface: #fafafa;
+  --surface-elevated: #ffffff;
+  
+  /* Brand */
+  --accent: #96d97f;
+  --accent-soft: rgba(150, 217, 127, 0.12);
+  
+  /* Borders & Lines */
+  --border-default: #e5e7eb;
+  --border-focus: #9cff00;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 32px;
+  
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 40px;
+
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.06);
+}
+
+[data-theme="dark"] {
+  --bg: #111111;
+  --surface: #141414;
+  --surface-elevated: #1a1a1a;
+  --card: #1c1c1c;
+  --cards: #222222;
+  --text: #ffffff;
+  --text-secondary: #b5b5b5;
+  --muted: #9a9a9a;
+  --border: #333333;
+}
+
+/* =========================
+   GLOBAL
+========================= */
+* {
+  box-sizing: border-box;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+input,
+button {
+  font-family: inherit;
+}
+
+input {
+  width: 100%;
+  padding: 14px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+  font-size: 14px;
+  background: var(--card);
+  color: var(--text);
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* =========================
+   NAV
+========================= */
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.nav-inner {
+  max-width: 1200px;
+  margin: auto;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  height: 40px;
+}
+
+.nav-links {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.nav-links a {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.nav-links a.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-toggle {
+  cursor: pointer;
+}
+
+.theme-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--icon-color);
+  transition: color 0.2s ease;
+}
+
+[data-theme="light"] {
+  --icon-color: #555;
+}
+
+[data-theme="dark"] {
+  --icon-color: #96d97f; /* premium green sun glow */
+}
+
+.theme-toggle:hover .theme-icon {
+  transform: rotate(12deg);
+}
+
+/* =========================
+   SETTINGS LAYOUT
+========================= */
+.settings {
+  max-width: 1100px;
+  margin: var(--space-5) auto;
+  padding: 0 var(--space-3);
+}
+
+.settings h1 {
+  font-size: 32px;
+  margin-bottom: var(--space-4);
+}
+
+/* =========================
+   SECTIONS
+========================= */
+section {
+  margin-top: var(--space-5);
+  background: var(--card);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+section h2 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+/* =========================
+   FORM ELEMENTS
+========================= */
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-1);
+}
+
+.inline-edit {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* =========================
+   BUTTONS
+========================= */
+button {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--cards);
+  box-shadow: var(--shadow-sm);
+  margin-right: var(--space-3);
+}
+
+.primary {
+  background: #000;
+  color: #fff;
+  margin-top: var(--space-3);
+}
+
+.danger {
+  background: #eee;
+  color: #000;
+}
+
+/* =========================
+   SUBSCRIPTION
+========================= */
+.subscription-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* =========================
+   STATUS
+========================= */
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.status.ok {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Exipred Subscription */
+.subscribe {
+  display: inline;
+  background: var(--cards);
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-2xl);
+  font-size: 14px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+  border-radius: var(--radius-lg);
+}
+  
+.subscribe button {
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--card);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+
+.subscribe h2 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+.subscribe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* =========================
+   MODAL
+========================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  width: 300px;
+  text-align: center;
+}
+
+.modal-content p {
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.modal-content p {
+  font-size: 14px;
+  margin-bottom: var(--space-3);
+}
+
+.modal-content .actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 768px) {
+  .subscription-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* =========================
+   MOBILE OPTIMIZATION – SETTINGS
+========================= */
+@media (max-width: 600px) {
+
+  body {
+    font-size: 15px;
+  }
+
+  /* ---------- LAYOUT ---------- */
+  .settings {
+    margin: var(--space-4) auto;
+    padding: 0 var(--space-4);
+  }
+
+  .settings h1 {
+    font-size: 26px;
+    margin-bottom: var(--space-3);
+  }
+
+  /* ---------- SECTIONS ---------- */
+  section {
+    padding: var(--space-4);
+    margin-top: var(--space-4);
+  }
+
+  section h2 {
+    font-size: 17px;
+  }
+
+  /* ---------- INPUTS ---------- */
+  input {
+    padding: 16px 20px;
+    font-size: 15px;
+  }
+
+  label {
+    font-size: 14px;
+  }
+
+  .inline-edit {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* ---------- BUTTONS ---------- */
+  button {
+    width: 100%;
+    padding: 14px 18px;
+    margin-right: 0;
+    margin-top: var(--space-2);
+    font-size: 14px;
+  }
+
+  .primary {
+    margin-top: var(--space-4);
+  }
+
+  /* ---------- SUBSCRIPTION ---------- */
+  .subscription-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  /* ---------- STATUS ---------- */
+  .status-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  /* ---------- MODAL ---------- */
+  .modal-content {
+    width: calc(100% - 32px);
+    padding: var(--space-4);
+  }
+
+  .modal-content .actions {
+    flex-direction: column;
+  }
+
+  .modal-content .actions button {
+    width: 100%;
+  }
+}
+
+/* ---------- BURGER MENU ---------- */
+
+.burger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 18px;
+  border-radius: 0px;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  background: none;
+  box-shadow: 0 2px 4px rgba(0,0,0,0);
+  margin-right: 0;
+  width: fit-content;
+}
+
+.burger span {
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+}
+
+/* ---------- MOBILE MENU ---------- */
+
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.mobile-menu a {
+  text-decoration: none;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.mobile-menu a.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mobile-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+}
+
+/* ---------- RESPONSIVE NAV ---------- */
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .burger {
+    display: flex;
+  }
+
+  .mobile-menu.open {
+    display: flex;
+  }
+}
+

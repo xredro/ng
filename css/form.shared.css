@@ -1,0 +1,356 @@
+/* =========================
+   THEME VARIABLES
+========================= */
+
+.preview-theme {
+  --bg: #f2f2f2;
+  --card: #ffffff;
+  --text: #111111;
+  --muted: #8a8a8a;
+  --border: #e6e6e6;
+
+  --accent: #e8f7d8;
+  --accent-text: #3a8f00;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --space-1: 8px;
+  --space-2: 14px;
+  --space-3: 20px;
+  --space-4: 32px;
+  --space-5: 44px;
+
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.06);
+
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* =========================
+   MAIN CARD
+========================= */
+
+.preview-card {
+  background: var(--card);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  box-shadow: var(--shadow-lg);
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.business-name {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  font-size: 15px;
+  color: var(--muted);
+  margin-bottom: var(--space-5);
+}
+
+/* =========================
+   FORM GRID (FIELDS)
+========================= */
+
+.form-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-4);
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+  line-height: 1.5;
+}
+
+/* =========================
+   INPUTS
+========================= */
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  border: none;
+  background: #f6f6f6;
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+  font-size: 16px;
+  outline: none;
+}
+
+.form-group textarea {
+  min-height: 160px;
+  resize: none;
+  line-height: 1.7;
+  padding-top: var(--space-3);
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(58,143,0,0.15);
+}
+
+/* =========================
+   PRODUCT SECTION
+========================= */
+
+.product-section {
+  margin-top: var(--space-5);
+}
+
+.product-section h3 {
+  font-size: 19px;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+/* =========================
+   PRODUCT GRID (ECOMMERCE)
+========================= */
+
+.product-grid {
+  display: grid;
+
+  /* Minimum 2 products like Jumia */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(240px, 1fr)
+  );
+
+  gap: var(--space-4);
+  max-height: 560px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+/* =========================
+   PRODUCT CARD
+========================= */
+
+.product-card {
+  background: #f7f7f7;
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+}
+
+.product-image {
+  width: 100%;
+  height: 220px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #eaeaea;
+  margin-bottom: var(--space-3);
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.product-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.product-price {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+}
+
+/* =========================
+   QTY CONTROL
+========================= */
+
+.product-qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.product-qty button {
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.product-qty span {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.product-qty button:hover {
+  background: #dff1c9;
+}
+
+.product-qty button:active {
+  transform: scale(0.95);
+}
+
+.product-qty button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* =========================
+   TOTAL BOX
+========================= */
+
+.total-box {
+  background: #f6f6f6;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: var(--space-5) 0;
+  font-size: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.total-box div {
+  display: flex;
+  justify-content: space-between;
+}
+
+.total-box div:last-child {
+  font-weight: 700;
+}
+
+/* =========================
+   PAYMENT PROOF
+========================= */
+
+.payment-proof {
+  margin-bottom: var(--space-5);
+}
+
+.payment-proof label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+  display: block;
+}
+
+.upload-proof {
+  display: block;
+  cursor: pointer;
+}
+
+.upload-ui {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: #f6f6f6;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--muted);
+  transition: all 0.2s ease;
+}
+
+.upload-proof:hover .upload-ui {
+  background: #ececec;
+}
+
+.upload-proof input {
+  display: none;
+}
+
+.upload-proof input:focus + .upload-ui {
+  outline: 2px solid var(--accent);
+}
+
+/* =========================
+   SEND BUTTON
+========================= */
+
+.send-btn {
+  width: 100%;
+  background: #111;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 18px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send-btn:hover {
+  opacity: 0.92;
+}
+
+.send-btn:active {
+  transform: scale(0.97);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =========================
+   FOOTER
+========================= */
+
+.powered {
+  text-align: center;
+  font-size: 12px;
+  color: #aaa;
+  margin-top: var(--space-3);
+}
+
+/* =========================
+   SCROLLBAR
+========================= */
+
+.product-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.product-grid::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.12);
+  border-radius: 3px;
+}
+
+.product-grid::-webkit-scrollbar-track {
+  background: transparent;
+}

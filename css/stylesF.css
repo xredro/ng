@@ -1,0 +1,730 @@
+/* =========================
+   THEME VARIABLES
+========================= */
+:root {
+  --bg: #fafafa;
+  --card: #ffffff;
+  --cards: #fefefe;
+  --text: #111111;
+  --text-secondary: #6b6b6b;
+  --muted: #777777;
+  --border: #e5e5e5;
+  --surface: #fafafa;
+  --surface-elevated: #ffffff;
+  
+  /* Brand */
+  --accent: #9cff00;
+  --accent-soft: rgba(156, 255, 0, 0.12);
+  
+  /* Borders & Lines */
+  --border-default: #e5e7eb;
+  --border-focus: #9cff00;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 32px;
+  
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 40px;
+
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.07);
+}
+
+[data-theme="dark"] {
+  --bg: #111111;
+  --surface: #141414;
+  --surface-elevated: #1a1a1a;
+  --card: #1c1c1c;
+  --cards: #222222;
+  --text: #ffffff;
+  --text-secondary: #b5b5b5;
+  --muted: #9a9a9a;
+  --border: #333333;
+}
+
+/* =========================
+   GLOBAL
+========================= */
+* {
+  box-sizing: border-box;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* =========================
+   NAVIGATION
+========================= */
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.nav-inner {
+  max-width: 1200px;
+  margin: auto;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  height: 40px;
+}
+
+.nav-links {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.nav-links a {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.nav-links a.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-toggle {
+  cursor: pointer;
+}
+
+.theme-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--icon-color);
+  transition: color 0.2s ease;
+}
+
+[data-theme="light"] {
+  --icon-color: #555;
+}
+
+[data-theme="dark"] {
+  --icon-color: #00ff97; /* premium sun glow */
+}
+
+.theme-toggle:hover .theme-icon {
+  transform: rotate(12deg);
+}
+
+/* =========================
+   LAYOUT
+========================= */
+.container {
+  max-width: 1100px;
+  margin: var(--space-5) auto;
+  padding: 0 var(--space-3);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.page-header h1 {
+  font-size: 32px;
+  margin-bottom: var(--space-lg);
+}
+
+/* =========================
+   ACTION BUTTONS
+========================= */
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.actions input {
+  width: 45%;
+  padding: 14px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: var(--card);
+  color: var(--text);
+}
+
+.actions button {
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--card);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* =========================
+   SECTIONS & CARDS
+========================= */
+.card {
+  background: var(--card);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin-top: var(--space-3);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.inputCard {
+  background: none;
+  padding: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  margin-top: var(--space-3);
+}
+
+
+/* =========================
+   FORM ROWS
+========================= */
+.row {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.row > div {
+  flex: 1;
+}
+
+.row p {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+
+textarea,
+select {
+  width: 90%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+input {
+  width: 90%;
+  padding: 14px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: var(--card);
+  color: var(--text);
+}
+
+
+/* =========================
+   ADD BUTTON
+========================= */
+.add-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  color: green;
+}
+
+.add-menu {
+  position: absolute;
+  background: var(--text);
+  box-shadow: var(--shadow-sm);
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.add-menu div {
+  margin: 14px;
+  margin-right: 60px;
+}
+
+.add-menu hr {
+  max-width: 80%;
+  border: 1px solid var(--muted);
+  opacity: 0.8;  
+}
+
+
+.hidden {
+  display: none;
+}
+
+/* =========================
+   FIELD CARDS
+========================= */
+.fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.field-card {
+  background: var(--card);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-3);
+  width: fit-content;
+  height: fit-content;
+  min-width: 260px;
+}
+
+.field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.field-label {
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+}
+
+.remove {
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text);
+}
+
+/* =========================
+   DROPDOWN OPTIONS
+========================= */
+.chips {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.chip span {
+  margin-left: 6px;
+  cursor: pointer;
+}
+
+/* =========================
+   PRODUCT BUILDER
+========================= */
+.product-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 100px 20px;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.product-image {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.product-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.upload-btn {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: center;
+}
+
+.add-product {
+  margin-top: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+/* =========================
+   SAVE BUTTON
+========================= */
+.save {
+  margin-top: var(--space-4);
+  padding: 12px 26px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  cursor: pointer;
+}
+
+/* =========================
+   ADD MENU
+========================= */
+.add-menu {
+  position: absolute;
+  z-index: 50;
+  background: var(--text);;
+  color: var(--card);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.add-menu div {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.add-menu hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+/* =========================
+   PREVIEW OVERLAY
+========================= */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay-content {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+/* Exipred Subscription */
+.subscribe {
+  display: inline;
+  background: var(--cards);
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-2xl);
+  font-size: 14px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+  border-radius: var(--radius-lg);
+}
+  
+.subscribe button {
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--card);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+
+.subscribe h2 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+.subscribe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* ---------- MODAL ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.hidden {
+  display: none;
+}
+
+/* ---------- BURGER MENU ---------- */
+
+.burger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.burger span {
+  width: 22px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+}
+
+/* ---------- MOBILE MENU ---------- */
+
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.mobile-menu a {
+  text-decoration: none;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.mobile-menu a.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mobile-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+}
+
+/* ---------- RESPONSIVE NAV ---------- */
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .burger {
+    display: flex;
+  }
+
+  .mobile-menu.open {
+    display: flex;
+  }
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 768px) {
+  .row {
+    flex-direction: column;
+  }
+}
+
+/* =========================
+   MOBILE OPTIMIZATION – BUILDER / DASHBOARD
+========================= */
+@media (max-width: 600px) {
+
+  /* ---------- CONTAINER ---------- */
+  .container {
+    margin: var(--space-4) auto;
+    padding: 0 var(--space-3);
+  }
+
+  /* ---------- HEADER ---------- */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+    margin-bottom: 0;
+  }
+
+  /* ---------- ACTIONS ---------- */
+  .actions {
+    width: 100%;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .actions input {
+    width: 100%;
+    height: 50px;
+    font-size: 15px;
+  }
+
+  .actions button {
+    width: 100%;
+    padding: 14px;
+    font-size: 14px;
+  }
+
+  /* ---------- CARDS ---------- */
+  .card {
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+  }
+
+  /* ---------- FORM ROWS ---------- */
+  .row {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  textarea,
+  select,
+  input {
+    width: 100%;
+    font-size: 15px;
+  }
+
+  textarea {
+    min-height: 90px;
+  }
+
+  /* ---------- FIELD CARDS ---------- */
+  .fields {
+    gap: var(--space-3);
+  }
+
+  .field-card {
+    width: 100%;
+    min-width: unset;
+  }
+
+  /* ---------- PRODUCT BUILDER ---------- */
+  .product-row {
+    grid-template-columns: 64px 1fr;
+    grid-template-rows: auto auto;
+    gap: var(--space-2);
+  }
+
+  .product-image {
+    width: 64px;
+    height: 64px;
+  }
+
+  .product-row input {
+    grid-column: span 2;
+  }
+
+  /* ---------- ADD BUTTON ---------- */
+  .add-btn {
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
+  }
+
+  .add-menu {
+    width: 220px;
+  }
+
+  /* ---------- SAVE BUTTON ---------- */
+  .save {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  /* ---------- OVERLAY ---------- */
+  .overlay-content {
+    width: calc(100% - 32px);
+    max-height: 85vh;
+  }
+
+  /* ---------- SUBSCRIBE ---------- */
+  .subscribe {
+    padding: var(--space-lg);
+  }
+
+  .subscribe-row {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .subscribe button {
+    width: 100%;
+  }
+}

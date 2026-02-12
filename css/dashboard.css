@@ -1,0 +1,630 @@
+/* ===============================
+   DASHBOARD – X REDRO
+   Light + Dark Mode
+   =============================== */
+
+/* ---------- VARIABLES ---------- */
+:root {
+  --bg: #fafafa;
+  --surface: #fafafa;
+  --surface-elevated: #ffffff;
+
+  --text-primary: #111111;
+  --text-secondary: #6b6b6b;
+  --text-muted: #9a9a9a;
+
+  --border: #e6e6e6;
+
+  --accent: #96d97f;
+
+  --dark-surface: #141414;
+
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --radius-pill: 999px;
+
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 40px;
+  
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 32px;
+  
+
+  --shadow-soft: 0 8px 24px rgba(0,0,0,0.05);
+  --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 8px rgba(0,0,0,0.06);
+}
+
+/* ---------- DARK MODE ---------- */
+[data-theme="dark"] {
+  --bg: #0f0f0f;
+  --surface: #141414;
+  --surface-elevated: #1a1a1a;
+  --card: #1c1c1c;
+  --cards: #222222;
+
+  --text-primary: #f2f2f2;
+  --text-secondary: #b5b5b5;
+  --text-muted: #888888;
+
+  --border: #262626;
+}
+
+/* ---------- BASE ---------- */
+* {
+  box-sizing: border-box;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: Inter, system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+/* ---------- NAV ---------- */
+.nav {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.nav-inner {
+  max-width: 1200px;
+  margin: auto;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  height: 40px;
+}
+
+.nav-links {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.nav-links a {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.nav-links a.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.theme-toggle {
+  cursor: pointer;
+}
+
+.theme-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--icon-color);
+  transition: color 0.2s ease;
+}
+
+[data-theme="light"] {
+  --icon-color: #555;
+}
+
+[data-theme="dark"] {
+  --icon-color: #96d97f; /* premium green sun glow */
+}
+
+.theme-toggle:hover .theme-icon {
+  transform: rotate(12deg);
+}
+
+/* ---------- MAIN ---------- */
+.dashboard {
+  max-width: 1100px;
+  margin: var(--space-2xl) auto;
+  padding: 0 var(--space-lg);
+}
+
+.dashboard h1 {
+  font-size: 32px;
+  margin-bottom: var(--space-lg);
+}
+
+/* ---------- STATS ---------- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: none;
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-lg);
+}
+
+.stats div span {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.stats div p {
+  margin-top: var(--space-xs);
+  font-size: 13px;
+  color: #aaaaaa;
+}
+
+/* ---------- SUBSCRIPTION ---------- */
+.subscription {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-2xl);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.subscription strong {
+  color: var(--text-primary);
+}
+
+.subscription button {
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface-elevated);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Exipred Subscription */
+.subscribe {
+  display: inline;
+  background: var(--bg);
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-2xl);
+  font-size: 14px;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+  border-radius: var(--radius-lg);
+}
+  
+.subscribe button {
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: 999px;
+  border: none;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface-elevated);
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+
+.subscribe h2 {
+  font-size: 18px;
+  margin: 0 0 var(--space-3);
+}
+
+.subscribe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* ---------- MODAL ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  width: 300px;
+  text-align: center;
+}
+
+/* ---------- LATEST ORDERS ---------- */
+#latestOrders h2 {
+  font-size: 18px;
+  margin-bottom: var(--space-md);
+}
+
+/* ---------- ORDER CARD ---------- */
+.order-card {
+  background: var(--surface-elevated);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-md);
+}
+
+/* Header */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.order-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Status pill */
+.status {
+  background: var(--text-primary);
+  color: var(--surface);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+/* Meta */
+.order-meta {
+  display: grid;
+  grid-template-columns: 1fr 2fr 120px;
+  gap: var(--space-md);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ---------- SUMMARY LINE ---------- */
+.order-summary-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.summary-item {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.order-date {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ---------- META ---------- */
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.meta button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+/* ATTENTION STATUS */
+.attention-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+  font-size: 14px;
+}
+
+.attention-status span {
+  font-size: 18px;
+}
+
+/* FORM STATUS */
+.form-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-2xl);
+}
+
+.form-status .label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.form-status strong {
+  font-size: 14px;
+}
+
+.form-status .copybtn {
+  background: var(--text-primary);
+  color: var(--surface);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+
+/* SYSTEM STATUS */
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: var(--space-2xl);
+}
+
+.system-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-lg);
+  }
+
+  .order-meta {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  .subscription {
+    flex-wrap: wrap;
+  }
+}
+   
+/* ---------- BURGER MENU ---------- */
+
+.burger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.burger span {
+  width: 22px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+}
+
+/* ---------- MOBILE MENU ---------- */
+
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.mobile-menu a {
+  text-decoration: none;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.mobile-menu a.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.mobile-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-sm);
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+}
+
+/* ---------- RESPONSIVE NAV ---------- */
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .burger {
+    display: flex;
+  }
+
+  .mobile-menu.open {
+    display: flex;
+  }
+}
+
+/* =================================
+   MOBILE OPTIMIZATION – DASHBOARD
+   ================================= */
+
+@media (max-width: 600px) {
+
+  /* ---------- GLOBAL ---------- */
+  body {
+    font-size: 15px;
+  }
+
+  /* ---------- NAV ---------- */
+  .nav-inner {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .nav-links {
+    gap: var(--space-md);
+  }
+
+  .nav-links a {
+    font-size: 15px;
+  }
+
+  /* ---------- MAIN ---------- */
+  .dashboard {
+    margin: var(--space-lg) auto;
+    padding: 0 var(--space-md);
+  }
+
+  .dashboard h1 {
+    font-size: 24px;
+    margin-bottom: var(--space-md);
+  }
+
+  /* ---------- STATS ---------- */
+  .stats {
+    grid-template-columns: 1fr;
+    padding: var(--space-lg);
+  }
+
+  .stats div span {
+    font-size: 28px;
+  }
+
+  .stats div p {
+    font-size: 14px;
+  }
+
+  /* ---------- SUBSCRIPTION ---------- */
+  .subscription {
+    font-size: 15px;
+    gap: var(--space-sm);
+  }
+
+  .subscription button,
+  .subscribe button {
+    font-size: 14px;
+    padding: 12px 18px;
+  }
+
+  .subscribe {
+    padding: var(--space-lg);
+  }
+
+  .subscribe h2 {
+    font-size: 16px;
+  }
+
+  .subscribe-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-sm);
+  }
+
+  /* ---------- ORDER CARD ---------- */
+  .order-card {
+    padding: var(--space-md);
+  }
+
+  .order-name {
+    font-size: 15px;
+  }
+
+  .status {
+    font-size: 13px;
+    padding: 6px 14px;
+  }
+
+  /* ---------- META GRID ---------- */
+  .order-meta {
+    grid-template-columns: 1fr;
+    font-size: 14px;
+  }
+
+  /* ---------- SUMMARY LINE ---------- */
+  .order-summary-line {
+    flex-wrap: wrap;
+    white-space: normal;
+    gap: var(--space-xs);
+  }
+
+  .summary-item {
+    font-size: 14px;
+  }
+
+  .order-date {
+    width: 100%;
+    margin-left: 0;
+    font-size: 13px;
+  }
+
+  /* ---------- FORM STATUS ---------- */
+  .form-status {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+
+  .form-status strong {
+    font-size: 15px;
+  }
+
+  .form-status .copybtn {
+    font-size: 13px;
+    padding: 8px 14px;
+  }
+
+  /* ---------- ATTENTION ---------- */
+  .attention-status {
+    font-size: 15px;
+    padding: var(--space-md);
+  }
+
+  /* ---------- SYSTEM STATUS ---------- */
+  .system-status {
+    font-size: 14px;
+  }
+}
