@@ -176,7 +176,7 @@ async function saveForm() {
 /* ---------------- FORM LINK ---------------- */
 function setupFormLink() {
   const input = document.getElementById("formLinkInput");
-  const link = `${window.location.origin}/X-Redro/form.html?fid=${formId}`;
+  const link = `${window.location.origin}/ng/form.html?fid=${formId}`;
   input.value = link;
 }
 
