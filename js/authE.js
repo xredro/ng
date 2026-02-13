@@ -114,7 +114,7 @@ async function signup() {
     await account.createEmailSession(email, password);  
 
     await account.createVerification(  
-      `${location.origin}/X-Redro/verify.html`  
+      `${location.origin}/ng/verify.html`  
     );  
       
     window.location.href = "verifyInfo.html";  
@@ -135,7 +135,7 @@ async function sendReset() {
   try {  
     await account.createRecovery(  
       email,  
-      `${location.origin}/X-Redro/reset-password.html`  
+      `${location.origin}/ng/reset-password.html`  
     );  
 
     showToast("Password reset link sent", "success");  
@@ -212,7 +212,7 @@ async function resendVerification() {
     btn.classList.add("hidden");
 
     await account.createVerification(
-      `${location.origin}/X-Redro/verify.html`
+      `${location.origin}/ng/verify.html`
     );
 
     showToast("Verification email sent", "success");
