@@ -78,6 +78,7 @@ async function loadUser() {
   const daysLeft = Math.ceil(
     (new Date(sub.expiresAt) - new Date()) / 86400000
   );
+  if (!subRes.documents.length) return;
 
   if (daysLeft <= 0) {
     document.getElementById("subscriptionModal").classList.remove("hidden");
@@ -215,15 +216,36 @@ async function buySubscription(days) {
 UI INTERACTION LOGIC
 ========================= */
 document.getElementById("updateAccount").onclick = async () => {
-  const nameVal = username.value.trim();
+  try {
+    const nameVal = username.value.trim();
+    const emailVal = email.value.trim();
+    const passwordVal = prompt("Enter your password to confirm email change");
 
-  await account.updateName(nameVal);
+    if (!passwordVal) {
+      showToast("Password required to update email", "warning");
+      return;
+    }
 
-  await databases.updateDocument(DB_ID, USERS, profileDocId, {
-    username: nameVal
-  });
+    // Update name
+    await account.updateName(nameVal);
 
-  showToast("Updated", "success");
+    // Update email (ONLY if changed)
+    if (emailVal !== user.email) {
+      await account.updateEmail(emailVal, passwordVal);
+    }
+
+    // Update profile collection
+    await databases.updateDocument(DB_ID, USERS, profileDocId, {
+      username: nameVal,
+      email: emailVal
+    });
+
+    showToast("Account updated successfully", "success");
+
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Update failed", "error");
+  }
 };
 
 document.getElementById("userUpdate").onclick = () => {
