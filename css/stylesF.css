@@ -255,7 +255,6 @@ select {
 input {
   width: 90%;
   padding: 14px 20px;
-  margin-bottom: var(--space-1);
   border-radius: 999px;
   border: 1px solid var(--border);
   font-size: 14px;
@@ -311,14 +310,10 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: flex-start;
 }
 
 .field-card {
   background: var(--card);
-  display: flex;
-  flex-direction: column;
-  position: relative;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   padding: var(--space-3);
@@ -329,8 +324,6 @@ input {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: relative;
-  z-index: 5;
 }
 
 .field-label {
