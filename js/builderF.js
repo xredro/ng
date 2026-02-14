@@ -251,20 +251,24 @@ function updateLabel(id, value) {
   if (f) f.label = value;
 }
 
+/* ---------------- Remove Field---------------- */
 async function removeField(id) {
   const field = fields.find(f => f.id === id);
-  
-  // delete all product images
-  if (field.type === "product") {
+
+  // Remove from state immediately
+  fields = fields.filter(f => f.id !== id);
+  renderFields();
+
+  // Cleanup async after UI update
+  if (field?.type === "product") {
     for (let p of field.products) {
       if (p.imageId) {
-        await storage.deleteFile(PRODUCT_IMAGES_BUCKET, p.imageId);
+        try {
+          await storage.deleteFile(PRODUCT_IMAGES_BUCKET, p.imageId);
+        } catch {}
       }
     }
   }
-  
-  fields = fields.filter(f => f.id !== id);
-  renderFields();
 }
 
 /* ---------------- DROPDOWN ---------------- */
