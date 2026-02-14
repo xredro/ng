@@ -264,19 +264,56 @@ async function removeField(id) {
 function renderDropdown(field) {
   const wrap = document.createElement('div');
 
+  const inputRow = document.createElement('div');
+  inputRow.className = "dropdown-input-row";
+
   const input = document.createElement('input');
-  input.placeholder = "Add option & press Enter";
+  input.placeholder = "Add option";
+  input.type = "text";
+  input.enterKeyHint = "done"; // important for mobile keyboards
+
+  const addBtn = document.createElement('button');
+  addBtn.type = "button";
+  addBtn.innerText = "Add";
+  addBtn.className = "add-option-btn";
 
   const chips = document.createElement('div');
   chips.className = "chips";
 
-  input.onkeydown = e => {
-    if (e.key === "Enter" && input.value.trim()) {
-      field.options.push(input.value.trim());
-      input.value = "";
-      renderFields();
+  function addOption() {
+    const value = input.value.trim();
+    if (!value) return;
+
+    field.options.push(value);
+    input.value = "";
+
+    renderFields();
+
+    // restore focus after re-render
+    setTimeout(() => {
+      const inputs = document.querySelectorAll(".dropdown-input-row input");
+      if (inputs.length) {
+        inputs[inputs.length - 1].focus();
+      }
+    }, 0);
+  }
+
+  // Desktop Enter
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addOption();
     }
-  };
+  });
+
+  // Mobile fallback
+  input.addEventListener("blur", () => {
+    if (input.value.trim()) {
+      addOption();
+    }
+  });
+
+  addBtn.onclick = addOption;
 
   field.options.forEach((opt, i) => {
     const chip = document.createElement('div');
@@ -285,7 +322,12 @@ function renderDropdown(field) {
     chips.appendChild(chip);
   });
 
-  wrap.append(input, chips);
+  inputRow.appendChild(input);
+  inputRow.appendChild(addBtn);
+
+  wrap.appendChild(inputRow);
+  wrap.appendChild(chips);
+
   return wrap;
 }
 
