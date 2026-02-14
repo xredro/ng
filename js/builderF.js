@@ -354,6 +354,7 @@ function savePrice(fieldId, index, value) {
 
 function renderProducts(field) {
   const wrap = document.createElement('div');
+  wrap.style.marginTop = "12px";
 
   field.products.forEach((p, i) => {
     const row = document.createElement('div');
