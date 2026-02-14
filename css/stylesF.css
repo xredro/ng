@@ -311,10 +311,13 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
+  align-items: flex-start;
 }
 
 .field-card {
   background: var(--card);
+  display: inline-flex;
+  flex-direction: column;
   position: relative;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
