@@ -228,7 +228,7 @@ function renderFields() {
           value="${field.label || ""}"
           onchange="updateLabel('${field.id}', this.value)"
         />
-        <span class="remove" onclick="removeField('${field.id}')">×</span>
+        <span class="remove remove-field" data-id="${field.id}">×</span>
       </div>
     `;
 
@@ -238,6 +238,13 @@ function renderFields() {
     container.appendChild(card);
   });
 }
+
+document.addEventListener("click", (e) => {
+  if (e.target.classList.contains("remove-field")) {
+    const id = e.target.dataset.id;
+    removeField(id);
+  }
+});
 
 function updateLabel(id, value) {
   const f = fields.find(f => f.id === id);
@@ -274,7 +281,7 @@ function renderDropdown(field) {
 
   const addBtn = document.createElement('button');
   addBtn.type = "button";
-  addBtn.innerText = "Add";
+  addBtn.innerText = " + Add option";
   addBtn.className = "add-product";
 
   const chips = document.createElement('div');
