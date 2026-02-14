@@ -255,6 +255,7 @@ select {
 input {
   width: 90%;
   padding: 14px 20px;
+  margin-bottom: var(--space-1);
   border-radius: 999px;
   border: 1px solid var(--border);
   font-size: 14px;
@@ -656,7 +657,7 @@ input {
   textarea,
   select,
   input {
-    width: 100%;
+    width: 90%;
     font-size: 15px;
   }
 
