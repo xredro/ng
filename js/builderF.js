@@ -161,6 +161,33 @@ async function requireAuth() {
 
 /* ---------------- SAVE ---------------- */
 async function saveForm() {
+
+  // Find product field
+  const productField = fields.find(f => f.type === "product");
+
+  // No product field added at all
+  if (!productField) {
+    showToast("Add at least one product listing before saving.", "warning");
+    return;
+  }
+
+  // Product field exists but empty
+  if (!productField.products || productField.products.length === 0) {
+    showToast("Add at least one product inside your product listing.", "warning");
+    return;
+  }
+
+  // Optional: block empty product name or price
+  const invalidProduct = productField.products.find(
+    p => !p.name || !p.price
+  );
+
+  if (invalidProduct) {
+    showToast("Each product must have a name and price.", "warning");
+    return;
+  }
+
+  // Saving if valid
   const safeFields = fields.map(f => JSON.stringify(f));
 
   await databases.updateDocument(DB_ID, FORMS, formId, {
