@@ -143,7 +143,8 @@ function getDefaultLabel(type) {
     number: "Number Input",
     textarea: "Text Area",
     dropdown: "Dropdown",
-    product: "Product Listing"
+    product: "Product Listing",
+    additional_fee: "Additional Fee"
   }[type];
 }
 
@@ -261,6 +262,7 @@ function renderFields() {
 
     if (field.type === "dropdown") card.appendChild(renderDropdown(field));
     if (field.type === "product") card.appendChild(renderProducts(field));
+    if (field.type === "additional_fee") card.appendChild(renderAdditionalFees(field));
 
     container.appendChild(card);
   });
@@ -455,6 +457,66 @@ async function uploadProductImage(fieldId, index, input) {
   renderFields();
 }
 
+/*---------------ADDITIONAL PRICING------------*/
+function renderAdditionalFees(field) {
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = "12px";
+
+  if (!Array.isArray(field.fees)) {
+    field.fees = [];
+  }
+
+  field.fees.forEach((f, i) => {
+    const row = document.createElement('div');
+    row.className = "product-row";
+
+    row.innerHTML = `
+      <input placeholder="Fee name" value="${f.name || ""}"
+        onchange="updateAdditionalFee('${field.id}', ${i}, 'name', this.value)">
+
+      <input placeholder="₦ Amount" value="${f.price ? formatWithCommas(f.price) : ""}"
+        oninput="handlePriceInput(this)" 
+        onblur="saveAdditionalFeePrice('${field.id}', ${i}, this.value)">
+
+      <span class="remove" onclick="removeAdditionalFee('${field.id}', ${i})">×</span>
+    `;
+
+    wrap.appendChild(row);
+  });
+
+  const btn = document.createElement('button');
+  btn.className = "add-product";
+  btn.innerText = "+ Add fee";
+  btn.onclick = () => {
+    field.fees.push({ name: "", price: "" });
+    renderFields();
+  };
+
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function updateAdditionalFee(fieldId, index, key, value) {
+  const field = fields.find(f => f.id === fieldId);
+  if (!field) return;
+  field.fees[index][key] = value;
+}
+
+function saveAdditionalFeePrice(fieldId, index, value) {
+  const field = fields.find(f => f.id === fieldId);
+  if (!field) return;
+  field.fees[index].price = stripCommas(value);
+}
+
+function removeAdditionalFee(fieldId, index) {
+  const field = fields.find(f => f.id === fieldId);
+  if (!field) return;
+
+  field.fees.splice(index, 1);
+  renderFields();
+}
+
+/*------------ NORMALIZE PRODUCTS & ADDITIONAL FEE-------------*/
 function normalizeProducts(field) {
   if (!Array.isArray(field.products)) {
     field.products = [];
@@ -466,6 +528,18 @@ function normalizeProducts(field) {
     price: p?.price ?? "",
     imageId: p?.imageId ?? "",
     imageUrl: p?.imageUrl ?? ""
+  }));
+}
+
+function normalizeFee(field){
+  if (!Array.isArray(field.fees)) {
+    field.fees = [];
+    return;
+  }
+
+  field.fees = field.fees.map(f => ({
+    name: f?.name ?? "",
+    price: f?.price ?? ""
   }));
 }
 
@@ -564,6 +638,10 @@ function renderPreviewField(field) {
   if (field.type === "product") {
     html += renderPreviewProducts(field);
   }
+  
+  if (field.type === "additional_fee") {
+    html += renderPreviewAdditionalFees(field);
+  }
 
   html += `</div>`;
   return html;
@@ -581,6 +659,24 @@ function renderPreviewProducts(field) {
         <div class="product-name">${p.name || "Product Name"}</div>
         <div class="product-price">₦${Number(p.price || 0).toLocaleString()}</div>
         <div class="product-qty">Qty: 1</div>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  return html;
+}
+
+function renderPreviewAdditionalFees(field) {
+  let html = `<div class="product-grid">`;
+
+  if (!Array.isArray(field.fees)) return "";
+
+  field.fees.forEach(f => {
+    html += `
+      <div class="product-card">
+        <div class="product-name">${f.name || "Additional Fee"}</div>
+        <div class="product-price">₦${Number(f.price || 0).toLocaleString()}</div>
       </div>
     `;
   });
@@ -635,7 +731,11 @@ async function initBuilder() {
 
           if (field.type === "product") {
             normalizeProducts(field);
-           }
+          }
+          
+          if (field.type === "additional_fee") {
+            normalizeFee(field);
+          }
 
           return field;
         } catch {
