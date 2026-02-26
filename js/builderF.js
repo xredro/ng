@@ -256,7 +256,7 @@ function renderFields() {
           value="${field.label || ""}"
           onchange="updateLabel('${field.id}', this.value)"
         />
-        <span class="remove remove-field" data-id="${field.id}">×</span>
+        <span class="remove" data-id="${field.id}">×</span>
       </div>
     `;
 
