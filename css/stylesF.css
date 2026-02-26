@@ -253,7 +253,7 @@ select {
 }
 
 input {
-  width: 99%;
+  width: 90%;
   padding: 14px 20px;
   margin-bottom: var(--space-1);
   border-radius: 999px;
