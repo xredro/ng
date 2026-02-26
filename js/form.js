@@ -255,6 +255,22 @@ function updateTotal() {
   });
 
   total += additionalFeeAmount;
+  const feeBox = document.getElementById("additionalFeeBox");
+
+  if (feeBox) {
+    if (additionalFeeAmount > 0) {
+      feeBox.innerHTML = `
+        <div>
+          Additional Fee (${additionalFeeLabel})
+          <span>₦${formatNaira(additionalFeeAmount)}</span>
+        </div>
+      `;
+      feeBox.style.display = "block";
+    } else {
+      feeBox.innerHTML = "";
+      feeBox.style.display = "none";
+    }
+  }
 
   document.getElementById("itemCount").innerText = items;
   document.getElementById("totalCost").innerText = `₦${formatNaira(total)}`;
