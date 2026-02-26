@@ -468,7 +468,7 @@ function renderAdditionalFees(field) {
 
   field.fees.forEach((f, i) => {
     const row = document.createElement('div');
-    row.className = "product-row";
+    row.className = "fee-row";
 
     row.innerHTML = `
       <input placeholder="Fee name" value="${f.name || ""}"
