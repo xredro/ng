@@ -238,7 +238,7 @@ function updateTotal() {
   });
   
   // additional fees
-  let additionalFeeLabel = "";
+  let additionalFees = [];
   let additionalFeeAmount = 0;
 
   fields.forEach(field => {
@@ -247,7 +247,12 @@ function updateTotal() {
       if (select && select.value) {
         const selected = field.fees.find(f => f.name === select.value);
         if (selected) {
-          additionalFeeLabel = selected.name;
+          additionalFees.push({
+            label: field.label,        // use FIELD label
+            name: selected.name,       // selected option name
+            price: Number(selected.price || 0)
+          });
+
           additionalFeeAmount += Number(selected.price || 0);
         }
       }
@@ -258,14 +263,17 @@ function updateTotal() {
   const feeBox = document.getElementById("additionalFeeBox");
 
   if (feeBox) {
-    if (additionalFeeAmount > 0) {
-      feeBox.innerHTML = `
+    if (additionalFees.length > 0) {
+
+      feeBox.innerHTML = additionalFees.map(fee => `
         <div>
-          Additional Fee (${additionalFeeLabel})
-          <span>₦${formatNaira(additionalFeeAmount)}</span>
+          ${fee.label}: ${fee.name}
+          <span>₦${formatNaira(fee.price)}</span>
         </div>
-      `;
+      `).join("");
+
       feeBox.style.display = "block";
+
     } else {
       feeBox.innerHTML = "";
       feeBox.style.display = "none";
