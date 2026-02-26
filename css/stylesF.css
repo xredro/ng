@@ -679,7 +679,7 @@ input {
   textarea,
   select,
   input {
-    width: 90%;
+    width: 100%;
     font-size: 15px;
   }
 
