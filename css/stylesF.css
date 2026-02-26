@@ -253,7 +253,7 @@ select {
 }
 
 input {
-  width: 90%;
+  width: 100%;
   padding: 14px 20px;
   margin-bottom: var(--space-1);
   border-radius: 999px;
@@ -404,6 +404,21 @@ input {
   border: none;
   color: var(--muted);
   cursor: pointer;
+}
+
+/* =========================
+   ADDITIONAL FEE ROW
+========================= */
+.fee-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 24px;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.fee-row input {
+  width: 100%;
 }
 
 /* =========================
@@ -650,6 +665,14 @@ input {
   .row {
     flex-direction: column;
     gap: var(--space-3);
+  }
+  
+  .fee-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fee-row .remove {
+    justify-self: end;
   }
 
   textarea,
