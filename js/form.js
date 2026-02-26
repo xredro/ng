@@ -64,6 +64,17 @@ function buildRawFormData() {
           value: selected
         });
       }
+     
+    } else if (field.type === "additional_fee") {
+      const el = document.querySelector(`[data-id="${field.id}"]`);
+      if (el && el.value) {
+        data.push({
+          label: field.label,
+          type: "additional_fee",
+          value: el.value // save ONLY name
+        });
+      }
+      
     } else {
       const el = document.querySelector(`[data-id="${field.id}"]`);
       if (el && el.value.trim()) {
@@ -149,6 +160,19 @@ async function submitOrder() {
       });
     }
   });
+  
+  // add additional fee to total
+  fields.forEach(field => {
+    if (field.type === "additional_fee") {
+      const selected = rawFormData.find(f => f.type === "additional_fee" && f.label === field.label);
+      if (selected) {
+        const feeObj = field.fees.find(f => f.name === selected.value);
+        if (feeObj) {
+          totalAmount += Number(feeObj.price || 0);
+        }
+      }
+    }
+  });
 
   // stringify ONLY for storage
   const formData = rawFormData.map(item =>
@@ -212,6 +236,25 @@ function updateTotal() {
       });
     }
   });
+  
+  // additional fees
+  let additionalFeeLabel = "";
+  let additionalFeeAmount = 0;
+
+  fields.forEach(field => {
+    if (field.type === "additional_fee") {
+      const select = document.querySelector(`[data-id="${field.id}"]`);
+      if (select && select.value) {
+        const selected = field.fees.find(f => f.name === select.value);
+        if (selected) {
+          additionalFeeLabel = selected.name;
+          additionalFeeAmount += Number(selected.price || 0);
+        }
+      }
+    }
+  });
+
+  total += additionalFeeAmount;
 
   document.getElementById("itemCount").innerText = items;
   document.getElementById("totalCost").innerText = `₦${formatNaira(total)}`;
@@ -250,6 +293,15 @@ function renderField(field) {
 
   if (field.type === "product") {
     html += renderProducts(field);
+  }
+  
+  if (field.type === "additional_fee") {
+    html += `
+      <select data-id="${field.id}" onchange="updateTotal()">
+        <option value="">Select option</option>
+        ${field.fees.map(f => `<option value="${f.name}">${f.name}</option>`).join("")}
+      </select>
+    `;
   }
 
   html += `</div>`;
@@ -297,6 +349,7 @@ function renderForm() {
   html += `
       <div class="total-box">
         <div>Items <span id="itemCount">0</span></div>
+        <div id="additionalFeeBox" style="display:none;"></div>
         <div>Total Cost <span id="totalCost">₦0</span></div>
       </div>
 
