@@ -396,7 +396,7 @@ function renderProducts(field) {
     row.innerHTML = `
       <div class="product-image">
         ${p.imageUrl 
-          ? `<img src="${p.imageUrl}" class="product-img"/>`
+          ? `<img src="${p.imageUrl}" class="product-img" loading="lazy" onerror="this.style.display='none';"/>`
           : `<label class="upload-btn">
               Upload image
               <input type="file" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
@@ -446,9 +446,13 @@ async function uploadProductImage(fieldId, index, input) {
     file
   );
 
-  const previewUrl = storage.getFileView(
+  const previewUrl = storage.getFilePreview(
     PRODUCT_IMAGES_BUCKET,
-    uploaded.$id
+    uploaded.$id,
+    300,
+    300,
+    "center",
+    80
   ).href;
 
   product.imageId = uploaded.$id;
@@ -654,7 +658,7 @@ function renderPreviewProducts(field) {
     html += `
       <div class="product-card">
         <div class="product-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}">` : ""}
+          ${p.imageUrl ? `<img src="${p.imageUrl}" loading="lazy">` : ""}
         </div>
         <div class="product-name">${p.name || "Product Name"}</div>
         <div class="product-price">₦${Number(p.price || 0).toLocaleString()}</div>
