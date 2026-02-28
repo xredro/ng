@@ -340,7 +340,7 @@ function renderProducts(field) {
     html += `
       <div class="product-card">
         <div class="product-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}" loading="lazy" onerror="this.style.display='none';"/>` : ""}
+          ${p.imageUrl ? `<img src="${p.imageUrl}" loading="lazy"/>` : ""}
         </div>
         <div class="product-name">${p.name}</div>
         <div class="product-price">₦${formatNaira(Number(p.price || 0))}</div>
