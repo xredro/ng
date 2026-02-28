@@ -30,11 +30,7 @@ const account = new Appwrite.Account(client);
       throw new Error("Empty function response");
     }
 
-    alert("Payload:", req.payload);
-    alert("Env DB:", process.env.DB_ID);
-    alert("Status:", execution.status);
-    alert("Stdout:", execution.logs);
-
+    
     const result = JSON.parse(execution.responseBody);
 
     if (result.success) {
@@ -48,6 +44,11 @@ const account = new Appwrite.Account(client);
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
     alert(err);
+    alert(req.payload);
+    alert(process.env.DB_ID);
+    alert(execution.status);
+    alert(execution.logs);
+    
     window.location.replace("dashboard.html");
   }
 })();
