@@ -181,9 +181,14 @@ async function saveForm() {
   }
 
   // Optional: block empty product name or price
-  const invalidProduct = productField.products.find(
-    p => !p.name || !p.price
-  );
+  let invalidProduct = null;
+
+  for (const field of productFields) {
+    invalidProduct = field.products.find(
+      p => !p.name || !p.price
+    );
+    if (invalidProduct) break;
+  }
 
   if (invalidProduct) {
     showToast("Each product must have a name and price.", "warning");
@@ -294,17 +299,13 @@ function updateLabel(id, value) {
 async function removeField(id) {
   const field = fields.find(f => f.id === id);
 
-  // Remove from state immediately
   fields = fields.filter(f => f.id !== id);
   renderFields();
 
-  // Cleanup async after UI update
   if (field?.type === "product") {
     for (let p of field.products) {
       if (p.imageId) {
-        try {
-          await storage.deleteFile(PRODUCT_IMAGES_BUCKET, p.imageId);
-        } catch {}
+        imagesMarkedForDeletion.push(p.imageId);
       }
     }
   }
