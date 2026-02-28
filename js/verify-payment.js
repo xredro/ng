@@ -26,6 +26,10 @@ const account = new Appwrite.Account(client);
       })
     );
 
+    if (!execution.responseBody) {
+      throw new Error("Empty function response");
+    }
+
     const result = JSON.parse(execution.responseBody);
 
     if (result.success) {
