@@ -1,3 +1,9 @@
+const client = new Appwrite.Client()
+  .setEndpoint("https://nyc.cloud.appwrite.io/v1")
+  .setProject("695981480033c7a4eb0d");
+
+const account = new Appwrite.Account(client);
+
 (async function verifyPaymentFrontend() {
   try {
     const params = new URLSearchParams(window.location.search);
