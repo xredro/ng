@@ -29,6 +29,7 @@ const Query = Appwrite.Query;
 GLOBAL STATE VARIABLES
 ========================= */
 let fields = [];
+let imagesMarkedForDeletion = [];
 let profileDocId = null;
 let user;
 let res;
@@ -187,6 +188,14 @@ async function saveForm() {
     showToast("Each product must have a name and price.", "warning");
     return;
   }
+
+  for (let imageId of imagesMarkedForDeletion) {
+    try {
+      await storage.deleteFile(PRODUCT_IMAGES_BUCKET, imageId);
+    } catch {}
+  }
+
+  imagesMarkedForDeletion = [];
 
   // Saving if valid
   const safeFields = fields.map(f => JSON.stringify(f));
@@ -552,22 +561,18 @@ function updateProduct(fieldId, index, key, value) {
   field.products[index][key] = value;
 }
 
-async function removeProduct(fieldId, index) {
+function removeProduct(fieldId, index) {
   const field = fields.find(f => f.id === fieldId);
   if (!field || !field.products[index]) return;
 
   const product = field.products[index];
 
-  // 🔒 remove synchronously first
+  if (product.imageId) {
+    imagesMarkedForDeletion.push(product.imageId);
+  }
+
   field.products.splice(index, 1);
   renderFields();
-
-  // 🧹 cleanup async later
-  if (product.imageId) {
-    try {
-      await storage.deleteFile(PRODUCT_IMAGES_BUCKET, product.imageId);
-    } catch {}
-  }
 }
 
 /* ---------------- PREVIEW OVERLAY ---------------- */
