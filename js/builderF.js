@@ -396,7 +396,7 @@ function renderProducts(field) {
     row.innerHTML = `
       <div class="product-image">
         ${p.imageUrl 
-          ? `<img src="${p.imageUrl}" class="product-img" loading="lazy" onerror="this.style.display='none';"/>`
+          ? `<img src="${p.imageUrl}" class="product-img"/>`
           : `<label class="upload-btn">
               Upload image
               <input type="file" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
@@ -658,7 +658,7 @@ function renderPreviewProducts(field) {
     html += `
       <div class="product-card">
         <div class="product-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}" loading="lazy">` : ""}
+          ${p.imageUrl ? `<img src="${p.imageUrl}">` : ""}
         </div>
         <div class="product-name">${p.name || "Product Name"}</div>
         <div class="product-price">₦${Number(p.price || 0).toLocaleString()}</div>
