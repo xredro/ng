@@ -457,13 +457,9 @@ async function uploadProductImage(fieldId, index, input) {
     file
   );
 
-  const previewUrl = storage.getFilePreview(
+  const previewUrl = storage.getFileView(
     PRODUCT_IMAGES_BUCKET,
-    uploaded.$id,
-    300,
-    300,
-    "center",
-    80
+    uploaded.$id
   ).href;
 
   product.imageId = uploaded.$id;
