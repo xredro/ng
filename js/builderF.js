@@ -164,17 +164,18 @@ async function requireAuth() {
 /* ---------------- SAVE ---------------- */
 async function saveForm() {
 
-  // Find product field
-  const productField = fields.find(f => f.type === "product");
+  const productFields = fields.filter(f => f.type === "product");
 
-  // No product field added at all
-  if (!productField) {
+  if (productFields.length === 0) {
     showToast("Add at least one product listing before saving.", "warning");
     return;
   }
 
-  // Product field exists but empty
-  if (!productField.products || productField.products.length === 0) {
+  const hasAtLeastOneProduct = productFields.some(
+    f => Array.isArray(f.products) && f.products.length > 0
+  );
+
+  if (!hasAtLeastOneProduct) {
     showToast("Add at least one product inside your product listing.", "warning");
     return;
   }
