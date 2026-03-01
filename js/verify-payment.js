@@ -16,32 +16,30 @@ const account = new Appwrite.Account(client);
       return;
     }
 
-    // Create Functions instance
     const functions = new Appwrite.Functions(client);
 
-     const execution = await functions.createExecution(
-       "69a293520034ade6659e",
-       JSON.stringify({ userId: user.$id, src: src }),
-       true
-     );
+    // Synchronous execution
+    const execution = await functions.createExecution(
+      "69a293520034ade6659e",
+      JSON.stringify({ userId: user.$id, src: src }),
+      { async: false }
+    );
 
-     // The "response" is now directly in execution
-     if (!execution.response) {
-       console.error("Empty function response");
-       alert("Payment verification failed. Try again.");
-       alert("phase1");
-       window.location.replace("dashboard.html");
-       return;
-     }
+    if (!execution.responseBody) {
+      console.error("Empty function response");
+      alert("Payment verification failed. Try again.");
+      window.location.replace("dashboard.html");
+      return;
+    }
 
-     let result;
-     try {
-       result = JSON.parse(execution.response);
-     } catch (e) {
-       console.error("Malformed function response:", execution.response);
-       alert("Payment verification failed. Try again.");
-       window.location.replace("dashboard.html");
-       return;
+    let result;
+    try {
+      result = JSON.parse(execution.responseBody);
+    } catch (e) {
+      console.error("Malformed function response:", execution.responseBody);
+      alert("Payment verification failed. Try again.");
+      window.location.replace("dashboard.html");
+      return;
     }
 
     if (result.success) {
@@ -50,11 +48,10 @@ const account = new Appwrite.Account(client);
       alert(result.message || "Payment verification failed");
       window.location.replace("dashboard.html");
     }
-    
+
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
-    alert(err);
     window.location.replace("dashboard.html");
   }
 })();
