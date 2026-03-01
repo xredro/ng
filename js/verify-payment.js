@@ -54,6 +54,7 @@ const account = new Appwrite.Account(client);
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
+    alert(err);
     window.location.replace("dashboard.html");
   }
 })();
