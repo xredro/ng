@@ -33,6 +33,7 @@ const account = new Appwrite.Account(client);
     if (!execution.responseBody) {
       console.error("Empty function response");
       alert("Payment verification failed. Try again.");
+      alert("phase1);
       window.location.replace("dashboard.html");
       return;
     }
@@ -43,6 +44,8 @@ const account = new Appwrite.Account(client);
     } catch (e) {
       console.error("Malformed function response:", execution.responseBody);
       alert("Payment verification failed. Try again.");
+      alert("phase2");
+      alert(e);
       window.location.replace("dashboard.html");
       return;
     }
@@ -52,13 +55,14 @@ const account = new Appwrite.Account(client);
       window.location.replace("dashboard.html");
     } else {
       alert(result.message || "Payment verification failed");
+      alert("phase3");
+      alert(result.message);
       window.location.replace("dashboard.html");
     }
 
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
-    alert(err);
     window.location.replace("dashboard.html");
   }
 })();
