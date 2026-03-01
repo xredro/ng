@@ -12,12 +12,14 @@ const account = new Appwrite.Account(client);
     const user = await account.get();
     if (!user) {
       alert("You must be logged in.");
+      window.location.replace("login.html");
       return;
     }
 
     // Create Functions instance
     const functions = new Appwrite.Functions(client);
 
+    // Execute Appwrite function
     const execution = await functions.createExecution(
       "69a293520034ade6659e",
       JSON.stringify({
@@ -26,29 +28,35 @@ const account = new Appwrite.Account(client);
       })
     );
 
+    // Check if the function responded
     if (!execution.responseBody) {
-      throw new Error("Empty function response");
+      console.error("Empty function response");
+      alert("Payment verification failed. Try again.");
+      window.location.replace("dashboard.html");
+      return;
     }
 
-    
-    const result = JSON.parse(execution.responseBody);
+    let result;
+    try {
+      result = JSON.parse(execution.responseBody);
+    } catch (e) {
+      console.error("Malformed function response:", execution.responseBody);
+      alert("Payment verification failed. Try again.");
+      window.location.replace("dashboard.html");
+      return;
+    }
 
+    // Handle success/failure
     if (result.success) {
       window.location.replace("dashboard.html");
     } else {
-      alert(result.message);
+      alert(result.message || "Payment verification failed");
       window.location.replace("dashboard.html");
     }
 
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
-    alert(err);
-    alert(req.payload);
-    alert(process.env.DB_ID);
-    alert(execution.status);
-    alert(execution.logs);
-    
     window.location.replace("dashboard.html");
   }
 })();
