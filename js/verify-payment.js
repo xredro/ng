@@ -1,4 +1,3 @@
-
 const client = new Appwrite.Client()
   .setEndpoint("https://nyc.cloud.appwrite.io/v1")
   .setProject("695981480033c7a4eb0d");
@@ -45,7 +44,6 @@ const account = new Appwrite.Account(client);
       console.error("Malformed function response:", execution.responseBody);
       alert("Payment verification failed. Try again.");
       alert("phase2");
-      alert(e);
       window.location.replace("dashboard.html");
       return;
     }
@@ -56,7 +54,6 @@ const account = new Appwrite.Account(client);
     } else {
       alert(result.message || "Payment verification failed");
       alert("phase3");
-      alert(result.message);
       window.location.replace("dashboard.html");
     }
 
