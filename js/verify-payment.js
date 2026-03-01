@@ -18,38 +18,31 @@ const account = new Appwrite.Account(client);
 
     // Create Functions instance
     const functions = new Appwrite.Functions(client);
+    
 
-    // Execute Appwrite function
-    const execution = await functions.createExecution(
-      "69a293520034ade6659e",
-      JSON.stringify({
-        userId: user.$id,
-        src: src
-      })
-    );
+    const execution = await functions.createExecution( "69a293520034ade6659e",
+     JSON.stringify({ userId: user.$id, src: src })
+  );
 
-    // Check if the function responded
-    if (!execution.responseBody) {
-      console.error("Empty function response");
-      alert("Payment verification failed. Try again.");
+    // Wait for function to finish and get result
+    const resultRaw = await functions.getExecution(execution.$id); // fetch execution result
+    if (!resultRaw.response) {
+     console.error("Empty function response");
       alert("phase1");
-      alert(execution.responseBody);
       window.location.replace("dashboard.html");
       return;
     }
 
     let result;
     try {
-      result = JSON.parse(execution.responseBody);
+      result = JSON.parse(resultRaw.response); // parse actual function output
     } catch (e) {
-      console.error("Malformed function response:", execution.responseBody);
-      alert("Payment verification failed. Try again.");
+      console.error("Malformed function response:", resultRaw.response);
       alert("phase2");
-      window.location.replace("dashboard.html");
+      window.location.replace("dashboard.html");     
       return;
     }
-
-    // Handle success/failure
+  
     if (result.success) {
       window.location.replace("dashboard.html");
     } else {
@@ -57,7 +50,7 @@ const account = new Appwrite.Account(client);
       alert("phase3");
       window.location.replace("dashboard.html");
     }
-
+ 
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
