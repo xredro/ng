@@ -33,6 +33,7 @@ const account = new Appwrite.Account(client);
       console.error("Empty function response");
       alert("Payment verification failed. Try again.");
       alert("phase1");
+      alert(execution.responseBody);
       window.location.replace("dashboard.html");
       return;
     }
