@@ -32,7 +32,7 @@ const account = new Appwrite.Account(client);
     if (!execution.responseBody) {
       console.error("Empty function response");
       alert("Payment verification failed. Try again.");
-      alert("phase1);
+      alert("phase1");
       window.location.replace("dashboard.html");
       return;
     }
