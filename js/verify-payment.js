@@ -1,3 +1,4 @@
+
 const client = new Appwrite.Client()
   .setEndpoint("https://nyc.cloud.appwrite.io/v1")
   .setProject("695981480033c7a4eb0d");
