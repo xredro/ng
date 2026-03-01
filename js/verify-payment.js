@@ -18,39 +18,39 @@ const account = new Appwrite.Account(client);
 
     // Create Functions instance
     const functions = new Appwrite.Functions(client);
-    
 
-    const execution = await functions.createExecution( "69a293520034ade6659e",
-     JSON.stringify({ userId: user.$id, src: src })
-  );
+     const execution = await functions.createExecution(
+       "69a293520034ade6659e",
+       JSON.stringify({ userId: user.$id, src: src }),
+       true
+     );
 
-    // Wait for function to finish and get result
-    const resultRaw = await functions.getExecution(execution.$id); // fetch execution result
-    if (!resultRaw.response) {
-     console.error("Empty function response");
-      alert("phase1");
-      window.location.replace("dashboard.html");
-      return;
+     // The "response" is now directly in execution
+     if (!execution.response) {
+       console.error("Empty function response");
+       alert("Payment verification failed. Try again.");
+       alert("phase1");
+       window.location.replace("dashboard.html");
+       return;
+     }
+
+     let result;
+     try {
+       result = JSON.parse(execution.response);
+     } catch (e) {
+       console.error("Malformed function response:", execution.response);
+       alert("Payment verification failed. Try again.");
+       window.location.replace("dashboard.html");
+       return;
     }
 
-    let result;
-    try {
-      result = JSON.parse(resultRaw.response); // parse actual function output
-    } catch (e) {
-      console.error("Malformed function response:", resultRaw.response);
-      alert("phase2");
-      window.location.replace("dashboard.html");     
-      return;
-    }
-  
     if (result.success) {
       window.location.replace("dashboard.html");
     } else {
       alert(result.message || "Payment verification failed");
-      alert("phase3");
       window.location.replace("dashboard.html");
     }
- 
+    
   } catch (err) {
     console.error("Verification error:", err);
     alert("Verification failed. Try again.");
