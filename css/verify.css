@@ -1,0 +1,197 @@
+/* =========================================================
+   PAYMENT VERIFICATION OVERLAY
+   Same visual language as the rest of the app (rounded cards,
+   soft shadow, black/green accent) — sized larger since it
+   hosts a multi-step flow, similar in spirit to the customer
+   -facing checkout overlay.
+========================================================= */
+
+.verify-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+}
+.verify-overlay.hidden { display: none; }
+
+.verify-panel {
+  position: relative;
+  width: 92%;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface-elevated);
+  border-radius: 20px;
+  box-shadow: var(--shadow-soft);
+  padding: 28px 24px 30px;
+}
+
+.verify-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.verify-panel h2 {
+  font-size: 19px;
+  margin: 0 0 8px;
+}
+
+.verify-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.verify-panel .form-group {
+  margin-bottom: 16px;
+  text-align: left;
+}
+.verify-panel .form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+.verify-panel input[type="text"],
+.verify-panel input[type="password"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.verify-btn-primary {
+  width: 100%;
+  border: none;
+  border-radius: 999px;
+  background: #16181A;
+  color: #fff;
+  padding: 13px 0;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+}
+
+.verify-upload {
+  display: block;
+  cursor: pointer;
+}
+.verify-upload-ui {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px dashed var(--border);
+  border-radius: 14px;
+  padding: 30px 16px;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+}
+.verify-upload-ui .upload-icon { font-size: 20px; }
+
+.verify-status-line {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.verify-error {
+  background: #FBE6E6;
+  color: #C0392B;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  margin-bottom: 10px;
+}
+
+.verify-column-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.verify-column-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.verify-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.verify-result-card {
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border-left: 4px solid var(--border);
+}
+.verify-result-card.verified { border-left-color: #3DA35D; }
+.verify-result-card.not-verified { border-left-color: #C0392B; }
+
+.verify-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.verify-verdict-tag {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.verify-result-card.verified .verify-verdict-tag { background: #E4F3E8; color: #2E7D46; }
+.verify-result-card.not-verified .verify-verdict-tag { background: #FBE6E6; color: #C0392B; }
+
+.verify-check {
+  font-size: 12.5px;
+  margin-bottom: 3px;
+}
+.verify-check.ok { color: #2E7D46; }
+.verify-check.fail { color: #C0392B; }
+
+.verify-reason {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.verify-summary {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+.verify-summary h3 { font-size: 16px; margin-bottom: 10px; }
+.verify-summary p { font-size: 13.5px; margin: 4px 0; }

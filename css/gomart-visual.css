@@ -1,0 +1,583 @@
+/* =====================================================================
+   GOMART VISUAL SYSTEM — applied across dashboard / orders / settings /
+   form builder. This file is ADDITIVE: it retints the existing CSS
+   variables and restyles existing components (by their existing class
+   names) to match the finalized GoMart look — Manrope font, black/white
+   base with a green primary accent and red/blue status accents, rounded
+   shadowed cards. It does not add, remove, or rename any nav links,
+   the light/dark toggle, or any page content.
+   Load this AFTER the page's own stylesheet so these rules win.
+===================================================================== */
+
+/* ---------- font + accent retint (light mode) ---------- */
+:root {
+  --accent: #3DA35D !important;
+  --accent-soft: rgba(61, 163, 93, 0.12) !important;
+  --shadow-soft: 0 2px 10px rgba(0,0,0,0.04) !important;
+  --bg: #F4F5F2 !important;
+  --surface: #F4F5F2 !important;
+  --surface-elevated: #ffffff !important;
+  --border: #E7E8E6 !important;
+  --border-default: #E7E8E6 !important;
+  --border-focus: #3DA35D !important;
+  --text-primary: #16181A !important;
+  --text-secondary: #767B80 !important;
+  --text-muted: #9AA19C !important;
+  /* extra variable names used by settings.css / stylesF.css — same
+     palette, just a different naming convention in those files */
+  --text: #16181A !important;
+  --muted: #767B80 !important;
+  --card: #ffffff !important;
+  --cards: #ffffff !important;
+  --radius-lg: 16px !important;
+}
+
+[data-theme="dark"] {
+  --accent: #3DA35D !important;
+}
+
+* {
+  font-family: 'Manrope', Inter, system-ui, sans-serif !important;
+}
+
+/* ---------- top nav — logo, links, one control on the right ---------- */
+.nav {
+  background: var(--surface-elevated) !important;
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.logo { height: 26px; }
+.nav-links {
+  gap: 22px;
+}
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* generic buttons — black pill, green on hover/emphasis */
+button {
+  border-radius: 999px;
+}
+button:not(.remove):not(.expand-btn):not(.burger):not(.theme-toggle) {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+}
+
+/* ================= DASHBOARD ================= */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.stats > div {
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  padding: 16px;
+  background: var(--surface-elevated);
+}
+.stats > div span { font-size: 22px; font-weight: 800; display: block; }
+.stats > div p { margin: 4px 0 0; font-size: 12.5px; opacity: 0.8; }
+
+/* colour-coded like the Orders status system: total (dark), delivered
+   (blue), paid (green), pending (red) */
+.stats > div:nth-child(1) { background: #16181A; color: #fff; }
+.stats > div:nth-child(1) p { color: rgba(255,255,255,0.7); }
+.stats > div:nth-child(2) { background: #E3EEFB; color: #2B5EA8; }
+.stats > div:nth-child(3) { background: #E4F3E8; color: #2E7D46; }
+.stats > div:nth-child(4) { background: #FBE6E6; color: #C0392B; }
+
+.attention-status {
+  border-radius: 14px;
+  background: #FDEEE1;
+  color: #8A5A1D;
+}
+
+.subscription,
+.form-status {
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  background: var(--surface-elevated);
+}
+
+.copybtn {
+  background: #16181A;
+  color: #fff;
+  border: none;
+}
+
+#latestOrders {
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  background: var(--surface-elevated);
+  padding: 16px;
+}
+
+.system-status .dot {
+  background: #3DA35D;
+}
+
+.dashboard-sub {
+  margin: -8px 0 20px;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+/* status badges used on the dashboard's mini order-card preview */
+.status.pending { background: #FBE6E6; color: #C0392B; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; text-transform: capitalize; }
+.status.paid { background: #E4F3E8; color: #2E7D46; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; text-transform: capitalize; }
+.status.delivered { background: #E3EEFB; color: #2B5EA8; border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 700; text-transform: capitalize; }
+
+/* ================= ORDERS ================= */
+
+.order-card {
+  border-radius: 16px !important;
+  box-shadow: var(--shadow-soft) !important;
+  background: var(--surface-elevated) !important;
+  border: none !important;
+  padding: 14px 16px !important;
+}
+
+.status-select {
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11.5px;
+  text-transform: capitalize;
+}
+.status-select.status-pending { background: #FBE6E6; color: #C0392B; }
+.status-select.status-paid { background: #E4F3E8; color: #2E7D46; }
+.status-select.status-delivered { background: #E3EEFB; color: #2B5EA8; }
+
+.expand-btn {
+  border-radius: 50%;
+  background: #F0F1EE;
+}
+[data-theme="dark"] .expand-btn {
+  background: #262626;
+}
+
+/* filter pills (All / Paid / Delivered / Pending) */
+.filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.filters button {
+  border: none;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  font-size: 12.5px;
+  box-shadow: var(--shadow-soft);
+}
+.filters button.active {
+  background: #16181A;
+  color: #fff;
+}
+.search {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+/* ================= SETTINGS ================= */
+
+.settings section {
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  background: var(--surface-elevated);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.status.ok {
+  color: #2E7D46;
+  font-weight: 700;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.profile-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #16181A;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.profile-avatar-name {
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+.subscription-row button,
+.subscribe-row button {
+  background: #16181A;
+  color: #fff;
+  border: none;
+}
+
+/* ================= FORM BUILDER ================= */
+
+.card {
+  border-radius: 16px;
+  box-shadow: var(--shadow-soft);
+  background: var(--surface-elevated);
+}
+
+.field-card {
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  background: var(--surface-elevated);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.field-header { display: flex; align-items: center; gap: 10px; }
+.field-label {
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  flex: 1;
+}
+.remove-field {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #FBE6E6;
+  color: #C0392B;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.section-header h3,
+.section-header {
+  font-weight: 700;
+}
+
+/* ================= FORM BUILDER — accordion fields ================= */
+
+.field-header {
+  cursor: pointer;
+}
+.field-chevron {
+  font-size: 10px;
+  opacity: 0.5;
+  margin: 0 8px;
+}
+.field-body {
+  display: none;
+  margin-top: 10px;
+}
+.field-card.expanded .field-body {
+  display: block;
+}
+
+/* ================= FORM BUILDER — products: categories + grid + editor ================= */
+
+.category-chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 10px 0 14px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.category-chip-row::-webkit-scrollbar { display: none; }
+.category-chip {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--bg);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.category-chip.active {
+  background: #16181A;
+  color: #fff;
+}
+
+.product-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.product-tile {
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  text-align: center;
+}
+.product-tile-image {
+  aspect-ratio: 1/1;
+  border-radius: 10px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.product-tile-image img { width: 100%; height: 100%; object-fit: cover; }
+.product-tile-placeholder { font-size: 11px; opacity: 0.5; }
+.product-tile-name { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+.product-tile-price { font-size: 11.5px; opacity: 0.75; }
+.product-tile.add-tile {
+  border: 1.5px dashed var(--border);
+  box-shadow: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  gap: 4px;
+}
+.product-tile.add-tile .pe-plus { font-size: 20px; }
+
+.product-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0,0,0,0.45);
+}
+@media (min-width: 640px) {
+  .product-editor-overlay { align-items: center; }
+}
+.product-editor-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface-elevated);
+  border-radius: 20px 20px 0 0;
+  padding: 20px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+@media (min-width: 640px) {
+  .product-editor-card { border-radius: 16px; }
+}
+.product-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.product-editor-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.product-editor-image {
+  aspect-ratio: 16/10;
+  border-radius: 12px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.product-editor-image img { width: 100%; height: 100%; object-fit: cover; }
+.product-editor-card label:not(.upload-btn) {
+  display: block;
+  font-size: 11.5px;
+  opacity: 0.6;
+  margin: 10px 0 4px;
+}
+.product-editor-card input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.product-editor-delete {
+  width: 100%;
+  margin-top: 16px;
+  background: #FBE6E6;
+  color: #C0392B;
+  border: none;
+  padding: 11px 0;
+  font-weight: 700;
+}
+
+/* ================= ORDERS — status tag + progression bar ================= */
+
+.status-tag {
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 4px 12px;
+  text-transform: capitalize;
+}
+.status-tag.status-pending { background: #FBE6E6; color: #C0392B; }
+.status-tag.status-paid { background: #E4F3E8; color: #2E7D46; }
+.status-tag.status-delivered { background: #E3EEFB; color: #2B5EA8; }
+
+.view-payment-btn {
+  border: none;
+  border-radius: 999px;
+  background: #F0F1EE;
+  color: #16181A;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-theme="dark"] .view-payment-btn { background: #262626; color: #f2f2f2; }
+.payment-verified { color: #2E7D46; font-weight: 700; }
+.no-proof { color: var(--text-muted); font-style: italic; }
+
+.status-progress-wrap { margin-top: 14px; }
+.status-progress-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+  margin: 0 0 10px;
+}
+.status-progress {
+  display: flex;
+  align-items: center;
+}
+.pstep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.pstep i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 12px;
+  background: var(--bg);
+  color: var(--text-muted);
+}
+.pstep.done i { background: #3DA35D; color: #fff; }
+.pstep.current i { background: #16181A; color: #fff; }
+.pstep.current { color: var(--text-primary); }
+.pline {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 4px 17px;
+}
+.pline.done { background: #3DA35D; }
+
+/* ================= DASHBOARD — expandable mini order cards ================= */
+
+.order-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.order-dot.status-pending { background: #C0392B; }
+.order-dot.status-paid { background: #2E7D46; }
+.order-dot.status-delivered { background: #2B5EA8; }
+
+#ordersList .card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+#ordersList .card-header h3 { flex: 1; margin: 0; }
+
+#paymentImageModal img {
+  max-width: 90vw;
+  max-height: 85vh;
+  border-radius: 12px;
+  display: block;
+  margin: auto;
+}
+
+/* ================= SETTINGS — subscription tiles ================= */
+
+.plan-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.plan-tile {
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--bg);
+}
+.plan-tile-active {
+  background: #E4F3E8;
+  color: #2E7D46;
+}
+.plan-tile-label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.plan-tile-value {
+  font-size: 15px;
+  font-weight: 800;
+}
+.plan-tile button {
+  width: 100%;
+  border: none;
+  background: #16181A;
+  color: #fff;
+  padding: 9px 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ================= NAV — real logo image, swapped by theme ================= */
+.logo-wrap { display: inline-flex; align-items: center; }
+.logo-img { height: 26px; width: auto; display: block; }
+.logo-dark { display: none; }
+[data-theme="dark"] .logo-light { display: none; }
+[data-theme="dark"] .logo-dark { display: block; }

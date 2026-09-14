@@ -109,14 +109,19 @@ input:focus {
 }
 
 .nav-links a {
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text-secondary);
   text-decoration: none;
+  padding-bottom: 4px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s ease, border-color 0.2s ease;
 }
 
 .nav-links a.active {
   color: var(--text-primary);
-  font-weight: 600;
+  font-weight: 700;
+  border-bottom-color: var(--accent);
 }
 
 .theme-toggle {
@@ -751,3 +756,49 @@ input {
     width: 100%;
   }
 }
+
+/* ---------- STORE THEME PICKER ---------- */
+.theme-picker-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 4px 2px 6px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.theme-picker-scroll::-webkit-scrollbar { display: none; }
+
+.theme-swatch {
+  flex-shrink: 0;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+.theme-swatch.active {
+  border-color: var(--accent);
+}
+.theme-swatch span {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.theme-swatch.active span {
+  color: var(--text-primary);
+}
+
+.theme-swatch-preview {
+  width: 80px;
+  height: 56px;
+  border-radius: 10px;
+}
+.theme-swatch-r1 { background: linear-gradient(135deg, #0F0F0F 55%, #ffffff 55%); }
+.theme-swatch-r2 { background: linear-gradient(135deg, #16181A 45%, #F7F7F7 45%); }
+.theme-swatch-r3 { background: linear-gradient(135deg, #F5F7F5 55%, #3DA35D 55%); }
+.theme-swatch-r4 { background: linear-gradient(135deg, #17151C 55%, #F2A93B 55%); }

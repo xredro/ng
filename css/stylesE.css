@@ -1,56 +1,57 @@
 /* ================================
    DESIGN TOKENS (AUTH PAGES)
+   Retinted to match the finalized GoMart mockup exactly.
 ================================ */
 
 :root {
   /* Brand */
-  --accent: #9cff00;
-  --accent-soft: rgba(156, 255, 0, 0.12);
+  --accent: #3DA35D;
+  --accent-soft: rgba(61, 163, 93, 0.12);
 
   /* Backgrounds */
-  --bg-page: #f3f4f6;
+  --bg-page: #F4F5F2;
   --bg-card: #ffffff;
-  --bg-input: #fafafa;
+  --bg-input: #F4F5F2;
   --surface-elevated: #ffffff;
-  
+
   /* Text */
-  --text-primary: #111111;
-  --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-primary: #16181A;
+  --text-secondary: #767B80;
+  --text-muted: #9AA19C;
 
   /* Borders & Lines */
-  --border-default: #e5e7eb;
-  --border-focus: #9cff00;
+  --border-default: #E7E8E6;
+  --border-focus: #3DA35D;
 
-  /* Radius */
-  --radius-card: 16px;
+  /* Radius — matches the mockup's login-card exactly */
+  --radius-card: 20px;
   --radius-input: 10px;
-  --radius-btn: 12px;
-  --radius-lg: 18px;
-  
+  --radius-btn: 999px;
+  --radius-lg: 16px;
+
   --card: #ffffff;
-  --cards: #fefefe;
-  
+  --cards: #ffffff;
+
   --space-1: 6px;
   --space-2: 10px;
   --space-3: 14px;
   --space-4: 20px;
   --space-5: 32px;
-  
+
   --space-xs: 6px;
   --space-sm: 10px;
   --space-md: 16px;
   --space-lg: 24px;
   --space-xl: 32px;
   --space-2xl: 40px;
-  
-  /* Shadows */
-  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.06);
+
+  /* Shadow — matches the mockup's login-card exactly */
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.05);
   --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
   --shadow-md: 0 4px 8px rgba(0,0,0,0.06);
 
   /* Typography */
-  --font-base: Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-base: 'Manrope', Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 /* ================================
@@ -86,7 +87,7 @@ body {
 
 .card {
   width: 100%;
-  max-width: 380px;
+  max-width: 360px;
   background: var(--bg-card);
   border-radius: var(--radius-card);
   padding: 32px 26px 34px;
@@ -95,18 +96,20 @@ body {
 }
 
 /* ================================
-   HEADER
+   HEADER — badge logo matching the mockup's login-logo
 ================================ */
 
-.logo {
+.logo-img {
   height: 40px;
-  margin-bottom: 22px;
+  width: auto;
+  margin: 0 auto 18px;
+  display: block;
 }
 
 h2 {
-  font-size: 22px;
-  font-weight: 600;
-  margin-bottom: 22px;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 18px;
   letter-spacing: -0.01em;
 }
 
@@ -116,15 +119,15 @@ h2 {
 
 .field {
   text-align: left;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .field label {
   display: block;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .input-wrapper {
@@ -137,14 +140,13 @@ input {
   padding: 0 42px 0 14px;
   font-size: 14px;
   border-radius: var(--radius-input);
-  border: 1px solid var(--border-default);
+  border: none;
   background: var(--bg-input);
-  transition: border 0.2s ease, box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 input:focus {
   outline: none;
-  border-color: var(--border-focus);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
@@ -171,7 +173,7 @@ input:focus {
 }
 
 /* ================================
-   PRIMARY BUTTON
+   PRIMARY BUTTON — black pill, matches the mockup's .pill-btn
 ================================ */
 
 .primary-btn {
@@ -180,17 +182,17 @@ input:focus {
   margin-top: 10px;
   border: none;
   border-radius: var(--radius-btn);
-  background: var(--accent);
+  background: #16181A;
   font-size: 15px;
-  font-weight: 600;
-  color: #111;
+  font-weight: 700;
+  color: #fff;
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .primary-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 20px rgba(156, 255, 0, 0.25);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
 }
 
 .primary-btn:active {
@@ -208,7 +210,7 @@ input:focus {
 .divider {
   display: flex;
   align-items: center;
-  margin: 22px 0;
+  margin: 20px 0;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -226,54 +228,24 @@ input:focus {
 }
 
 /* ================================
-   LINKS
+   LINKS — muted, matching the mockup's "muted center" text
 ================================ */
 
 .link {
-  margin-top: 18px;
+  margin-top: 16px;
   font-size: 12.5px;
 }
 
-.link a {
-  color: var(--accent);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.link a:hover {
-  text-decoration: underline;
-}
-
-.subscribe {
-  display: inline;
-  background: var(--bg);
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-xl);
-  margin-bottom: var(--space-2xl);
-  font-size: 14px;
+.link a,
+.divider a {
   color: var(--text-secondary);
-  box-shadow: var(--shadow-soft);
-  text-align: center;
-  border-radius: var(--radius-lg);
+  text-decoration: none;
+  font-weight: 600;
 }
-  
-.subscribe button {
-  margin-left: auto;
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: 999px;
-  border: none;
-  box-shadow: var(--shadow-sm);
-  background: var(--surface-elevated);
-  font-size: 13px;
+
+.link a:hover,
+.divider a:hover {
   color: var(--text-primary);
-  cursor: pointer;
-}
-
-
-.subscribe h2 {
-  font-size: 18px;
-  margin: 0 0 var(--space-3);
 }
 
 /* ---------- MODAL ---------- */
@@ -302,18 +274,24 @@ input:focus {
 .modal-content h3 {
   font-size: 18px;
   margin: 0 0 var(--space-3);
+  font-weight: 700;
+}
+
+.modal-content input {
+  margin-bottom: var(--space-3);
 }
 
 .modal-content button {
-  margin: var(--space-sm);
+  margin: var(--space-sm) 0;
   padding: var(--space-sm) var(--space-lg);
   border-radius: 999px;
   border: none;
-  box-shadow: var(--shadow-sm);
-  background: var(--surface-elevated);
+  background: #16181A;
+  color: #fff;
   font-size: 13px;
-  color: var(--text-primary);
+  font-weight: 700;
   cursor: pointer;
+  width: 100%;
 }
 
 /* ================================
@@ -325,29 +303,26 @@ input:focus {
     align-items: flex-start;
   }
 
-  /* ---------- PAGE ---------- */
   .page {
     padding: 32px 16px;
   }
 
-  /* ---------- CARD ---------- */
   .card {
     padding: 28px 22px 30px;
     border-radius: var(--radius-lg);
   }
 
   h2 {
-    font-size: 20px;
+    font-size: 19px;
+    margin-bottom: 16px;
+  }
+
+  .field {
     margin-bottom: 18px;
   }
 
-  /* ---------- FORM ---------- */
-  .field {
-    margin-bottom: 20px;
-  }
-
   .field label {
-    font-size: 13px;
+    font-size: 12.5px;
   }
 
   input {
@@ -356,7 +331,6 @@ input:focus {
     padding-left: 16px;
   }
 
-  /* ---------- PASSWORD TOGGLE ---------- */
   .toggle-password {
     right: 14px;
   }
@@ -365,25 +339,21 @@ input:focus {
     width: 20px;
   }
 
-  /* ---------- PRIMARY BUTTON ---------- */
   .primary-btn {
     height: 52px;
     font-size: 16px;
     margin-top: 14px;
   }
 
-  /* ---------- DIVIDER ---------- */
   .divider {
-    margin: 26px 0;
+    margin: 24px 0;
   }
 
-  /* ---------- LINKS ---------- */
   .link {
     font-size: 13px;
-    margin-top: 20px;
+    margin-top: 18px;
   }
 
-  /* ---------- MODAL ---------- */
   .modal-content {
     width: calc(100% - 32px);
     padding: var(--space-4);

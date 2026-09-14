@@ -1,0 +1,41 @@
+/* Theme 1 — "Dark": dark, borderless video-grid style */
+.preview-theme.theme-r1 {
+  --bg: #0F0F0F;
+  --card: #181818;
+  --text: #ffffff;
+  --muted: #AAAAAA;
+  --border: #2A2A2A;
+  --accent: #272727;
+  --accent-text: #ffffff;
+}
+.theme-r1 .store-simple-header h1 { color: #fff; }
+.theme-r1 .store-simple-header p { color: #AAAAAA; }
+.theme-r1 .showcase h3 { color: #fff; }
+
+.theme-r1 .product-grid { grid-template-columns: repeat(4, 1fr); }
+.theme-r1 .product-card { background: transparent; border: none; padding: 0; }
+.theme-r1 .product-image { aspect-ratio: 16/9; height: auto; border-radius: 10px; background: linear-gradient(160deg,#272727,#1B1B1B); }
+.theme-r1 .product-name { color: #fff; font-weight: 600; margin-top: 8px; }
+.theme-r1 .product-price { color: #AAAAAA; font-size: 12px; }
+.theme-r1 .more-btn { background: #fff; color: #0F0F0F; }
+
+.theme-r1 .popup-card, .theme-r1 .checkout-overlay-card { background: #181818; color: #fff; }
+.theme-r1 .popup-backdrop, .theme-r1 .checkout-overlay-backdrop { background: rgba(0,0,0,0.6); }
+.theme-r1 .popup-close, .theme-r1 .checkout-close { background: #272727; color: #fff; }
+.theme-r1 .popup-image { background: linear-gradient(160deg,#272727,#1B1B1B); }
+.theme-r1 .popup-desc { color: #AAAAAA; }
+.theme-r1 .checkout-badge { background: #272727; color: #fff; font-weight: 700; font-size: 12px; }
+.theme-r1 .checkout-head h2 { color: #fff; }
+.theme-r1 .checkout-head p { color: #AAAAAA; }
+
+.theme-r1 .form-group input, .theme-r1 .form-group textarea, .theme-r1 .form-group select { background: #0F0F0F; color: #fff; border: 1px solid #2A2A2A; }
+.theme-r1 .total-box { background: #0F0F0F; color: #fff; }
+.theme-r1 .upload-ui { background: #0F0F0F; color: #AAAAAA; }
+.theme-r1 .send-btn { background: #fff; color: #0F0F0F; }
+.theme-r1 .powered { color: #555; }
+
+.theme-r1 .cart-bar { background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.theme-r1 .cart-bar .cb-info { color: #0F0F0F; }
+.theme-r1 .cart-bar-checkout-label { background: #0F0F0F; color: #fff; }
+
+@media (max-width: 640px) { .theme-r1 .product-grid { grid-template-columns: repeat(2, 1fr); } }
