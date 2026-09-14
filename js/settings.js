@@ -60,6 +60,13 @@ async function loadUser() {
 
   username.value = profile.username || "";
   email.value = profile.email || user.email || "";
+
+  // GoMart-style profile avatar — WhatsApp-style initials, no photo
+  const avatarEl = document.getElementById("profileAvatar");
+  const nameDisplayEl = document.getElementById("profileNameDisplay");
+  const displayName = profile.username || user.email || "Your account";
+  if (avatarEl) avatarEl.textContent = displayName.trim().charAt(0).toUpperCase();
+  if (nameDisplayEl) nameDisplayEl.textContent = displayName;
      
   //Theme Application    
   profileDocId = res.documents[0].$id;
@@ -129,6 +136,17 @@ async function logout() {
   window.location.href = "login.html";
 }
 
+/* =========================================================
+   PAYMENT SYSTEM DISABLED — kept for reference, not deleted.
+   The Selar-based buySubscription() flow below is commented
+   out. Selling/trial-renewal now goes through
+   goToPaymentUpload() instead, which sends the seller to an
+   external page to upload proof of payment manually.
+   To re-enable Selar checkout, uncomment the block below and
+   swap the button handlers back to buySubscription(days).
+========================================================= */
+/*
+ORIGINAL_BUY_SUBSCRIPTION_START
 async function buySubscription(days) {
   const btn = document.activeElement;
   if (btn) {
@@ -210,6 +228,17 @@ async function buySubscription(days) {
     console.error(err);
     showToast("Unable to start payment", "error");
   }
+}
+ORIGINAL_BUY_SUBSCRIPTION_END
+*/
+
+// Replaces the old buySubscription(days) flow: sends the seller to
+// an external page where they upload their payment proof manually.
+// TODO: replace this placeholder URL with your real payment/upload page.
+const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
+
+function goToPaymentUpload() {
+  window.location.href = PAYMENT_UPLOAD_URL;
 }
 
 /* =========================

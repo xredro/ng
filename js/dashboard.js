@@ -146,6 +146,17 @@ async function loadLatestOrders(userId) {
 /* =========================
 UI INTERACTION LOGIC
 ========================= */
+/* =========================================================
+   PAYMENT SYSTEM DISABLED — kept for reference, not deleted.
+   The Selar-based buySubscription() flow below is commented
+   out. Selling/trial-renewal now goes through
+   goToPaymentUpload() instead, which sends the seller to an
+   external page to upload proof of payment manually.
+   To re-enable Selar checkout, uncomment the block below and
+   swap the button handlers back to buySubscription(days).
+========================================================= */
+/*
+ORIGINAL_BUY_SUBSCRIPTION_START
 async function buySubscription(days) {
   const btn = document.activeElement;
   if (btn) {
@@ -228,6 +239,17 @@ async function buySubscription(days) {
     showToast("Unable to start payment", "error");
   }
 }
+ORIGINAL_BUY_SUBSCRIPTION_END
+*/
+
+// Replaces the old buySubscription(days) flow: sends the seller to
+// an external page where they upload their payment proof manually.
+// TODO: replace this placeholder URL with your real payment/upload page.
+const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
+
+function goToPaymentUpload() {
+  window.location.href = PAYMENT_UPLOAD_URL;
+}
 
 function updateAttention(pendingCount) {
   const box = document.getElementById("attentionStatus");
@@ -289,7 +311,8 @@ function renderOrders(orders) {
     const amount = normalizeAmount(order.totalAmount);
 
     card.innerHTML = `
-      <div class="card-header">
+      <div class="card-header" onclick="toggleDashboardOrderExpand(this)">
+        <span class="order-dot status-${order.status}"></span>
         <h3>${title}</h3>
         <div class="status ${order.status}"> ${order.status} </div>
       </div>
@@ -306,10 +329,34 @@ function renderOrders(orders) {
       <div class="meta">
         <span>₦${amount.toLocaleString() || 0}</span>
       </div>
+
+      <div class="expanded hidden">
+        <div class="order-field">
+          <strong>Payment:</strong>
+          ${order.status === "pending"
+            ? (order.paymentProof
+                ? `<button class="view-payment-btn" onclick="viewPaymentImage('${order.paymentProof}')">View payment image</button>`
+                : `<span class="no-proof">No payment proof uploaded</span>`)
+            : `<span class="payment-verified">&#10003; Payment verified</span>`
+          }
+        </div>
+      </div>
     `;
 
     wrap.appendChild(card);
   });
+}
+
+function toggleDashboardOrderExpand(headerEl) {
+  const card = headerEl.closest(".order-card");
+  card.querySelector(".expanded").classList.toggle("hidden");
+}
+
+function viewPaymentImage(fileId) {
+  if (!fileId) return;
+  const modal = document.getElementById("paymentImageModal");
+  modal.innerHTML = `<img src="https://nyc.cloud.appwrite.io/v1/storage/buckets/696825350032fe17c1eb/files/${fileId}/view?project=695981480033c7a4eb0d" />`;
+  modal.classList.remove("hidden");
 }
 
 /* =========================

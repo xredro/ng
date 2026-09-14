@@ -45,6 +45,17 @@ const CLOSE_EXPAND = `
 /* =========================
 UTILITY / HELPER FUNCTIONS
 ========================= */
+/* =========================================================
+   PAYMENT SYSTEM DISABLED — kept for reference, not deleted.
+   The Selar-based buySubscription() flow below is commented
+   out. Selling/trial-renewal now goes through
+   goToPaymentUpload() instead, which sends the seller to an
+   external page to upload proof of payment manually.
+   To re-enable Selar checkout, uncomment the block below and
+   swap the button handlers back to buySubscription(days).
+========================================================= */
+/*
+ORIGINAL_BUY_SUBSCRIPTION_START
 async function buySubscription(days) {
   const btn = document.activeElement;
   if (btn) {
@@ -126,6 +137,17 @@ async function buySubscription(days) {
     console.error(err);
     showToast("Unable to start payment", "error");
   }
+}
+ORIGINAL_BUY_SUBSCRIPTION_END
+*/
+
+// Replaces the old buySubscription(days) flow: sends the seller to
+// an external page where they upload their payment proof manually.
+// TODO: replace this placeholder URL with your real payment/upload page.
+const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
+
+function goToPaymentUpload() {
+  window.location.href = PAYMENT_UPLOAD_URL;
 }
 
 function parseFormData(raw) {
@@ -311,9 +333,18 @@ function applyFilter() {
 
   renderOrders(result);
 
-  // Update active button highlight
+  // Update active button highlight + live counts, matching the
+  // finalized mockup's "Unpaid 12 / Paid 7 / Delivered 5" style
+  const countAll = allOrders.length;
+  const countPending = allOrders.filter(o => o.status === "pending").length;
+  const countPaid = allOrders.filter(o => o.status === "paid").length;
+  const countDelivered = allOrders.filter(o => o.status === "delivered").length;
+
   document.querySelectorAll(".filters button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.filter === activeFilter);
+    const base = { all: "All", pending: "Unpaid", paid: "Paid", delivered: "Delivered" }[btn.dataset.filter];
+    const count = { all: countAll, pending: countPending, paid: countPaid, delivered: countDelivered }[btn.dataset.filter];
+    btn.textContent = `${base} ${count}`;
   });
 }
 
@@ -521,16 +552,7 @@ function renderOrders(orders) {
       <div class="card-header">
         <h3>${getCardTitle(order)}</h3>
 
-        <div class="status-select" data-id="${order.$id}" onclick="toggleStatusMenu(this)">
-          <span class="status-value">${order.status}</span>
-          <svg class="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg>
-
-          <div class="status-menu hidden">
-            <div onclick="setStatus(this, 'pending')">pending</div>
-            <div onclick="setStatus(this, 'paid')">paid</div>
-            <div onclick="setStatus(this, 'delivered')">delivered</div>
-          </div>
-        </div>
+        <span class="status-tag status-${order.status}">${order.status}</span>
       </div>
       
       <div class="order-summary-line">
@@ -541,10 +563,6 @@ function renderOrders(orders) {
       <div class="meta">
         <span>₦${amounts.toLocaleString()}</span>
         <div>
-          ${order.paymentProof ? `
-            <button onclick="viewImage('${order.paymentProof}')"><svg xmlns="http://www.w3.org/2000/svg" height="24px" class="theme-icon" viewBox="0 -960 960 960" width="24px" ><path fill="currentColor" d="M260-361v-40H160v-80h200v-80H200q-17 0-28.5-11.5T160-601v-160q0-17 11.5-28.5T200-801h60v-40h80v40h100v80H240v80h160q17 0 28.5 11.5T440-601v160q0 17-11.5 28.5T400-401h-60v40h-80Zm298 240L388-291l56-56 114 114 226-226 56 56-282 282Z"/></svg></button>
-          ` : ""}
-          
           <button class="expand-btn" onclick="toggleExpand(this)"> <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#999999"> ${EXPAND_DOWN} </svg></button>
           <button onclick="deleteOrder('${order.$id}')"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#999999"><path d="m376-300 104-104 104 104 56-56-104-104 104-104-56-56-104 104-104-104-56 56 104 104-104 104 56 56Zm-96 180q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520Zm-400 0v520-520Z"/></svg></button>
         </div>
@@ -570,6 +588,36 @@ function renderOrders(orders) {
           })
           .filter(Boolean)
           .join("")}
+
+        <div class="order-field">
+          <strong>Payment:</strong>
+          ${order.status === "pending"
+            ? (order.paymentProof
+                ? `<button class="view-payment-btn" onclick="viewImage('${order.paymentProof}')">View payment image</button>`
+                : `<span class="no-proof">No payment proof uploaded</span>`)
+            : `<span class="payment-verified">&#10003; Payment verified</span>`
+          }
+        </div>
+
+        <div class="status-progress-wrap">
+          <p class="status-progress-label">Status</p>
+          <div class="status-progress">
+            <span class="pstep ${order.status === "pending" ? "current" : "done"}"
+              onclick="updateStatus('${order.$id}', 'pending')">
+              <i>${order.status === "pending" ? "&#9679;" : "&#10003;"}</i>Pending
+            </span>
+            <span class="pline ${order.status === "pending" ? "" : "done"}"></span>
+            <span class="pstep ${order.status === "paid" ? "current" : (order.status === "delivered" ? "done" : "todo")}"
+              onclick="updateStatus('${order.$id}', 'paid')">
+              <i>${order.status === "delivered" ? "&#10003;" : (order.status === "paid" ? "&#9679;" : "&#9675;")}</i>Paid
+            </span>
+            <span class="pline ${order.status === "delivered" ? "done" : ""}"></span>
+            <span class="pstep ${order.status === "delivered" ? "current" : "todo"}"
+              onclick="updateStatus('${order.$id}', 'delivered')">
+              <i>${order.status === "delivered" ? "&#9679;" : "&#9675;"}</i>Delivered
+            </span>
+          </div>
+        </div>
       </div>
     `;
 
@@ -616,6 +664,10 @@ function setStatus(item, value) {
   select.querySelector(".status-value").textContent = value;
   select.classList.remove("open");
   select.querySelector(".status-menu").classList.add("hidden");
+
+  // keep the status-based colour coding (status-pending/paid/delivered) in sync
+  select.classList.remove("status-pending", "status-paid", "status-delivered");
+  select.classList.add(`status-${value}`);
 
   updateStatus(id, value);
 }

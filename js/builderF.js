@@ -38,9 +38,43 @@ let formId;
 let formTitle = "";
 let formSubtitle = "";
 
+// Visual theme for the customer-facing store page — one of "r1".."r4",
+// matching css/theme-r1.css .. theme-r4.css. Persisted on the form
+// document as `storeTheme` (NOTE: add a `storeTheme` string attribute
+// to the "form" collection in Appwrite for this to save — it's separate
+// from the existing dark/light `theme` field on the user profile).
+let selectedStoreTheme = "r1";
+
+function selectStoreTheme(themeId) {
+  selectedStoreTheme = themeId;
+  highlightSelectedTheme();
+  // if the preview overlay is currently open, keep it in sync immediately
+  const previewRoot = document.getElementById("previewThemeRoot");
+  if (previewRoot && !document.getElementById("previewOverlay").classList.contains("hidden")) {
+    previewRoot.className = `preview-theme theme-${selectedStoreTheme}`;
+  }
+}
+
+function highlightSelectedTheme() {
+  document.querySelectorAll("#themePicker .theme-swatch").forEach(el => {
+    el.classList.toggle("active", el.dataset.theme === selectedStoreTheme);
+  });
+}
+
 /* =========================
 UTILITY / HELPER FUNCTIONS
 ========================= */
+/* =========================================================
+   PAYMENT SYSTEM DISABLED — kept for reference, not deleted.
+   The Selar-based buySubscription() flow below is commented
+   out. Selling/trial-renewal now goes through
+   goToPaymentUpload() instead, which sends the seller to an
+   external page to upload proof of payment manually.
+   To re-enable Selar checkout, uncomment the block below and
+   swap the button handlers back to buySubscription(days).
+========================================================= */
+/*
+ORIGINAL_BUY_SUBSCRIPTION_START
 async function buySubscription(days) {
   const btn = document.activeElement;
   if (btn) {
@@ -122,6 +156,17 @@ async function buySubscription(days) {
     console.error(err);
     showToast("Unable to start payment", "error");
   }
+}
+ORIGINAL_BUY_SUBSCRIPTION_END
+*/
+
+// Replaces the old buySubscription(days) flow: sends the seller to
+// an external page where they upload their payment proof manually.
+// TODO: replace this placeholder URL with your real payment/upload page.
+const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
+
+function goToPaymentUpload() {
+  window.location.href = PAYMENT_UPLOAD_URL;
 }
 
 function formatWithCommas(value) {
@@ -210,6 +255,7 @@ async function saveForm() {
     title: formTitle,
     subtitle: formSubtitle,
     fields: safeFields,
+    storeTheme: selectedStoreTheme,
     $updatedAt: new Date().toISOString()
   });
 
@@ -256,31 +302,75 @@ function addField(type) {
 }
 
 /* ---------------- RENDER ---------------- */
+let expandedFieldIds = new Set(); // transient UI-only state — which Input Field cards are expanded
+
 function renderFields() {
   const container = document.getElementById('fields');
+  const productContainer = document.getElementById('productFields');
   container.innerHTML = "";
+  if (productContainer) productContainer.innerHTML = "";
 
   fields.forEach(field => {
+    // Product-type fields render in their own "Products" section
+    // (category chips + grid + tap-to-edit overlay), always open —
+    // not part of the collapsible Input Fields accordion below.
+    if (field.type === "product" && productContainer) {
+      const card = document.createElement('div');
+      card.className = "field-card product-field-card";
+      card.innerHTML = `
+        <div class="field-header">
+          <input
+            class="field-label"
+            value="${field.label || ""}"
+            onchange="updateLabel('${field.id}', this.value)"
+          />
+          <span class="remove remove-field" data-id="${field.id}">×</span>
+        </div>
+      `;
+      card.appendChild(renderProducts(field));
+      productContainer.appendChild(card);
+      return;
+    }
+
+    const isExpanded = expandedFieldIds.has(field.id);
+    const hasBody = field.type === "dropdown" || field.type === "additional_fee";
+
     const card = document.createElement('div');
-    card.className = "field-card";
+    card.className = "field-card" + (isExpanded ? " expanded" : "");
 
     card.innerHTML = `
-      <div class="field-header">
-        <input 
+      <div class="field-header" onclick="toggleFieldExpanded(event, '${field.id}')">
+        <input
           class="field-label"
           value="${field.label || ""}"
           onchange="updateLabel('${field.id}', this.value)"
+          onclick="event.stopPropagation()"
         />
-        <span class="remove remove-field" data-id="${field.id}">×</span>
+        ${hasBody ? `<span class="field-chevron">${isExpanded ? "&#9650;" : "&#9660;"}</span>` : ""}
+        <span class="remove remove-field" data-id="${field.id}" onclick="event.stopPropagation()">×</span>
       </div>
     `;
 
-    if (field.type === "dropdown") card.appendChild(renderDropdown(field));
-    if (field.type === "product") card.appendChild(renderProducts(field));
-    if (field.type === "additional_fee") card.appendChild(renderAdditionalFees(field));
+    if (hasBody) {
+      const body = document.createElement('div');
+      body.className = "field-body";
+      if (field.type === "dropdown") body.appendChild(renderDropdown(field));
+      if (field.type === "additional_fee") body.appendChild(renderAdditionalFees(field));
+      card.appendChild(body);
+    }
 
     container.appendChild(card);
   });
+}
+
+function toggleFieldExpanded(e, id) {
+  if (e) e.stopPropagation();
+  if (expandedFieldIds.has(id)) {
+    expandedFieldIds.delete(id);
+  } else {
+    expandedFieldIds.add(id);
+  }
+  renderFields();
 }
 
 document.addEventListener("click", (e) => {
@@ -396,46 +486,125 @@ function savePrice(fieldId, index, value) {
   field.products[index].price = stripCommas(value);
 }
 
+let productUIState = {}; // { [fieldId]: { activeCategory: "All", editingIndex: null } } — transient UI-only state, not saved
+
+function getProductUIState(fieldId) {
+  if (!productUIState[fieldId]) {
+    productUIState[fieldId] = { activeCategory: "All", editingIndex: null };
+  }
+  return productUIState[fieldId];
+}
+
+function setActiveCategory(fieldId, cat) {
+  getProductUIState(fieldId).activeCategory = cat;
+  renderFields();
+}
+
+function openProductEditor(fieldId, index) {
+  getProductUIState(fieldId).editingIndex = index;
+  renderFields();
+}
+
+function closeProductEditor(fieldId) {
+  getProductUIState(fieldId).editingIndex = null;
+  renderFields();
+}
+
 function renderProducts(field) {
   const wrap = document.createElement('div');
   wrap.style.marginTop = "12px";
 
+  field.products.forEach(p => { if (!p.category) p.category = "General"; });
+
+  const state = getProductUIState(field.id);
+  const categories = ["All", ...new Set(field.products.map(p => p.category || "General"))];
+
+  const chipRow = document.createElement('div');
+  chipRow.className = "category-chip-row";
+  categories.forEach(cat => {
+    const chip = document.createElement('span');
+    chip.className = "category-chip" + (state.activeCategory === cat ? " active" : "");
+    chip.innerText = cat;
+    chip.onclick = () => setActiveCategory(field.id, cat);
+    chipRow.appendChild(chip);
+  });
+  wrap.appendChild(chipRow);
+
+  const grid = document.createElement('div');
+  grid.className = "product-edit-grid";
+
   field.products.forEach((p, i) => {
-    const row = document.createElement('div');
-    row.className = "product-row";
+    if (state.activeCategory !== "All" && (p.category || "General") !== state.activeCategory) return;
 
-    row.innerHTML = `
-      <div class="product-image">
-        ${p.imageUrl 
-          ? `<img src="${p.imageUrl}" class="product-img"/>`
-          : `<label class="upload-btn">
-              Upload image
-              <input type="file" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
-            </label>`
-        }
+    const tile = document.createElement('div');
+    tile.className = "product-tile";
+    tile.innerHTML = `
+      <div class="product-tile-image">
+        ${p.imageUrl ? `<img src="${p.imageUrl}" class="product-img"/>` : `<span class="product-tile-placeholder">+ Photo</span>`}
       </div>
-
-      <input placeholder="Product name" value="${p.name || ""}"
-        onchange="updateProduct('${field.id}', ${i}, 'name', this.value)">
-
-      <input placeholder="₦ Price" value="${p.price ? formatWithCommas(p.price) : ""}"
-        oninput="handlePriceInput(this)" onblur="savePrice('${field.id}', ${i}, this.value)">
-
-      <span class="remove" onclick="removeProduct('${field.id}', ${i})">×</span>
+      <div class="product-tile-name">${p.name || "Untitled"}</div>
+      <div class="product-tile-price">₦${p.price ? formatWithCommas(p.price) : "0"}</div>
     `;
-
-    wrap.appendChild(row);
+    tile.onclick = () => openProductEditor(field.id, i);
+    grid.appendChild(tile);
   });
 
-  const btn = document.createElement('button');
-  btn.className = "add-product";
-  btn.innerText = "+ Add product";
-  btn.onclick = () => {
-    field.products.push({ name: "", price: "", imageId: "", imageUrl: "" });
+  const addTile = document.createElement('div');
+  addTile.className = "product-tile add-tile";
+  addTile.innerHTML = `<span class="pe-plus">+</span><span>Add product</span>`;
+  addTile.onclick = () => {
+    field.products.push({
+      name: "", price: "", imageId: "", imageUrl: "",
+      category: state.activeCategory === "All" ? "General" : state.activeCategory
+    });
+    state.editingIndex = field.products.length - 1;
     renderFields();
   };
+  grid.appendChild(addTile);
 
-  wrap.appendChild(btn);
+  wrap.appendChild(grid);
+
+  if (state.editingIndex !== null && field.products[state.editingIndex]) {
+    const i = state.editingIndex;
+    const p = field.products[i];
+    const editor = document.createElement('div');
+    editor.className = "product-editor-overlay";
+    editor.innerHTML = `
+      <div class="product-editor-card">
+        <div class="product-editor-head">
+          <strong>Edit product</strong>
+          <span class="product-editor-close" onclick="closeProductEditor('${field.id}')">&times;</span>
+        </div>
+
+        <div class="product-editor-image">
+          ${p.imageUrl ? `<img src="${p.imageUrl}" class="product-img"/>` : ""}
+          <label class="upload-btn">
+            ${p.imageUrl ? "Change image" : "Upload image"}
+            <input type="file" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
+          </label>
+        </div>
+
+        <label>Name</label>
+        <input placeholder="Product name" value="${p.name || ""}"
+          onchange="updateProduct('${field.id}', ${i}, 'name', this.value)">
+
+        <label>Price</label>
+        <input placeholder="₦ Price" value="${p.price ? formatWithCommas(p.price) : ""}"
+          oninput="handlePriceInput(this)" onblur="savePrice('${field.id}', ${i}, this.value)">
+
+        <label>Category</label>
+        <input placeholder="e.g. Audio" value="${p.category || "General"}"
+          onchange="updateProduct('${field.id}', ${i}, 'category', this.value); renderFields();">
+
+        <button type="button" class="product-editor-delete"
+          onclick="removeProduct('${field.id}', ${i}); closeProductEditor('${field.id}');">
+          Delete product
+        </button>
+      </div>
+    `;
+    wrap.appendChild(editor);
+  }
+
   return wrap;
 }
 
@@ -538,7 +707,8 @@ function normalizeProducts(field) {
     name: p?.name ?? "",
     price: p?.price ?? "",
     imageId: p?.imageId ?? "",
-    imageUrl: p?.imageUrl ?? ""
+    imageUrl: p?.imageUrl ?? "",
+    category: p?.category ?? "General"
   }));
 }
 
@@ -578,7 +748,9 @@ function openPreview(e) {
   if (e) e.preventDefault();
   const overlay = document.getElementById("previewOverlay");
   const container = document.getElementById("previewForm");
+  const previewRoot = document.getElementById("previewThemeRoot");
 
+  previewRoot.className = `preview-theme theme-${selectedStoreTheme}`;
   container.innerHTML = buildPreviewHTML();
   overlay.classList.remove("hidden");
 }
@@ -588,29 +760,83 @@ function closePreview() {
 }
 
 function buildPreviewHTML() {
+  const productFields = fields.filter(f => f.type === "product");
+  const otherFields = fields.filter(f => f.type !== "product" && f.type !== "additional_fee");
+  const feeFields = fields.filter(f => f.type === "additional_fee");
+  const title = formTitle || "My Business Name";
+  const initial = title.trim().charAt(0).toUpperCase();
+
+  // No products yet — same flat fallback layout the real customer page uses.
+  if (productFields.length === 0) {
+    let html = `
+      <div class="preview-card">
+        <h2 class="business-name">${title}</h2>
+        <p class="subtitle">${formSubtitle || "Select your order"}</p>
+    `;
+    otherFields.forEach(field => { html += renderPreviewField(field); });
+    feeFields.forEach(field => { html += renderPreviewField(field); });
+    html += `
+        <div class="total-box">
+          <div>Items <span>0</span></div>
+          <div>Total Cost <span>₦0</span></div>
+        </div>
+        <div class="payment-proof">
+          <label>Payment Proof</label>
+          <div class="proof-box">Upload</div>
+        </div>
+        <button class="send-btn" disabled>Send Order</button>
+        <p class="powered">powered by X Redro</p>
+      </div>
+    `;
+    return html;
+  }
+
+  // Same showcase + checkout-overlay pattern as the live customer page.
+  // The "+" popups and the Checkout sheet are real, clickable CSS-only
+  // toggles here too, so this preview behaves like the real thing.
   let html = `
-    <div class="preview-card">
-      <h2 class="business-name">${formTitle || "My Business Name"}</h2>
-      <p class="subtitle">${formSubtitle || "Select your order"}</p>
-  `;
+    <div class="store-simple-header">
+      <h1>${title}</h1>
+      <p>${formSubtitle || "Select your order"}</p>
+    </div>
 
-  fields.forEach(field => {
-    html += renderPreviewField(field);
-  });
+    <div class="store-shell">
+      <section class="showcase">
+        ${productFields.map(field => renderPreviewProducts(field)).join("")}
+      </section>
+    </div>
 
-  html += `
-      <div class="total-box">
-        <div>Items <span>0</span></div>
-        <div>Total Cost <span>₦0</span></div>
+    <input type="checkbox" id="previewCheckoutToggle" class="pop-toggle">
+
+    <div class="cart-bar visible">
+      <div class="cb-info"><span>Preview only</span><small>Qty/total shown live on the real page</small></div>
+      <label for="previewCheckoutToggle" class="cart-bar-checkout-label">Checkout &rarr;</label>
+    </div>
+
+    <div class="checkout-overlay">
+      <label for="previewCheckoutToggle" class="checkout-overlay-backdrop"></label>
+      <div class="checkout-overlay-card">
+        <label for="previewCheckoutToggle" class="checkout-close">&times;</label>
+        <div class="checkout-badge">${initial}</div>
+        <div class="checkout-head">
+          <h2>Checkout</h2>
+          <p>Confirm your details and we'll get your order moving.</p>
+        </div>
+
+        ${otherFields.map(field => renderPreviewField(field)).join("")}
+        ${feeFields.map(field => renderPreviewField(field)).join("")}
+
+        <div class="total-box">
+          <div>Items <span>0</span></div>
+          <div>Total Cost <span>₦0</span></div>
+        </div>
+        <div class="payment-proof">
+          <label>Payment Proof</label>
+          <div class="proof-box">Upload</div>
+        </div>
+        <button class="send-btn" disabled>Send Order</button>
+        <p class="powered">powered by X Redro</p>
       </div>
-
-      <div class="payment-proof">
-        <label>Payment Proof</label>
-        <div class="proof-box">Upload</div>
-      </div>
-
-      <button class="send-btn" disabled>Send Order</button>
-      <p class="powered">powered by X Redro</p>
     </div>
   `;
 
@@ -642,10 +868,6 @@ function renderPreviewField(field) {
     </select>`;
   }
 
-  if (field.type === "product") {
-    html += renderPreviewProducts(field);
-  }
-  
   if (field.type === "additional_fee") {
     html += renderPreviewAdditionalFees(field);
   }
@@ -657,15 +879,29 @@ function renderPreviewField(field) {
 function renderPreviewProducts(field) {
   let html = `<div class="product-grid">`;
 
-  field.products.forEach(p => {
+  field.products.forEach((p, i) => {
+    const cbId = `preview-pop-${field.id}-${i}`;
+    const img = p.imageUrl ? `<img src="${p.imageUrl}">` : "";
     html += `
       <div class="product-card">
-        <div class="product-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}">` : ""}
-        </div>
+        <input type="checkbox" id="${cbId}" class="pop-toggle">
+        <div class="product-image">${img}</div>
         <div class="product-name">${p.name || "Product Name"}</div>
         <div class="product-price">₦${Number(p.price || 0).toLocaleString()}</div>
-        <div class="product-qty">Qty: 1</div>
+        <label for="${cbId}" class="more-btn">+</label>
+
+        <div class="product-popup">
+          <label for="${cbId}" class="popup-backdrop"></label>
+          <div class="popup-card">
+            <label for="${cbId}" class="popup-close">&times;</label>
+            <div class="popup-image">${img}</div>
+            <h3>${p.name || "Product Name"}</h3>
+            <div class="popup-price">₦${Number(p.price || 0).toLocaleString()}</div>
+            <div class="product-qty">
+              <button disabled>-</button><span>0</span><button disabled>+</button>
+            </div>
+          </div>
+        </div>
       </div>
     `;
   });
@@ -753,9 +989,11 @@ async function initBuilder() {
     formId = user.$id;
     formTitle = formDoc.title || "";
     formSubtitle = formDoc.subtitle || "";
+    selectedStoreTheme = formDoc.storeTheme || "r1";
 
     document.getElementById("titleInput").value = formTitle;
     document.getElementById("subtitleInput").value = formSubtitle;
+    highlightSelectedTheme();
   } catch (err) {
     // create empty form if not exists
     await databases.createDocument(DB_ID, FORMS, user.$id, {

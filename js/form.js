@@ -26,6 +26,7 @@ GLOBAL STATE VARIABLES
 let fields = [];
 let formTitle = "";
 let formSubtitle = "";
+let CURRENT_THEME_CLASS = "theme-r1";
 
 let CURRENT_FORM_ID = "";
 let FORM_OWNER_ID = "";
@@ -282,6 +283,14 @@ function updateTotal() {
 
   document.getElementById("itemCount").innerText = items;
   document.getElementById("totalCost").innerText = `₦${formatNaira(total)}`;
+
+  // keep the sticky cart bar in sync (new visual system — additive)
+  const cartBarCount = document.getElementById("cartBarCount");
+  const cartBarTotal = document.getElementById("cartBarTotal");
+  const cartBar = document.getElementById("cartBar");
+  if (cartBarCount) cartBarCount.innerText = `${items} item${items === 1 ? "" : "s"}`;
+  if (cartBarTotal) cartBarTotal.innerText = `₦${formatNaira(total)}`;
+  if (cartBar) cartBar.classList.toggle("visible", items > 0);
 }
 
 /* =========================
@@ -337,17 +346,29 @@ function renderProducts(field) {
   let html = `<div class="product-grid">`;
 
   field.products.forEach((p, i) => {
+    const cbId = `pop-${field.id}-${i}`;
+    const img = p.imageUrl ? `<img src="${p.imageUrl}">` : "";
     html += `
       <div class="product-card">
-        <div class="product-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}">` : ""}
-        </div>
+        <input type="checkbox" id="${cbId}" class="pop-toggle">
+        <div class="product-image">${img}</div>
         <div class="product-name">${p.name}</div>
         <div class="product-price">₦${formatNaira(Number(p.price || 0))}</div>
-        <div class="product-qty">
-          <button onclick="changeQty('${field.id}', ${i}, -1)">-</button>
-          <span id="qty-${field.id}-${i}">0</span>
-          <button onclick="changeQty('${field.id}', ${i}, 1)">+</button>
+        <label for="${cbId}" class="more-btn">+</label>
+
+        <div class="product-popup">
+          <label for="${cbId}" class="popup-backdrop"></label>
+          <div class="popup-card">
+            <label for="${cbId}" class="popup-close">&times;</label>
+            <div class="popup-image">${img}</div>
+            <h3>${p.name}</h3>
+            <div class="popup-price">₦${formatNaira(Number(p.price || 0))}</div>
+            <div class="product-qty">
+              <button onclick="changeQty('${field.id}', ${i}, -1)">-</button>
+              <span id="qty-${field.id}-${i}">0</span>
+              <button onclick="changeQty('${field.id}', ${i}, 1)">+</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -360,36 +381,108 @@ function renderProducts(field) {
 function renderForm() {
   const container = document.getElementById("formRoot");
 
-  let html = `
-    <div class="preview-card">
-      <h2 class="business-name">${formTitle}</h2>
-      <p class="subtitle">${formSubtitle}</p>
-  `;
+  const productFields = fields.filter(f => f.type === "product");
+  const otherFields = fields.filter(f => f.type !== "product");
+  const initial = (formTitle || "X").trim().charAt(0).toUpperCase();
 
-  fields.forEach(field => {
-    html += renderField(field);
-  });
+  // Fallback: no product fields at all — keep the simple single-card
+  // layout instead of showcase + checkout overlay (nothing to browse).
+  if (productFields.length === 0) {
+    let html = `
+      <div class="preview-theme ${CURRENT_THEME_CLASS}">
+        <div class="preview-card">
+          <h2 class="business-name">${formTitle}</h2>
+          <p class="subtitle">${formSubtitle}</p>
+    `;
 
-  html += `
-      <div class="total-box">
-        <div>Items <span id="itemCount">0</span></div>
-        <div id="additionalFeeBox" style="display:none;"></div>
-        <div>Total Cost <span id="totalCost">₦0</span></div>
-      </div>
+    fields.forEach(field => { html += renderField(field); });
 
-      <div class="payment-proof">
-        <label>Payment Proof Image</label>
-        <label class="upload-proof">
-          <input type="file" id="paymentProof" hidden>
-          <div class="upload-ui">
-            <span class="upload-icon">⬆</span>
-            <span class="upload-text">Upload payment proof</span>
+    html += `
+          <div class="total-box">
+            <div>Items <span id="itemCount">0</span></div>
+            <div id="additionalFeeBox" style="display:none;"></div>
+            <div>Total Cost <span id="totalCost">₦0</span></div>
           </div>
-        </label>
+
+          <div class="payment-proof">
+            <label>Payment Proof Image</label>
+            <label class="upload-proof">
+              <input type="file" id="paymentProof" hidden>
+              <div class="upload-ui">
+                <span class="upload-icon">⬆</span>
+                <span class="upload-text">Upload payment proof</span>
+              </div>
+            </label>
+          </div>
+
+          <button class="send-btn" onclick="submitOrder()">Send Order</button>
+          <p class="powered">powered by X Redro</p>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+    return;
+  }
+
+  // Standard layout: browse products first, checkout is an overlay
+  // triggered from the sticky cart bar — matches the finalized designs.
+  let html = `
+    <div class="preview-theme ${CURRENT_THEME_CLASS}">
+      <div class="store-simple-header">
+        <h1>${formTitle}</h1>
+        <p>${formSubtitle}</p>
       </div>
 
-      <button class="send-btn" onclick="submitOrder()">Send Order</button>
-      <p class="powered">powered by X Redro</p>
+      <div class="store-shell">
+        <section class="showcase">
+          ${productFields.map(field => renderProducts(field)).join("")}
+        </section>
+      </div>
+
+      <input type="checkbox" id="checkoutToggle" class="pop-toggle">
+
+      <div class="cart-bar" id="cartBar">
+        <div class="cb-info">
+          <span id="cartBarCount">0 items</span>
+          <small id="cartBarTotal">₦0</small>
+        </div>
+        <label for="checkoutToggle" class="cart-bar-checkout-label">Checkout &rarr;</label>
+      </div>
+
+      <div class="checkout-overlay">
+        <label for="checkoutToggle" class="checkout-overlay-backdrop"></label>
+        <div class="checkout-overlay-card">
+          <label for="checkoutToggle" class="checkout-close">&times;</label>
+          <div class="checkout-badge">${initial}</div>
+          <div class="checkout-head">
+            <h2>Checkout</h2>
+            <p>Confirm your details and we'll get your order moving.</p>
+          </div>
+
+          ${otherFields.map(field => renderField(field)).join("")}
+
+          <div class="total-box">
+            <div>Items <span id="itemCount">0</span></div>
+            <div id="additionalFeeBox" style="display:none;"></div>
+            <div>Total Cost <span id="totalCost">₦0</span></div>
+          </div>
+
+          <div class="payment-proof">
+            <label>Payment Proof Image</label>
+            <label class="upload-proof">
+              <input type="file" id="paymentProof" hidden>
+              <div class="upload-ui">
+                <span class="upload-icon">⬆</span>
+                <span class="upload-text">Upload payment proof</span>
+              </div>
+            </label>
+          </div>
+
+          <button class="send-btn" onclick="submitOrder()">Send Order</button>
+          <p class="powered">powered by X Redro</p>
+        </div>
+      </div>
     </div>
   `;
 
@@ -400,17 +493,19 @@ function renderSuccessState() {
   const container = document.getElementById("formRoot");
 
   container.innerHTML = `
-    <div class="preview-card success-state">
-      <h2 class="business-name">${formTitle}</h2>
+    <div class="preview-theme ${CURRENT_THEME_CLASS}">
+      <div class="preview-card success-state">
+        <h2 class="business-name">${formTitle}</h2>
 
-      <div class="success-icon">✓</div>
+        <div class="success-icon">✓</div>
 
-      <h3 class="success-title">Your order has been sent</h3>
-      <p class="success-subtitle">
-        The seller will contact you shortly.
-      </p>
+        <h3 class="success-title">Your order has been sent</h3>
+        <p class="success-subtitle">
+          The seller will contact you shortly.
+        </p>
 
-      <p class="powered">powered by X Redro</p>
+        <p class="powered">powered by X Redro</p>
+      </div>
     </div>
   `;
 }
@@ -444,6 +539,12 @@ async function initForm() {
 
     formTitle = doc.title || "";
     formSubtitle = doc.subtitle || "";
+
+    // Which of the 4 finalized visual themes this seller picked in the
+    // Form Builder (falls back to theme-r1 if the form predates this,
+    // or if the `storeTheme` attribute hasn't been added to the form
+    // collection in Appwrite yet — see NOTE in js/builderF.js).
+    CURRENT_THEME_CLASS = doc.storeTheme ? `theme-${doc.storeTheme}` : "theme-r1";
 
     fields = doc.fields.map(f =>
       typeof f === "string" ? JSON.parse(f) : f

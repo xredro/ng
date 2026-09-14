@@ -40,20 +40,14 @@ const SUN_SVG_PATH = `
 function applyTheme(theme) {
   const iconDesktop = document.getElementById("themeIconD");
   const iconMobile = document.getElementById("themeIconM");
+  const iconSettings = document.getElementById("themeIconSettings");
   document.body.dataset.theme = theme;
 
   localStorage.setItem("theme", theme);
 
-  if (!iconDesktop) return;
-  if (!iconMobile) return;
+  const path = theme === "dark" ? SUN_SVG_PATH : MOON_SVG_PATH;
 
-  iconDesktop.innerHTML =
-    theme === "dark"
-      ? SUN_SVG_PATH
-      : MOON_SVG_PATH;
-
-  iconMobile.innerHTML =
-    theme === "dark"
-      ? SUN_SVG_PATH
-      : MOON_SVG_PATH;
+  if (iconDesktop) iconDesktop.innerHTML = path;
+  if (iconMobile) iconMobile.innerHTML = path;
+  if (iconSettings) iconSettings.innerHTML = path;
   }
