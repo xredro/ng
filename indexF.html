@@ -6,7 +6,14 @@
   <title>Form Builder | X REDRO</title>
   <link rel="stylesheet" href="css/form.shared.css">
   <link rel="stylesheet" href="css/stylesF.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/gomart-visual.css">
   <link rel="stylesheet" href="css/alert.css" />
+  <!-- Store visual themes — used by the live preview overlay below -->
+  <link rel="stylesheet" href="css/theme-r1.css">
+  <link rel="stylesheet" href="css/theme-r2.css">
+  <link rel="stylesheet" href="css/theme-r3.css">
+  <link rel="stylesheet" href="css/theme-r4.css">
 </head>
 <body>
 <script>
@@ -20,7 +27,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <img src="assets/logo.png" class="logo" />
+    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
 
     <!-- Desktop links -->
     <div class="nav-links desktop-only">
@@ -67,7 +74,7 @@
     <div class="actions">
       <input id="formLinkInput" readonly>
       <button onclick="copyFormLink()">Copy link</button>
-      <!-- <button type="button" onclick="openPreview(event)">Preview Form</button> -->
+      <button type="button" onclick="openPreview(event)">Preview Form</button>
     </div>
   </div>
 
@@ -87,6 +94,29 @@
     </div>
   </section>
 
+  <!-- STORE THEME (visual design for the customer-facing page) -->
+  <h3>Store Theme</h3>
+  <section class="card">
+    <div id="themePicker" class="theme-picker-scroll">
+      <div class="theme-swatch" data-theme="r1" onclick="selectStoreTheme('r1')">
+        <div class="theme-swatch-preview theme-swatch-r1"></div>
+        <span>Dark</span>
+      </div>
+      <div class="theme-swatch" data-theme="r2" onclick="selectStoreTheme('r2')">
+        <div class="theme-swatch-preview theme-swatch-r2"></div>
+        <span>E-commerce</span>
+      </div>
+      <div class="theme-swatch" data-theme="r3" onclick="selectStoreTheme('r3')">
+        <div class="theme-swatch-preview theme-swatch-r3"></div>
+        <span>Simple</span>
+      </div>
+      <div class="theme-swatch" data-theme="r4" onclick="selectStoreTheme('r4')">
+        <div class="theme-swatch-preview theme-swatch-r4"></div>
+        <span>Tech</span>
+      </div>
+    </div>
+  </section>
+
   <!-- INPUT FIELDS -->
   <div class="section-header">
     <h3 style="display: inline-block; margin-right: 10px;">Input Fields</h3>
@@ -94,6 +124,14 @@
   </div>
   <section class="inputCard">
     <div id="fields" class="fields"></div>
+  </section>
+
+  <!-- PRODUCTS (its own section — category chips + grid, tap a tile to edit) -->
+  <div class="section-header">
+    <h3 style="display: inline-block; margin-right: 10px;">Products</h3>
+  </div>
+  <section class="inputCard">
+    <div id="productFields"></div>
   </section>
 
   <button class="save" onclick="saveForm()">Save Form</button>
@@ -116,14 +154,10 @@
     <!-- Close button OUTSIDE preview theme -->
     <span class="close" onclick="closePreview()">×</span>
 
-    <!-- Theme-isolated preview -->
-    <div class="preview-theme">
-      <div class="preview-card">
-
-        <!-- This is where JS injects the form -->
-        <div id="previewForm"></div>
-
-      </div>
+    <!-- Theme-isolated preview — selectStoreTheme()/openPreview() set the
+         theme-rX class here to match the seller's Store Theme choice -->
+    <div class="preview-theme theme-r1" id="previewThemeRoot">
+      <div id="previewForm"></div>
     </div>
 
   </div>
@@ -135,6 +169,8 @@
   <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
   <div class="subscribe">
   <h2>Your subscription has expired</h2>
+
+  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
   <div class="subscribe-row">
       <span>7 days</span>
       <button onclick="buySubscription(7)">Buy Subscription</button>
@@ -143,6 +179,12 @@
     <div class="subscribe-row">
       <span>30 days</span>
       <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+  -->
+
+  <div class="subscribe-row">
+      <span>Renew to keep your store live</span>
+      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
     </div>
    </div>     
 </div>

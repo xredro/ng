@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Orders | X REDRO</title>
-  <link rel="stylesheet" href="css/orders.css" /> 
+  <link rel="stylesheet" href="css/orders.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/gomart-visual.css">
+  <link rel="stylesheet" href="css/verify.css">
   <link rel="stylesheet" href="css/alert.css" />
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 </head>
@@ -20,7 +23,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <img src="assets/logo.png" class="logo" />
+    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
 
     <!-- Desktop links -->
     <div class="nav-links desktop-only">
@@ -66,6 +69,7 @@
       <button onclick="openOrderDeleteModal()">Delete Orders</button>
       <button type="button" onclick="exportOrdersCSV()">Export CSV</button>
       <button type="button" onclick="exportOrdersPDF()">Export PDF</button>
+      <button type="button" onclick="openVerifyOverlay()">Verify Payments</button>
     </div>
   </section>
 
@@ -78,9 +82,9 @@
 
   <div class="filters">
     <button data-filter="all">All</button>
+    <button data-filter="pending">Unpaid</button>
     <button data-filter="paid">Paid</button>
     <button data-filter="delivered">Delivered</button>
-    <button data-filter="pending">Pending</button>
   </div>
 
   <section id="ordersList"></section>
@@ -105,6 +109,8 @@
   <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
   <div class="subscribe">
   <h2>Your subscription has expired</h2>
+
+  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
   <div class="subscribe-row">
       <span>7 days</span>
       <button onclick="buySubscription(7)">Buy Subscription</button>
@@ -114,13 +120,27 @@
       <span>30 days</span>
       <button onclick="buySubscription(30)">Buy Subscription</button>
     </div>
+  -->
+
+  <div class="subscribe-row">
+      <span>Renew to keep your store live</span>
+      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
+    </div>
    </div>     
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  // pdf.js needs its worker pointed at a matching CDN build
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+</script>
 <script src="js/orders.js"></script>
+<script src="js/paymentVerify.js"></script>
 <script src="js/themeF.js"></script>
 <script src="js/alert.js"></script>
 <script>

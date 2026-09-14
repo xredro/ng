@@ -29,6 +29,7 @@
   <meta name="twitter:title" content="X Redro | Structured Orders for Instagram & WhatsApp Sellers" />
   <meta name="twitter:description" content="Turn messy WhatsApp DMs into structured orders. Built for Nigerian online sellers." />
 
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/styles.css"/>
 </head>
 <body>
@@ -36,7 +37,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <img src="assets/logo.png" alt="X Redro Logo" class="logo"/>
+    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
 
     <div class="nav-actions">
       <a href="login.html" class="login">Log in</a>
@@ -45,143 +46,114 @@
   </div>
 </nav>
 
-<!-- HERO -->
+<!-- HERO — headline, CTAs, and the feature cards, all on the same background -->
 <section class="hero">
   <div class="container">
+    <p class="hero-eyebrow">ORDER MANAGEMENT PLATFORM</p>
+
     <h1>
       Built to handle<br>
       500 orders in 10 minutes
     </h1>
 
     <p class="hero-sub">
-      Stop collecting messy orders in DMs.  
-      Create a clean order link.  
-      Let customers select products, upload payment proof,  
+      Stop collecting messy orders in DMs.
+      Create a clean order link.
+      Let customers select products, upload payment proof,
       and send complete orders in one place.
     </p>
 
     <div class="hero-cta">
-      <a href="signup.html" class="btn-primary">
-        Start Free 7-Day Trial →
-      </a>
+      <a href="signup.html" class="btn-primary">Start Free 7-Day Trial &rarr;</a>
+      <a href="#features" class="btn-secondary">See How It Works</a>
+    </div>
+
+    <!-- FEATURE CARDS — horizontal scroll, arrows grouped on the right, overlaid on the card row -->
+    <div class="carousel-wrap" id="features">
+      <div class="carousel-track" id="featureCarouselTrack">
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="8" width="25" height="30" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 15h13M16 21h13M16 27h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M15 40h23" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M38 14v20" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+          <h3>Take hundreds of orders</h3>
+          <p>Handle a high volume of orders through one link without things getting lost in the DMs.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 20l4-10h24l4 10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 20h30v20H9z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20c0 4 3 6 6 6s6-2 6-6c0 4 3 6 6 6s6-2 6-6c0 4 3 6 6 6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19 40V30h10v10" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+          <h3>Your own shop page</h3>
+          <p>Every seller gets a dedicated, shareable store page customers can order directly from.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="7" width="24" height="34" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 15h12M16 21h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M16 29l4 4 8-9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="34" r="8" fill="white" stroke="currentColor" stroke-width="2"/><path d="M31.5 34l2.5 2.5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Auto-verify payments</h3>
+          <p>Payment proof images are automatically checked and verified once a customer's payment is confirmed.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="9" cy="24" r="3" fill="currentColor"/><circle cx="24" cy="15" r="3" fill="currentColor"/><circle cx="39" cy="24" r="3" fill="currentColor"/><path d="M12 23l9-6M27 17l9 6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M17 34h18M29 30l6 4-6 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Track order status</h3>
+          <p>Mark every order Unpaid, Paid, or Delivered, so you always know exactly where it stands.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="9" y="7" width="30" height="34" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="14" y="12" width="20" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 25h4M24 25h4M15 32h4M24 32h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M32 25v10M28 30h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <h3>No manual price calculation</h3>
+          <p>No more "how much is total?" DMs and no more messy screenshots — totals add up on their own.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M19 29l-3 3a7 7 0 010-10l5-5a7 7 0 0110 0" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M29 19l3-3a7 7 0 0110 10l-5 5a7 7 0 01-10 0" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M18 24h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <h3>No website needed</h3>
+          <p>Just a link. Works perfectly in your Instagram bio or a WhatsApp broadcast.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M27 5L11 27h12l-2 16 16-23H25z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
+          <h3>Set up in minutes</h3>
+          <p>Create your form, add products and prices, share your link — customers place structured orders right away.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 39v-8c0-5 4-9 9-9s9 4 9 9v8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 39v-5c0-4 3-7 7-7M41 39v-5c0-4-3-7-7-7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="23" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="36" cy="23" r="3" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+          <h3>Built for online hustlers</h3>
+          <p>Fashion, thrift, hair, perfume, gadgets, food, resellers — however you sell, X Redro fits.</p>
+        </div>
+
+        <div class="carousel-card">
+          <div class="carousel-card-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="16" fill="none" stroke="currentColor" stroke-width="2"/><path d="M28 16c-1.5-1-3-1.5-5-1.5-3.5 0-6 2-6 4.5 0 6 11 3.5 11 9 0 2.5-2.5 4.5-6 4.5-2 0-4-.5-5.5-1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M24 12v24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <h3>Simple pricing</h3>
+          <p>₦1,000 for 7 days or ₦3,000 for 30 days. No CAC required, no complicated setup.</p>
+        </div>
+
+      </div>
+
+      <div class="carousel-nav">
+        <button class="carousel-arrow" onclick="scrollFeatureCarousel(-1)" aria-label="Previous">&#8592;</button>
+        <button class="carousel-arrow" onclick="scrollFeatureCarousel(1)" aria-label="Next">&#8594;</button>
+      </div>
     </div>
   </div>
 </section>
 
-<!-- PROBLEM -->
-<section class="section">
-  <div class="container grid-2">
-    <div class="containerPadding">
-      <h2>Why Sellers Use X Redro</h2>
-      <ul class="feature-list">
-        <li>No more “How much is total?”</li>
-        <li>No more messy screenshots</li>
-        <li>No more manual price calculation</li>
-        <li>No full website needed</li>
-        <li>Works perfectly for WhatsApp & Instagram bio links</li>
-      </ul>
-    </div>
-
-    <div class="card">
-      <h3>How It Works</h3>
-      <ul class="feature-list">
-        <li>Create your order form</li>
-        <li>Add products & prices</li>
-        <li>Share your link</li>
-        <li>Customers place structured orders</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<!-- BUILT FOR -->
-<section class="section alt">
+<!-- CONTACT — last section of the page -->
+<section class="contact">
   <div class="container center">
-    <h2>Built for Online Hustlers</h2>
-    <p class="muted">
-      Fashion sellers • Thrift sellers • Hair vendors • Perfume sellers • Gadget sellers • Food vendors • Resellers
-    </p>
+    <h2>Contact &amp; Feedback</h2>
+    <p class="muted">Questions, issues, or suggestions?</p>
+    <p><span class="contact-icon">&#9993;</span> <a href="mailto:xredrocontact@gmail.com">xredrocontact@gmail.com</a></p>
+    <p><span class="contact-icon">&#128172;</span> <a href="https://wa.me/2347055274048" target="_blank" rel="noopener">Chat us on WhatsApp</a></p>
   </div>
 </section>
 
-<!-- PRICING -->
-<section class="section">
-  <div class="container center">
-    <h2>Simple Pricing</h2>
-
-    <div class="pricing">
-      <div class="price-card">
-        <h3>7 Days</h3>
-        <p class="price">₦1000</p>
-      </div>
-
-      <div class="price-card">
-        <h3>30 Days</h3>
-        <p class="price">₦3000</p>
-      </div>
-    </div>
-
-    <p class="muted small">
-      No CAC required. No complicated setup.
-    </p>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section class="section alt">
-  <div class="container">
-    <h2>Frequently Asked Questions</h2>
-
-    <div class="faq">
-      <div class="faq-item">
-        <h4>Do I need a website?</h4>
-        <p>No. X Redro gives you a shareable order link.</p>
-      </div>
-
-      <div class="faq-item">
-        <h4>Does X Redro process payments?</h4>
-        <p>No. Customers pay you directly. X Redro structures the order and payment proof.</p>
-      </div>
-
-      <div class="faq-item">
-        <h4>Can I use it for Instagram bio?</h4>
-        <p>Yes. Your form link works perfectly in bio or WhatsApp broadcast.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- CONTACT -->
-<section class="section">
-  <div class="container center">
-    <h2>Contact & Feedback</h2>
-
-    <p class="muted">
-      Questions, issues, or suggestions?
-    </p>
-
-    <p>
-      📧 Email: <a href="mailto:xredrocontact@gmail.com">xredrocontact@gmail.com</a>
-    </p>
-
-    <p>
-      💬 WhatsApp: <a href="https://wa.me/2347055274048" target="_blank">Chat us on WhatsApp</a>
-    </p>
-
-    <div class="hero-cta">
-      <a href="signup.html" class="btn-primary">
-        Get Started →
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer class="footer">
-  <div class="container footer-inner">
-    <p>© 2026 X Redro. Built for online sellers.</p>
-  </div>
-</footer>
+<script>
+  function scrollFeatureCarousel(direction) {
+    const track = document.getElementById("featureCarouselTrack");
+    const card = track.querySelector(".carousel-card");
+    const amount = card ? card.offsetWidth + 16 : 280;
+    track.scrollBy({ left: amount * direction, behavior: "smooth" });
+  }
+</script>
 
 </body>
 </html>

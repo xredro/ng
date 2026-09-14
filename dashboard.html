@@ -6,6 +6,8 @@
   <title>Dashboard | X REDRO</title>
   <link rel="stylesheet" href="css/alert.css" />
   <link rel="stylesheet" href="css/dashboard.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/gomart-visual.css">
 </head>
 <body>
 <script>
@@ -20,7 +22,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <img src="assets/logo.png" class="logo" />
+    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
 
     <!-- Desktop links -->
     <div class="nav-links desktop-only">
@@ -62,6 +64,7 @@
 <main class="dashboard">
 
   <h1>Dashboard</h1>
+  <p class="dashboard-sub">Here's what's happening with your store today.</p>
 
   <section id="stats" class="stats">
     <div>
@@ -118,10 +121,14 @@
 
 </main>
 
+<div id="paymentImageModal" class="modal hidden" onclick="this.classList.add('hidden')"></div>
+
 <div id="subscriptionModal" class="modal hidden">
   <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
   <div class="subscribe">
   <h2>Your subscription has expired</h2>
+
+  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
   <div class="subscribe-row">
       <span>7 days</span>
       <button onclick="buySubscription(7)">Buy Subscription</button>
@@ -130,6 +137,12 @@
     <div class="subscribe-row">
       <span>30 days</span>
       <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+  -->
+
+  <div class="subscribe-row">
+      <span>Renew to keep your store live</span>
+      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
     </div>
    </div>     
 </div>

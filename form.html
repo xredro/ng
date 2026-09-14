@@ -7,6 +7,15 @@
   <link rel="stylesheet" href="css/form.shared.css">
   <link rel="stylesheet" href="css/form.css">
   <link rel="stylesheet" href="css/alert.css" />
+  <!-- Visual theme skins — the correct one is applied at runtime via a
+       class on #formRoot's .preview-theme wrapper, set from the form's
+       saved `theme` value (see initForm() in js/form.js). All four are
+       safe to load together since every rule is scoped under its own
+       theme-rX class. -->
+  <link rel="stylesheet" href="css/theme-r1.css">
+  <link rel="stylesheet" href="css/theme-r2.css">
+  <link rel="stylesheet" href="css/theme-r3.css">
+  <link rel="stylesheet" href="css/theme-r4.css">
 </head>
 <body>
   <div id="formRoot"></div>

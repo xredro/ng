@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Settings | X REDRO</title>
   <link rel="stylesheet" href="css/settings.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/gomart-visual.css">
     <link rel="stylesheet" href="css/alert.css" />
 </head>
 <body>
@@ -20,7 +22,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <img src="assets/logo.png" class="logo" />
+    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
 
     <!-- Desktop links -->
     <div class="nav-links desktop-only">
@@ -66,6 +68,13 @@
   <section>
     <h2>Profile</h2>
 
+    <div class="profile-identity">
+      <div class="profile-avatar" id="profileAvatar">?</div>
+      <div>
+        <div class="profile-avatar-name" id="profileNameDisplay">Your account</div>
+      </div>
+    </div>
+
     <label>Username</label>
     <input id="username" disabled>
 
@@ -82,6 +91,7 @@
   <section>
     <h2>Subscription</h2>
 
+    <!-- Old Selar-based plan buttons — kept for reference, not deleted.
     <div class="subscription-row">
       <span>7 days</span>
       <button onclick="buySubscription(7)">Buy Subscription</button>
@@ -91,8 +101,33 @@
       <span>30 days</span>
       <button onclick="buySubscription(30)">Buy Subscription</button>
     </div>
+    -->
+
+    <div class="plan-tiles">
+      <div class="plan-tile plan-tile-active">
+        <span class="plan-tile-label">Current plan</span>
+        <span class="plan-tile-value">Active</span>
+      </div>
+      <div class="plan-tile">
+        <span class="plan-tile-label">Renew to keep your store live</span>
+        <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
+      </div>
+    </div>
   </section>
-  
+
+  <!-- APPEARANCE — hidden per instruction: dark/light mode toggle
+       stays only in the nav bar, not duplicated here. Kept in the DOM
+       (not deleted) in case this is wanted back later. -->
+  <section style="display:none;">
+    <h2>Appearance</h2>
+    <div class="status-row">
+      <span>Dark mode</span>
+      <div class="theme-toggle" onclick="toggleTheme()">
+        <svg id="themeIconSettings" class="theme-icon" viewBox="0 -960 960 960" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+  </section>
+
   <!-- SYSTEM STATUS -->
   <section>
     <h2>System Status</h2>
@@ -147,6 +182,8 @@
   <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
   <div class="subscribe">
   <h2>Your subscription has expired</h2>
+
+  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
   <div class="subscribe-row">
       <span>7 days</span>
       <button onclick="buySubscription(7)">Buy Subscription</button>
@@ -155,6 +192,12 @@
     <div class="subscribe-row">
       <span>30 days</span>
       <button onclick="buySubscription(30)">Buy Subscription</button>
+    </div>
+  -->
+
+  <div class="subscribe-row">
+      <span>Renew to keep your store live</span>
+      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
     </div>
    </div>     
 </div>
