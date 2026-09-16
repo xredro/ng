@@ -393,7 +393,7 @@ body {
 /* both arrows grouped together, floating over the right edge of the row */
 .carousel-nav {
   position: absolute;
-  top: 20%;
+  top: 50%;
   right: 8px;
   transform: translateY(-50%);
   display: flex;

@@ -1,0 +1,39 @@
+/* Theme 5 — "Luxury": single-column, large image, serif, sparse */
+.preview-theme.theme-r5 {
+  --bg: #FBF8F3;
+  --card: #ffffff;
+  --text: #2E2A22;
+  --muted: #857C6B;
+  --border: #E9E2D3;
+  --accent: #F3EDE0;
+  --accent-text: #6B5B3A;
+}
+.theme-r5 * { font-family: Georgia, 'Times New Roman', serif; }
+.theme-r5 .store-simple-header { text-align: center; padding-top: 44px; }
+.theme-r5 .store-simple-header h1 { color: #2E2A22; font-size: 30px; font-weight: 400; letter-spacing: 0.02em; }
+.theme-r5 .store-simple-header p { color: #857C6B; font-style: italic; }
+
+.theme-r5 .cat-chip { background: transparent; border: 1px solid #E9E2D3; color: #857C6B; }
+.theme-r5 .cat-chip.cat-active { background: #2E2A22; color: #fff; border-color: #2E2A22; }
+
+.theme-r5 .product-card { background: transparent; border: none; padding: 0; }
+.theme-r5 .product-image { background: #F3EDE0; border-radius: 2px; }
+.theme-r5 .product-name { color: #2E2A22; font-size: 19px; font-weight: 400; text-align: center; }
+.theme-r5 .product-price { color: #6B5B3A; text-align: center; font-size: 14px; }
+.theme-r5 .more-btn { position: static; display: block; width: fit-content; margin: 10px auto 0; border-radius: 0; background: transparent; border-bottom: 1px solid #2E2A22; color: #2E2A22; padding: 2px 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.theme-r5 .popup-card, .theme-r5 .checkout-overlay-card { background: #FBF8F3; color: #2E2A22; }
+.theme-r5 .popup-backdrop, .theme-r5 .checkout-overlay-backdrop { background: rgba(46,42,34,0.5); }
+.theme-r5 .popup-close, .theme-r5 .checkout-close { background: #F3EDE0; color: #2E2A22; }
+.theme-r5 .popup-image { background: #F3EDE0; border-radius: 2px; }
+.theme-r5 .popup-desc { color: #857C6B; }
+.theme-r5 .checkout-badge { background: #2E2A22; color: #fff; border-radius: 0; }
+.theme-r5 .checkout-head h2 { font-weight: 400; }
+
+.theme-r5 .form-group input, .theme-r5 .form-group textarea, .theme-r5 .form-group select { background: #fff; border: 1px solid #E9E2D3; border-radius: 0; }
+.theme-r5 .total-box { background: #F3EDE0; border-radius: 2px; }
+.theme-r5 .upload-ui { background: #fff; border: 1px dashed #C9BC9C; border-radius: 0; }
+.theme-r5 .send-btn { background: #2E2A22; border-radius: 0; letter-spacing: 0.06em; text-transform: uppercase; font-size: 13px; }
+
+.theme-r5 .cart-bar { background: #2E2A22; border-radius: 4px; }
+.theme-r5 .cart-bar-checkout-label { background: #fff; color: #2E2A22; border-radius: 2px; }

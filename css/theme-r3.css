@@ -11,7 +11,6 @@
 .theme-r3 .store-simple-header h1 { color: #16181A; }
 .theme-r3 .store-simple-header p { color: #767B80; }
 
-.theme-r3 .product-grid { grid-template-columns: repeat(2, 1fr); }
 .theme-r3 .product-card { background: #fff; border-radius: 16px; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
 .theme-r3 .product-image { background: #E4F3E8; border-radius: 12px; }
 .theme-r3 .product-name { color: #16181A; font-weight: 600; }

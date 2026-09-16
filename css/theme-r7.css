@@ -1,0 +1,34 @@
+/* Theme 7 — "Listings": horizontal rows, image left / details right */
+.preview-theme.theme-r7 {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #16181A;
+  --muted: #767B80;
+  --border: #EBEBEB;
+  --accent: #FBE6E6;
+  --accent-text: #C0392B;
+}
+.theme-r7 .store-simple-header h1 { font-size: 22px; font-weight: 800; }
+
+.theme-r7 .cat-chip { background: #F4F4F4; border-radius: 8px; }
+.theme-r7 .cat-chip.cat-active { background: #16181A; color: #fff; }
+
+.theme-r7 .product-card { background: #fff; border-bottom: 1px solid #EBEBEB; border-radius: 0; padding: 16px 4px; }
+.theme-r7 .product-image { border-radius: 10px; background: #F4F4F4; }
+.theme-r7 .product-name { font-size: 15px; font-weight: 700; }
+.theme-r7 .product-price { font-size: 14px; color: #C0392B; font-weight: 700; margin-top: 4px; }
+.theme-r7 .more-btn { background: #16181A; color: #fff; border-radius: 999px; }
+
+.theme-r7 .popup-card, .theme-r7 .checkout-overlay-card { background: #fff; }
+.theme-r7 .popup-backdrop, .theme-r7 .checkout-overlay-backdrop { background: rgba(0,0,0,0.4); }
+.theme-r7 .popup-close, .theme-r7 .checkout-close { background: #F4F4F4; }
+.theme-r7 .popup-image { background: #F4F4F4; border-radius: 12px; }
+.theme-r7 .checkout-badge { background: #C0392B; color: #fff; }
+
+.theme-r7 .form-group input, .theme-r7 .form-group textarea, .theme-r7 .form-group select { background: #F8F8F8; border-radius: 10px; }
+.theme-r7 .total-box { background: #F8F8F8; border-radius: 10px; }
+.theme-r7 .upload-ui { background: #F8F8F8; border-radius: 10px; }
+.theme-r7 .send-btn { background: #16181A; }
+
+.theme-r7 .cart-bar { background: #16181A; }
+.theme-r7 .cart-bar-checkout-label { background: #C0392B; color: #fff; }

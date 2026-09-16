@@ -11,9 +11,8 @@
 .theme-r4 .store-simple-header h1 { color: #fff; }
 .theme-r4 .store-simple-header p { color: #9B96A6; }
 
-.theme-r4 .product-grid { grid-template-columns: repeat(2, 1fr); }
 .theme-r4 .product-card { background: #201D26; border: 1px solid #2E2A38; border-radius: 18px; }
-.theme-r4 .product-image { background: #2E2618; border-radius: 12px; }
+.theme-r4 .product-image, .theme-r4 .card-icon-badge { background: #2E2618; border-radius: 12px; }
 .theme-r4 .product-name { color: #fff; font-weight: 600; }
 .theme-r4 .product-price { color: #F2A93B; font-weight: 700; }
 .theme-r4 .more-btn { background: #F2A93B; color: #17151C; }

@@ -378,7 +378,6 @@
 .store-shell { max-width: 1080px; margin: 0 auto; padding-bottom: 90px; }
 .showcase { margin-bottom: var(--space-5); }
 .showcase .product-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   max-height: none;
   overflow: visible;
   padding-right: 0;
@@ -505,3 +504,81 @@
 .checkout-head { text-align: center; margin-bottom: var(--space-4); }
 .checkout-head h2 { margin: 0 0 4px; font-size: 20px; }
 .checkout-head p { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* =========================================================
+   CATEGORY SCROLL (shown only when a product field has >1 category)
+========================================================= */
+
+.category-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 0 0 12px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.category-scroll::-webkit-scrollbar { display: none; }
+.cat-chip {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.product-card.hidden { display: none !important; }
+
+/* =========================================================
+   9 STRUCTURALLY DISTINCT LAYOUT MODES
+   These control SHAPE (columns, orientation, image ratio) —
+   each theme's own CSS file controls color/type on top of this.
+========================================================= */
+
+/* dense (r1) — tight multi-column grid, no card padding */
+.layout-dense { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.layout-dense .product-image { aspect-ratio: 16/9; height: auto; }
+
+/* airy (r2) — spacious 2-col grid, generous card padding */
+.layout-airy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+
+/* rounded (r3) — 2-col grid, soft rounded cards */
+.layout-rounded { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+/* iconbadge (r4) — 2-col grid, small icon badge instead of full image */
+.layout-iconbadge { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.layout-iconbadge .product-card { display: flex; flex-direction: column; }
+.card-icon-badge {
+  width: 40px; height: 40px; border-radius: 12px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: var(--space-2);
+}
+.card-icon-badge img { width: 100%; height: 100%; object-fit: cover; }
+
+/* luxury (r5) — single column, large image, sparse */
+.layout-luxury { display: flex; flex-direction: column; gap: 22px; }
+.luxury-row { display: flex; flex-direction: column; }
+.luxury-row .product-image { aspect-ratio: 16/10; height: auto; margin-bottom: var(--space-3); }
+.luxury-details { text-align: center; }
+
+/* marketplace (r6) — dense 3-col compact grid */
+.layout-marketplace { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.layout-marketplace .product-card { padding: var(--space-1); }
+.layout-marketplace .product-image { aspect-ratio: 1/1; height: auto; }
+
+/* listings (r7) — horizontal rows, image left / details right */
+.layout-listings { display: flex; flex-direction: column; gap: 12px; }
+.list-row { display: flex; flex-direction: row; align-items: center; gap: 14px; }
+.list-row .product-image { width: 96px; height: 96px; flex-shrink: 0; margin-bottom: 0; }
+.list-row-body { flex: 1; min-width: 0; }
+.list-row .more-btn { position: static; margin-top: 6px; width: auto; height: auto; border-radius: 999px; padding: 6px 14px; font-size: 12px; }
+
+/* organic (r8) — single column, circular photos, no card box */
+.layout-organic { display: flex; flex-direction: column; gap: 26px; }
+.organic-row { background: transparent !important; box-shadow: none !important; text-align: center; }
+.circle-photo { border-radius: 50%; aspect-ratio: 1/1; height: auto; width: 55%; margin: 0 auto var(--space-3); overflow: hidden; }
+
+/* editorial (r9) — asymmetric grid, first product featured/larger */
+.layout-editorial { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.layout-editorial .product-card.featured { grid-column: span 2; }
+.layout-editorial .product-card.featured .product-image { aspect-ratio: 21/9; height: auto; }

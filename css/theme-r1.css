@@ -12,7 +12,6 @@
 .theme-r1 .store-simple-header p { color: #AAAAAA; }
 .theme-r1 .showcase h3 { color: #fff; }
 
-.theme-r1 .product-grid { grid-template-columns: repeat(4, 1fr); }
 .theme-r1 .product-card { background: transparent; border: none; padding: 0; }
 .theme-r1 .product-image { aspect-ratio: 16/9; height: auto; border-radius: 10px; background: linear-gradient(160deg,#272727,#1B1B1B); }
 .theme-r1 .product-name { color: #fff; font-weight: 600; margin-top: 8px; }
@@ -38,4 +37,3 @@
 .theme-r1 .cart-bar .cb-info { color: #0F0F0F; }
 .theme-r1 .cart-bar-checkout-label { background: #0F0F0F; color: #fff; }
 
-@media (max-width: 640px) { .theme-r1 .product-grid { grid-template-columns: repeat(2, 1fr); } }

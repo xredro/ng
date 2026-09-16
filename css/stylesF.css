@@ -465,28 +465,36 @@ input {
 /* =========================
    PREVIEW OVERLAY
 ========================= */
-.overlay {
+/* Preview overlay — deliberately edge-to-edge, no bordered "card" wrapper,
+   so it looks exactly like the real customer page, not a small modal
+   nested inside the builder. */
+.preview-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: var(--bg, #fff);
   z-index: 9999;
+  overflow-y: auto;
 }
-
-.overlay.hidden {
+.preview-overlay.hidden {
   display: none;
 }
-
-.overlay-content {
-  background: #fff;
-  border-radius: var(--radius-lg);
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: var(--space-3);
+.preview-fullbleed {
+  min-height: 100vh;
+}
+.preview-close-btn {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 10000;
+  border: none;
+  border-radius: 999px;
+  background: #16181A;
+  color: #fff;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
 }
 
 /* Exipred Subscription */
@@ -802,3 +810,8 @@ input {
 .theme-swatch-r2 { background: linear-gradient(135deg, #16181A 45%, #F7F7F7 45%); }
 .theme-swatch-r3 { background: linear-gradient(135deg, #F5F7F5 55%, #3DA35D 55%); }
 .theme-swatch-r4 { background: linear-gradient(135deg, #17151C 55%, #F2A93B 55%); }
+.theme-swatch-r5 { background: linear-gradient(135deg, #FBF8F3 55%, #6B5B3A 55%); }
+.theme-swatch-r6 { background: linear-gradient(135deg, #F4F5F2 55%, #2B5EA8 55%); }
+.theme-swatch-r7 { background: linear-gradient(135deg, #ffffff 55%, #C0392B 55%); }
+.theme-swatch-r8 { background: linear-gradient(135deg, #FBF3E1 55%, #3DA35D 55%); }
+.theme-swatch-r9 { background: linear-gradient(135deg, #16181A 45%, #F4C542 45%); }

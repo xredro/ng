@@ -1,0 +1,36 @@
+/* Theme 9 — "Editorial": asymmetric grid, first product featured, bold typography */
+.preview-theme.theme-r9 {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --text: #16181A;
+  --muted: #767B80;
+  --border: #EDEDED;
+  --accent: #16181A;
+  --accent-text: #F4C542;
+}
+.theme-r9 .store-simple-header h1 { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
+.theme-r9 .store-simple-header p { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; }
+
+.theme-r9 .cat-chip { background: #16181A; color: #fff; border-radius: 2px; }
+.theme-r9 .cat-chip.cat-active { background: #F4C542; color: #16181A; }
+
+.theme-r9 .product-card { background: #fff; border: none; padding: 0; }
+.theme-r9 .product-image { border-radius: 0; background: #F4F4F4; }
+.theme-r9 .product-card.featured .product-name { font-size: 26px; }
+.theme-r9 .product-name { font-weight: 800; font-size: 15px; margin-top: 10px; text-transform: uppercase; }
+.theme-r9 .product-price { font-weight: 700; color: #F4C542; background: #16181A; display: inline-block; padding: 2px 8px; margin-top: 4px; }
+.theme-r9 .more-btn { border-radius: 0; background: #16181A; color: #fff; }
+
+.theme-r9 .popup-card, .theme-r9 .checkout-overlay-card { background: #fff; border-radius: 0 !important; }
+.theme-r9 .popup-backdrop, .theme-r9 .checkout-overlay-backdrop { background: rgba(0,0,0,0.7); }
+.theme-r9 .popup-close, .theme-r9 .checkout-close { background: #16181A; color: #fff; border-radius: 0; }
+.theme-r9 .popup-image { border-radius: 0; background: #F4F4F4; }
+.theme-r9 .checkout-badge { background: #16181A; color: #F4C542; border-radius: 0; font-weight: 900; }
+
+.theme-r9 .form-group input, .theme-r9 .form-group textarea, .theme-r9 .form-group select { background: #F8F8F8; border-radius: 0; border-bottom: 2px solid #16181A; }
+.theme-r9 .total-box { background: #16181A; color: #fff; border-radius: 0; }
+.theme-r9 .upload-ui { background: #F8F8F8; border-radius: 0; }
+.theme-r9 .send-btn { background: #16181A; border-radius: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.theme-r9 .cart-bar { background: #16181A; border-radius: 6px; }
+.theme-r9 .cart-bar-checkout-label { background: #F4C542; color: #16181A; border-radius: 4px; }
