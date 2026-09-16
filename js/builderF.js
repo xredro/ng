@@ -48,10 +48,11 @@ let selectedStoreTheme = "r1";
 function selectStoreTheme(themeId) {
   selectedStoreTheme = themeId;
   highlightSelectedTheme();
-  // if the preview overlay is currently open, keep it in sync immediately
-  const previewRoot = document.getElementById("previewThemeRoot");
-  if (previewRoot && !document.getElementById("previewOverlay").classList.contains("hidden")) {
-    previewRoot.className = `preview-theme theme-${selectedStoreTheme}`;
+  // if the preview overlay is currently open, re-render it immediately
+  // so switching themes updates the preview live
+  const overlay = document.getElementById("previewOverlay");
+  if (overlay && !overlay.classList.contains("hidden")) {
+    openPreview();
   }
 }
 
@@ -744,14 +745,24 @@ function removeProduct(fieldId, index) {
 }
 
 /* ---------------- PREVIEW OVERLAY ---------------- */
+let previewCart = {};
+
 function openPreview(e) {
   if (e) e.preventDefault();
   const overlay = document.getElementById("previewOverlay");
   const container = document.getElementById("previewForm");
-  const previewRoot = document.getElementById("previewThemeRoot");
 
-  previewRoot.className = `preview-theme theme-${selectedStoreTheme}`;
-  container.innerHTML = buildPreviewHTML();
+  previewCart = {};
+  container.innerHTML = buildStorefrontHTML({
+    fields,
+    formTitle,
+    formSubtitle,
+    themeClass: `theme-${selectedStoreTheme}`,
+    // live:true so the preview is genuinely interactive (real qty
+    // buttons, real running total) — same renderer as the real page,
+    // just pointed at a throwaway preview cart instead of a real order.
+    opts: { live: true, cart: previewCart, qtyFn: "previewChangeQty", totalFn: "previewUpdateTotal", submitFn: "previewNoSubmit" }
+  });
   overlay.classList.remove("hidden");
 }
 
@@ -759,173 +770,64 @@ function closePreview() {
   document.getElementById("previewOverlay").classList.add("hidden");
 }
 
-function buildPreviewHTML() {
-  const productFields = fields.filter(f => f.type === "product");
-  const otherFields = fields.filter(f => f.type !== "product" && f.type !== "additional_fee");
-  const feeFields = fields.filter(f => f.type === "additional_fee");
-  const title = formTitle || "My Business Name";
-  const initial = title.trim().charAt(0).toUpperCase();
-
-  // No products yet — same flat fallback layout the real customer page uses.
-  if (productFields.length === 0) {
-    let html = `
-      <div class="preview-card">
-        <h2 class="business-name">${title}</h2>
-        <p class="subtitle">${formSubtitle || "Select your order"}</p>
-    `;
-    otherFields.forEach(field => { html += renderPreviewField(field); });
-    feeFields.forEach(field => { html += renderPreviewField(field); });
-    html += `
-        <div class="total-box">
-          <div>Items <span>0</span></div>
-          <div>Total Cost <span>₦0</span></div>
-        </div>
-        <div class="payment-proof">
-          <label>Payment Proof</label>
-          <div class="proof-box">Upload</div>
-        </div>
-        <button class="send-btn" disabled>Send Order</button>
-        <p class="powered">powered by X Redro</p>
-      </div>
-    `;
-    return html;
-  }
-
-  // Same showcase + checkout-overlay pattern as the live customer page.
-  // The "+" popups and the Checkout sheet are real, clickable CSS-only
-  // toggles here too, so this preview behaves like the real thing.
-  let html = `
-    <div class="store-simple-header">
-      <h1>${title}</h1>
-      <p>${formSubtitle || "Select your order"}</p>
-    </div>
-
-    <div class="store-shell">
-      <section class="showcase">
-        ${productFields.map(field => renderPreviewProducts(field)).join("")}
-      </section>
-    </div>
-
-    <input type="checkbox" id="previewCheckoutToggle" class="pop-toggle">
-
-    <div class="cart-bar visible">
-      <div class="cb-info"><span>Preview only</span><small>Qty/total shown live on the real page</small></div>
-      <label for="previewCheckoutToggle" class="cart-bar-checkout-label">Checkout &rarr;</label>
-    </div>
-
-    <div class="checkout-overlay">
-      <label for="previewCheckoutToggle" class="checkout-overlay-backdrop"></label>
-      <div class="checkout-overlay-card">
-        <label for="previewCheckoutToggle" class="checkout-close">&times;</label>
-        <div class="checkout-badge">${initial}</div>
-        <div class="checkout-head">
-          <h2>Checkout</h2>
-          <p>Confirm your details and we'll get your order moving.</p>
-        </div>
-
-        ${otherFields.map(field => renderPreviewField(field)).join("")}
-        ${feeFields.map(field => renderPreviewField(field)).join("")}
-
-        <div class="total-box">
-          <div>Items <span>0</span></div>
-          <div>Total Cost <span>₦0</span></div>
-        </div>
-        <div class="payment-proof">
-          <label>Payment Proof</label>
-          <div class="proof-box">Upload</div>
-        </div>
-        <button class="send-btn" disabled>Send Order</button>
-        <p class="powered">powered by X Redro</p>
-      </div>
-    </div>
-  `;
-
-  return html;
+function previewNoSubmit() {
+  showToast("This is a preview — orders can't be sent from here.", "info");
 }
 
-function renderPreviewField(field) {
-  let html = `<div class="form-group">`;
-
-  if (field.label) {
-    html += `<label>${field.label}</label>`;
-  }
-
-  if (field.type === "text") {
-    html += `<input type="text" placeholder="User input" disabled>`;
-  }
-
-  if (field.type === "number") {
-    html += `<input type="number" placeholder="User input" disabled>`;
-  }
-
-  if (field.type === "textarea") {
-    html += `<textarea placeholder="User input" disabled></textarea>`;
-  }
-
-  if (field.type === "dropdown") {
-    html += `<select disabled>
-      ${field.options.map(opt => `<option>${opt}</option>`).join("")}
-    </select>`;
-  }
-
-  if (field.type === "additional_fee") {
-    html += renderPreviewAdditionalFees(field);
-  }
-
-  html += `</div>`;
-  return html;
+function previewChangeQty(fieldId, index, delta) {
+  const key = `${fieldId}_${index}`;
+  previewCart[key] = Math.max(0, (previewCart[key] || 0) + delta);
+  const el = document.getElementById(`qty-${fieldId}-${index}`);
+  if (el) el.innerText = previewCart[key];
+  previewUpdateTotal();
 }
 
-function renderPreviewProducts(field) {
-  let html = `<div class="product-grid">`;
+function previewUpdateTotal() {
+  let items = 0, total = 0;
 
-  field.products.forEach((p, i) => {
-    const cbId = `preview-pop-${field.id}-${i}`;
-    const img = p.imageUrl ? `<img src="${p.imageUrl}">` : "";
-    html += `
-      <div class="product-card">
-        <input type="checkbox" id="${cbId}" class="pop-toggle">
-        <div class="product-image">${img}</div>
-        <div class="product-name">${p.name || "Product Name"}</div>
-        <div class="product-price">₦${Number(p.price || 0).toLocaleString()}</div>
-        <label for="${cbId}" class="more-btn">+</label>
-
-        <div class="product-popup">
-          <label for="${cbId}" class="popup-backdrop"></label>
-          <div class="popup-card">
-            <label for="${cbId}" class="popup-close">&times;</label>
-            <div class="popup-image">${img}</div>
-            <h3>${p.name || "Product Name"}</h3>
-            <div class="popup-price">₦${Number(p.price || 0).toLocaleString()}</div>
-            <div class="product-qty">
-              <button disabled>-</button><span>0</span><button disabled>+</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+  fields.forEach(field => {
+    if (field.type === "product") {
+      field.products.forEach((p, i) => {
+        const qty = previewCart[`${field.id}_${i}`] || 0;
+        items += qty;
+        total += qty * Number(p.price || 0);
+      });
+    }
   });
 
-  html += `</div>`;
-  return html;
-}
-
-function renderPreviewAdditionalFees(field) {
-  let html = `<div class="product-grid">`;
-
-  if (!Array.isArray(field.fees)) return "";
-
-  field.fees.forEach(f => {
-    html += `
-      <div class="product-card">
-        <div class="product-name">${f.name || "Additional Fee"}</div>
-        <div class="product-price">₦${Number(f.price || 0).toLocaleString()}</div>
-      </div>
-    `;
+  let additionalFeeAmount = 0;
+  let additionalFeesHtml = [];
+  fields.forEach(field => {
+    if (field.type === "additional_fee") {
+      const select = document.querySelector(`[data-id="${field.id}"]`);
+      if (select && select.value) {
+        const selected = (field.fees || []).find(f => f.name === select.value);
+        if (selected) {
+          additionalFeeAmount += Number(selected.price || 0);
+          additionalFeesHtml.push(`<div>${field.label}: ${selected.name} <span>₦${Number(selected.price || 0).toLocaleString()}</span></div>`);
+        }
+      }
+    }
   });
+  total += additionalFeeAmount;
 
-  html += `</div>`;
-  return html;
+  const feeBox = document.getElementById("additionalFeeBox");
+  if (feeBox) {
+    feeBox.innerHTML = additionalFeesHtml.join("");
+    feeBox.style.display = additionalFeesHtml.length ? "block" : "none";
+  }
+
+  const itemCountEl = document.getElementById("itemCount");
+  const totalCostEl = document.getElementById("totalCost");
+  if (itemCountEl) itemCountEl.innerText = items;
+  if (totalCostEl) totalCostEl.innerText = `₦${total.toLocaleString()}`;
+
+  const cartBarCount = document.getElementById("cartBarCount");
+  const cartBarTotal = document.getElementById("cartBarTotal");
+  const cartBar = document.getElementById("cartBar");
+  if (cartBarCount) cartBarCount.innerText = `${items} item${items === 1 ? "" : "s"}`;
+  if (cartBarTotal) cartBarTotal.innerText = `₦${total.toLocaleString()}`;
+  if (cartBar) cartBar.classList.toggle("visible", items > 0);
 }
 
 /* =========================
