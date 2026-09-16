@@ -14,6 +14,11 @@
   <link rel="stylesheet" href="css/theme-r2.css">
   <link rel="stylesheet" href="css/theme-r3.css">
   <link rel="stylesheet" href="css/theme-r4.css">
+  <link rel="stylesheet" href="css/theme-r5.css">
+  <link rel="stylesheet" href="css/theme-r6.css">
+  <link rel="stylesheet" href="css/theme-r7.css">
+  <link rel="stylesheet" href="css/theme-r8.css">
+  <link rel="stylesheet" href="css/theme-r9.css">
 </head>
 <body>
 <script>
@@ -114,6 +119,26 @@
         <div class="theme-swatch-preview theme-swatch-r4"></div>
         <span>Tech</span>
       </div>
+      <div class="theme-swatch" data-theme="r5" onclick="selectStoreTheme('r5')">
+        <div class="theme-swatch-preview theme-swatch-r5"></div>
+        <span>Luxury</span>
+      </div>
+      <div class="theme-swatch" data-theme="r6" onclick="selectStoreTheme('r6')">
+        <div class="theme-swatch-preview theme-swatch-r6"></div>
+        <span>Marketplace</span>
+      </div>
+      <div class="theme-swatch" data-theme="r7" onclick="selectStoreTheme('r7')">
+        <div class="theme-swatch-preview theme-swatch-r7"></div>
+        <span>Listings</span>
+      </div>
+      <div class="theme-swatch" data-theme="r8" onclick="selectStoreTheme('r8')">
+        <div class="theme-swatch-preview theme-swatch-r8"></div>
+        <span>Organic</span>
+      </div>
+      <div class="theme-swatch" data-theme="r9" onclick="selectStoreTheme('r9')">
+        <div class="theme-swatch-preview theme-swatch-r9"></div>
+        <span>Editorial</span>
+      </div>
     </div>
   </section>
 
@@ -148,19 +173,12 @@
   <div onclick="addField('additional_fee')">Additional Fee</div>
 </div>
 
-<div id="previewOverlay" class="overlay hidden">
-  <div class="overlay-content">
-
-    <!-- Close button OUTSIDE preview theme -->
-    <span class="close" onclick="closePreview()">×</span>
-
-    <!-- Theme-isolated preview — selectStoreTheme()/openPreview() set the
-         theme-rX class here to match the seller's Store Theme choice -->
-    <div class="preview-theme theme-r1" id="previewThemeRoot">
-      <div id="previewForm"></div>
-    </div>
-
-  </div>
+<!-- Preview overlay is intentionally edge-to-edge (no bordered "card"
+     wrapping it) so it looks exactly like visiting the real customer
+     page, not like a small modal nested inside the builder. -->
+<div id="previewOverlay" class="preview-overlay hidden">
+  <button class="preview-close-btn" onclick="closePreview()">&times; Close Preview</button>
+  <div id="previewForm" class="preview-fullbleed"></div>
 </div>
 
 <div id="toast-container"></div>
@@ -192,6 +210,7 @@
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
 <script src="appwrite.js"></script>
 <script src="js/themeF.js"></script>
+<script src="js/storefront-render.js"></script>
 <script src="js/builderF.js"></script>
 <script src="js/alert.js"></script>
 <script>
