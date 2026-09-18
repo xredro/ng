@@ -285,26 +285,6 @@ input {
   color: green;
 }
 
-.add-menu {
-  position: absolute;
-  background: var(--text);
-  box-shadow: var(--shadow-sm);
-  padding: 8px;
-  border-radius: 8px;
-}
-
-.add-menu div {
-  margin: 14px;
-  margin-right: 60px;
-}
-
-.add-menu hr {
-  max-width: 80%;
-  border: 1px solid var(--muted);
-  opacity: 0.8;  
-}
-
-
 .hidden {
   display: none;
 }
@@ -446,20 +426,30 @@ input {
 .add-menu {
   position: absolute;
   z-index: 50;
-  background: var(--text);;
-  color: var(--card);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  background: var(--surface-elevated, #fff);
+  color: var(--text-primary, #16181A);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+  min-width: 190px;
 }
 
 .add-menu div {
-  padding: var(--space-1) var(--space-2);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.add-menu div:hover {
+  background: var(--bg, #F0F1EE);
 }
 
 .add-menu hr {
   border: none;
-  border-top: 1px solid rgba(255,255,255,0.1);
+  border-top: 1px solid var(--border, #E7E8E6);
+  margin: 4px 0;
 }
 
 /* =========================
@@ -814,4 +804,4 @@ input {
 .theme-swatch-r6 { background: linear-gradient(135deg, #F4F5F2 55%, #2B5EA8 55%); }
 .theme-swatch-r7 { background: linear-gradient(135deg, #ffffff 55%, #C0392B 55%); }
 .theme-swatch-r8 { background: linear-gradient(135deg, #FBF3E1 55%, #3DA35D 55%); }
-.theme-swatch-r9 { background: linear-gradient(135deg, #16181A 45%, #F4C542 45%); }
+.theme-swatch-r9 { background: linear-gradient(135deg, #FF7A45, #E0562B); }

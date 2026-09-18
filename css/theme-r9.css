@@ -1,36 +1,53 @@
-/* Theme 9 — "Editorial": asymmetric grid, first product featured, bold typography */
+/* Theme 9 — "Bold Deals": vibrant gradient, playful, promo/flash-sale energy.
+   Same underlying grid (first product featured/larger) as before, but a
+   completely different look — bright, rounded, colorful instead of the
+   earlier black/gold editorial-magazine treatment. */
 .preview-theme.theme-r9 {
-  --bg: #ffffff;
+  --bg: #FFF4E8;
   --card: #ffffff;
-  --text: #16181A;
-  --muted: #767B80;
-  --border: #EDEDED;
-  --accent: #16181A;
-  --accent-text: #F4C542;
+  --text: #2B1B12;
+  --muted: #8A6F5C;
+  --border: #FFE3C2;
+  --accent: #FFE3C2;
+  --accent-text: #E0562B;
 }
-.theme-r9 .store-simple-header h1 { font-size: 34px; font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase; }
-.theme-r9 .store-simple-header p { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; }
+.theme-r9 .store-simple-header h1 { color: #2B1B12; font-size: 28px; font-weight: 800; }
+.theme-r9 .store-simple-header p { color: #E0562B; font-weight: 700; }
 
-.theme-r9 .cat-chip { background: #16181A; color: #fff; border-radius: 2px; }
-.theme-r9 .cat-chip.cat-active { background: #F4C542; color: #16181A; }
+.theme-r9 .cat-chip { background: #fff; color: #8A6F5C; box-shadow: 0 2px 8px rgba(224,86,43,0.1); }
+.theme-r9 .cat-chip.cat-active { background: linear-gradient(135deg, #FF7A45, #E0562B); color: #fff; }
 
-.theme-r9 .product-card { background: #fff; border: none; padding: 0; }
-.theme-r9 .product-image { border-radius: 0; background: #F4F4F4; }
-.theme-r9 .product-card.featured .product-name { font-size: 26px; }
-.theme-r9 .product-name { font-weight: 800; font-size: 15px; margin-top: 10px; text-transform: uppercase; }
-.theme-r9 .product-price { font-weight: 700; color: #F4C542; background: #16181A; display: inline-block; padding: 2px 8px; margin-top: 4px; }
-.theme-r9 .more-btn { border-radius: 0; background: #16181A; color: #fff; }
+.theme-r9 .product-card {
+  background: #fff;
+  border: none;
+  border-radius: 22px;
+  box-shadow: 0 10px 24px rgba(224,86,43,0.1);
+}
+.theme-r9 .product-image { border-radius: 16px; background: linear-gradient(135deg, #FFE3C2, #FFD1A8); }
+.theme-r9 .product-card.featured { background: linear-gradient(135deg, #FF7A45, #E0562B); }
+.theme-r9 .product-card.featured .product-image { background: rgba(255,255,255,0.25); }
+.theme-r9 .product-card.featured .product-name,
+.theme-r9 .product-card.featured .product-price { color: #fff; }
+.theme-r9 .product-name { font-weight: 800; font-size: 15px; margin-top: 10px; }
+.theme-r9 .product-price {
+  font-weight: 800; color: #E0562B; background: #FFE3C2;
+  display: inline-block; padding: 3px 10px; border-radius: 999px; margin-top: 4px; font-size: 13px;
+}
+.theme-r9 .more-btn { background: linear-gradient(135deg, #FF7A45, #E0562B); color: #fff; box-shadow: 0 6px 16px rgba(224,86,43,0.35); }
 
-.theme-r9 .popup-card, .theme-r9 .checkout-overlay-card { background: #fff; border-radius: 0 !important; }
-.theme-r9 .popup-backdrop, .theme-r9 .checkout-overlay-backdrop { background: rgba(0,0,0,0.7); }
-.theme-r9 .popup-close, .theme-r9 .checkout-close { background: #16181A; color: #fff; border-radius: 0; }
-.theme-r9 .popup-image { border-radius: 0; background: #F4F4F4; }
-.theme-r9 .checkout-badge { background: #16181A; color: #F4C542; border-radius: 0; font-weight: 900; }
+.theme-r9 .popup-card, .theme-r9 .checkout-overlay-card { background: #fff; }
+.theme-r9 .popup-backdrop, .theme-r9 .checkout-overlay-backdrop { background: rgba(43,27,18,0.5); }
+.theme-r9 .popup-close, .theme-r9 .checkout-close { background: #FFE3C2; color: #E0562B; }
+.theme-r9 .popup-image { border-radius: 16px; background: linear-gradient(135deg, #FFE3C2, #FFD1A8); }
+.theme-r9 .popup-desc { color: #8A6F5C; }
+.theme-r9 .checkout-badge { background: linear-gradient(135deg, #FF7A45, #E0562B); color: #fff; font-weight: 800; }
 
-.theme-r9 .form-group input, .theme-r9 .form-group textarea, .theme-r9 .form-group select { background: #F8F8F8; border-radius: 0; border-bottom: 2px solid #16181A; }
-.theme-r9 .total-box { background: #16181A; color: #fff; border-radius: 0; }
-.theme-r9 .upload-ui { background: #F8F8F8; border-radius: 0; }
-.theme-r9 .send-btn { background: #16181A; border-radius: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+.theme-r9 .form-group input, .theme-r9 .form-group textarea, .theme-r9 .form-group select {
+  background: #FFF4E8; border-radius: 14px;
+}
+.theme-r9 .total-box { background: #FFF4E8; border-radius: 16px; }
+.theme-r9 .upload-ui { background: #FFF4E8; border-radius: 16px; }
+.theme-r9 .send-btn { background: linear-gradient(135deg, #FF7A45, #E0562B); border-radius: 999px; font-weight: 800; }
 
-.theme-r9 .cart-bar { background: #16181A; border-radius: 6px; }
-.theme-r9 .cart-bar-checkout-label { background: #F4C542; color: #16181A; border-radius: 4px; }
+.theme-r9 .cart-bar { background: linear-gradient(135deg, #FF7A45, #E0562B); box-shadow: 0 10px 28px rgba(224,86,43,0.35); }
+.theme-r9 .cart-bar-checkout-label { background: #fff; color: #E0562B; }
