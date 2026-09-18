@@ -63,7 +63,7 @@ function storefrontProductCard(mode, field, p, i, opts) {
     </div>
   `;
 
-  const moreLabel = mode === "listings" ? "View" : mode === "luxury" ? "Enquire" : "+";
+  const moreLabel = mode === "listings" ? "Add" : mode === "luxury" ? "Add" : "+";
 
   if (mode === "iconbadge") {
     return `
