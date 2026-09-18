@@ -536,12 +536,9 @@
    each theme's own CSS file controls color/type on top of this.
 ========================================================= */
 
-/* dense (r1) — tight multi-column grid, no card padding */
-.layout-dense { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+/* dense (r1) — tight 2-col grid, no card padding (borderless video-tile feel) */
+.layout-dense { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .layout-dense .product-image { aspect-ratio: 4/3; height: auto; min-height: 220px; }
-@media (max-width: 640px) {
-  .layout-dense { grid-template-columns: repeat(2, 1fr); }
-}
 
 /* airy (r2) — spacious 2-col grid, generous card padding */
 .layout-airy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
@@ -570,7 +567,7 @@
 /* marketplace (r6) — compact grid, still real-sized images */
 .layout-marketplace { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .layout-marketplace .product-card { padding: var(--space-2); }
-.layout-marketplace .product-image { aspect-ratio: 1/1; height: auto; min-height: 220px; }
+.layout-marketplace .product-image { height: 220px; }
 
 /* listings (r7) — horizontal rows, image left / details right */
 .layout-listings { display: flex; flex-direction: column; gap: 14px; }

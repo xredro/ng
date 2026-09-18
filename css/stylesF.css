@@ -796,8 +796,8 @@ input {
   height: 56px;
   border-radius: 10px;
 }
-.theme-swatch-r1 { background: linear-gradient(135deg, #0F0F0F 55%, #ffffff 55%); }
-.theme-swatch-r2 { background: linear-gradient(135deg, #16181A 45%, #F7F7F7 45%); }
+.theme-swatch-r1 { background: linear-gradient(135deg, #0A0A0F, #00E5FF); }
+.theme-swatch-r2 { background: linear-gradient(135deg, #ffffff 50%, #111111 50%); }
 .theme-swatch-r3 { background: linear-gradient(135deg, #F5F7F5 55%, #3DA35D 55%); }
 .theme-swatch-r4 { background: linear-gradient(135deg, #17151C 55%, #F2A93B 55%); }
 .theme-swatch-r5 { background: linear-gradient(135deg, #FBF8F3 55%, #6B5B3A 55%); }

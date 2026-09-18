@@ -1,39 +1,61 @@
-/* Theme 1 — "Dark": dark, borderless video-grid style */
+/* Theme 1 — "Neon": dark, glowing cyan/magenta accents, sharp bordered
+   cards. Same fixed 2-col grid used everywhere else (safer than the
+   earlier 3-col arrangement, which was overflowing narrow screens) —
+   the completely different look now comes from color, glow, and
+   typography instead. */
 .preview-theme.theme-r1 {
-  --bg: #0F0F0F;
-  --card: #181818;
+  --bg: #0A0A0F;
+  --card: #14141C;
   --text: #ffffff;
-  --muted: #AAAAAA;
-  --border: #2A2A2A;
-  --accent: #272727;
-  --accent-text: #ffffff;
+  --muted: #9A9AB0;
+  --border: #2A2A3A;
+  --accent: #1C1C2A;
+  --accent-text: #00E5FF;
 }
-.theme-r1 .store-simple-header h1 { color: #fff; }
-.theme-r1 .store-simple-header p { color: #AAAAAA; }
-.theme-r1 .showcase h3 { color: #fff; }
+.theme-r1 .store-simple-header h1 {
+  color: #fff;
+  text-shadow: 0 0 18px rgba(0,229,255,0.35);
+}
+.theme-r1 .store-simple-header p { color: #9A9AB0; }
 
-.theme-r1 .product-card { background: transparent; border: none; padding: 0; }
-.theme-r1 .product-image { aspect-ratio: 16/9; height: auto; border-radius: 10px; background: linear-gradient(160deg,#272727,#1B1B1B); }
-.theme-r1 .product-name { color: #fff; font-weight: 600; margin-top: 8px; }
-.theme-r1 .product-price { color: #AAAAAA; font-size: 12px; }
-.theme-r1 .more-btn { background: #fff; color: #0F0F0F; }
+.theme-r1 .cat-chip { background: #14141C; border: 1px solid #2A2A3A; color: #9A9AB0; }
+.theme-r1 .cat-chip.cat-active { background: #00E5FF; color: #0A0A0F; border-color: #00E5FF; }
 
-.theme-r1 .popup-card, .theme-r1 .checkout-overlay-card { background: #181818; color: #fff; }
-.theme-r1 .popup-backdrop, .theme-r1 .checkout-overlay-backdrop { background: rgba(0,0,0,0.6); }
-.theme-r1 .popup-close, .theme-r1 .checkout-close { background: #272727; color: #fff; }
-.theme-r1 .popup-image { background: linear-gradient(160deg,#272727,#1B1B1B); }
-.theme-r1 .popup-desc { color: #AAAAAA; }
-.theme-r1 .checkout-badge { background: #272727; color: #fff; font-weight: 700; font-size: 12px; }
+.theme-r1 .product-card {
+  background: #14141C;
+  border: 1px solid #2A2A3A;
+  border-radius: 4px;
+  transition: border-color 0.2s ease;
+}
+.theme-r1 .product-image {
+  border-radius: 2px;
+  background: linear-gradient(160deg, #1C1C2A, #0A0A0F);
+  border: 1px solid #2A2A3A;
+}
+.theme-r1 .product-name { color: #fff; font-weight: 700; margin-top: 8px; text-transform: uppercase; font-size: 12.5px; letter-spacing: 0.03em; }
+.theme-r1 .product-price { color: #00E5FF; font-size: 13px; font-weight: 700; }
+.theme-r1 .more-btn { background: #00E5FF; color: #0A0A0F; border-radius: 4px; box-shadow: 0 0 14px rgba(0,229,255,0.5); }
+
+.theme-r1 .popup-card, .theme-r1 .checkout-overlay-card { background: #14141C; color: #fff; border: 1px solid #2A2A3A; border-radius: 6px; }
+.theme-r1 .popup-backdrop, .theme-r1 .checkout-overlay-backdrop { background: rgba(0,0,0,0.75); }
+.theme-r1 .popup-close, .theme-r1 .checkout-close { background: #1C1C2A; color: #fff; }
+.theme-r1 .popup-image { background: linear-gradient(160deg, #1C1C2A, #0A0A0F); border: 1px solid #2A2A3A; }
+.theme-r1 .popup-desc { color: #9A9AB0; }
+.theme-r1 .checkout-badge { background: #00E5FF; color: #0A0A0F; font-weight: 800; box-shadow: 0 0 16px rgba(0,229,255,0.45); }
 .theme-r1 .checkout-head h2 { color: #fff; }
-.theme-r1 .checkout-head p { color: #AAAAAA; }
+.theme-r1 .checkout-head p { color: #9A9AB0; }
 
-.theme-r1 .form-group input, .theme-r1 .form-group textarea, .theme-r1 .form-group select { background: #0F0F0F; color: #fff; border: 1px solid #2A2A2A; }
-.theme-r1 .total-box { background: #0F0F0F; color: #fff; }
-.theme-r1 .upload-ui { background: #0F0F0F; color: #AAAAAA; }
-.theme-r1 .send-btn { background: #fff; color: #0F0F0F; }
-.theme-r1 .powered { color: #555; }
+.theme-r1 .form-group input, .theme-r1 .form-group textarea, .theme-r1 .form-group select {
+  background: #0A0A0F; color: #fff; border: 1px solid #2A2A3A; border-radius: 4px;
+}
+.theme-r1 .form-group input:focus, .theme-r1 .form-group textarea:focus, .theme-r1 .form-group select:focus {
+  border-color: #00E5FF; box-shadow: 0 0 0 3px rgba(0,229,255,0.15);
+}
+.theme-r1 .total-box { background: #14141C; color: #fff; border: 1px solid #2A2A3A; }
+.theme-r1 .upload-ui { background: #0A0A0F; color: #9A9AB0; border: 1px dashed #2A2A3A; }
+.theme-r1 .send-btn { background: #00E5FF; color: #0A0A0F; border-radius: 4px; box-shadow: 0 0 18px rgba(0,229,255,0.4); }
+.theme-r1 .powered { color: #4A4A5A; }
 
-.theme-r1 .cart-bar { background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-.theme-r1 .cart-bar .cb-info { color: #0F0F0F; }
-.theme-r1 .cart-bar-checkout-label { background: #0F0F0F; color: #fff; }
-
+.theme-r1 .cart-bar { background: #14141C; border: 1px solid #00E5FF; box-shadow: 0 0 22px rgba(0,229,255,0.3); }
+.theme-r1 .cart-bar .cb-info { color: #fff; }
+.theme-r1 .cart-bar-checkout-label { background: #00E5FF; color: #0A0A0F; }
