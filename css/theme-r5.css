@@ -10,8 +10,8 @@
 }
 .theme-r5 * { font-family: Georgia, 'Times New Roman', serif; }
 .theme-r5 .store-simple-header { text-align: center; padding-top: 44px; }
-.theme-r5 .store-simple-header h1 { color: #2E2A22; font-size: 30px; font-weight: 400; letter-spacing: 0.02em; }
-.theme-r5 .store-simple-header p { color: #857C6B; font-style: italic; }
+.theme-r5 .store-simple-header h1 { color: #2E2A22; font-size: 34px; font-weight: 500; letter-spacing: 0.02em; font-family: 'Playfair Display', serif; }
+.theme-r5 .store-simple-header p { color: #857C6B; font-style: italic; font-family: 'Playfair Display', serif; font-size: 15px; }
 
 .theme-r5 .cat-chip { background: transparent; border: 1px solid #E9E2D3; color: #857C6B; }
 .theme-r5 .cat-chip.cat-active { background: #2E2A22; color: #fff; border-color: #2E2A22; }

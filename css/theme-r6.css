@@ -9,8 +9,8 @@
   --accent-text: #2B5EA8;
 }
 .theme-r6 .store-simple-header { padding: 16px 16px 8px; }
-.theme-r6 .store-simple-header h1 { font-size: 18px; }
-.theme-r6 .store-simple-header p { font-size: 12px; }
+.theme-r6 .store-simple-header h1 { font-size: 21px; font-family: 'Roboto Condensed', sans-serif; font-weight: 700; }
+.theme-r6 .store-simple-header p { font-size: 13.5px; font-family: 'Roboto Condensed', sans-serif; }
 
 .theme-r6 .cat-chip { background: #fff; border: 1px solid #E2E4E0; font-size: 11px; padding: 5px 11px; }
 .theme-r6 .cat-chip.cat-active { background: #2B5EA8; color: #fff; border-color: #2B5EA8; }

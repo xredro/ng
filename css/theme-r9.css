@@ -11,8 +11,8 @@
   --accent: #FFE3C2;
   --accent-text: #E0562B;
 }
-.theme-r9 .store-simple-header h1 { color: #2B1B12; font-size: 28px; font-weight: 800; }
-.theme-r9 .store-simple-header p { color: #E0562B; font-weight: 700; }
+.theme-r9 .store-simple-header h1 { color: #2B1B12; font-size: 30px; font-weight: 800; font-family: 'Fredoka', sans-serif; }
+.theme-r9 .store-simple-header p { color: #E0562B; font-weight: 700; font-family: 'Fredoka', sans-serif; font-size: 15px; }
 
 .theme-r9 .cat-chip { background: #fff; color: #8A6F5C; box-shadow: 0 2px 8px rgba(224,86,43,0.1); }
 .theme-r9 .cat-chip.cat-active { background: linear-gradient(135deg, #FF7A45, #E0562B); color: #fff; }
@@ -26,8 +26,8 @@
 .theme-r9 .product-image { border-radius: 16px; background: linear-gradient(135deg, #FFE3C2, #FFD1A8); }
 .theme-r9 .product-card.featured { background: linear-gradient(135deg, #FF7A45, #E0562B); }
 .theme-r9 .product-card.featured .product-image { background: rgba(255,255,255,0.25); }
-.theme-r9 .product-card.featured .product-name,
-.theme-r9 .product-card.featured .product-price { color: #fff; }
+.theme-r9 .product-card.featured .product-name { color: #fff; }
+.theme-r9 .product-card.featured .product-price { background: rgba(255,255,255,0.95); color: #E0562B; }
 .theme-r9 .product-name { font-weight: 800; font-size: 15px; margin-top: 10px; }
 .theme-r9 .product-price {
   font-weight: 800; color: #E0562B; background: #FFE3C2;

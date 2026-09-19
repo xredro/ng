@@ -8,8 +8,8 @@
   --accent: #2E2618;
   --accent-text: #F2A93B;
 }
-.theme-r4 .store-simple-header h1 { color: #fff; }
-.theme-r4 .store-simple-header p { color: #9B96A6; }
+.theme-r4 .store-simple-header h1 { color: #fff; font-family: 'Sora', sans-serif; font-size: 28px; font-weight: 700; }
+.theme-r4 .store-simple-header p { color: #9B96A6; font-family: 'Manrope', sans-serif; font-size: 14.5px; }
 
 .theme-r4 .product-card { background: #201D26; border: 1px solid #2E2A38; border-radius: 18px; }
 .theme-r4 .product-image, .theme-r4 .card-icon-badge { background: #2E2618; border-radius: 12px; }

@@ -15,8 +15,11 @@
 .theme-r1 .store-simple-header h1 {
   color: #fff;
   text-shadow: 0 0 18px rgba(0,229,255,0.35);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 30px;
+  font-weight: 800;
 }
-.theme-r1 .store-simple-header p { color: #9A9AB0; }
+.theme-r1 .store-simple-header p { color: #9A9AB0; font-family: 'Space Grotesk', sans-serif; font-size: 15px; }
 
 .theme-r1 .cat-chip { background: #14141C; border: 1px solid #2A2A3A; color: #9A9AB0; }
 .theme-r1 .cat-chip.cat-active { background: #00E5FF; color: #0A0A0F; border-color: #00E5FF; }

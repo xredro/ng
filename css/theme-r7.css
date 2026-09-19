@@ -8,7 +8,8 @@
   --accent: #FBE6E6;
   --accent-text: #C0392B;
 }
-.theme-r7 .store-simple-header h1 { font-size: 22px; font-weight: 800; }
+.theme-r7 .store-simple-header h1 { font-size: 26px; font-weight: 800; font-family: 'Poppins', sans-serif; }
+.theme-r7 .store-simple-header p { font-size: 14.5px; font-family: 'Poppins', sans-serif; }
 
 .theme-r7 .cat-chip { background: #F4F4F4; border-radius: 8px; }
 .theme-r7 .cat-chip.cat-active { background: #16181A; color: #fff; }
