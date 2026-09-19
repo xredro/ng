@@ -171,6 +171,10 @@ html {
   padding: var(--space-3);
   display: flex;
   flex-direction: column;
+  min-width: 0; /* CSS Grid items default to min-width:auto, which lets
+                   card content (images, long names) force the track
+                   wider than available space and overflow the screen
+                   on narrow viewports — this removes that floor. */
 }
 
 .product-image {
@@ -555,15 +559,15 @@ html {
 .layout-dense .product-image { aspect-ratio: 4/3; height: auto; min-height: 220px; }
 
 /* airy (r2) — spacious 2-col grid, generous card padding */
-.layout-airy { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px; }
+.layout-airy { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
 
 /* rounded (r3) — 2-col grid, soft rounded cards */
-.layout-rounded { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
+.layout-rounded { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 
 /* iconbadge (r4) — 2-col grid; still a distinct "badge" treatment
    (rounded square, sits above the name) but sized like a real product
    image, not a tiny icon */
-.layout-iconbadge { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.layout-iconbadge { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
 .layout-iconbadge .product-card { display: flex; flex-direction: column; }
 .card-icon-badge {
   width: 100%; height: 220px; border-radius: 14px; overflow: hidden;
@@ -579,7 +583,7 @@ html {
 .luxury-details { text-align: center; }
 
 /* marketplace (r6) — compact grid, still real-sized images */
-.layout-marketplace { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.layout-marketplace { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .layout-marketplace .product-card { padding: var(--space-2); }
 .layout-marketplace .product-image { height: 220px; }
 
@@ -600,9 +604,33 @@ html {
 .circle-photo { border-radius: 50%; aspect-ratio: 1/1; height: auto; width: 80%; max-width: 260px; min-width: 220px; margin: 0 auto var(--space-3); overflow: hidden; }
 
 /* editorial (r9) — see theme-r9.css for the full redesigned look */
-.layout-editorial { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+.layout-editorial { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .layout-editorial .product-card.featured { grid-column: span 2; }
 .layout-editorial .product-card.featured .product-image { aspect-ratio: 21/9; height: auto; min-height: 220px; }
+
+/* Responsive column counts for the 5 grid-based themes above (Catalog,
+   Simple, Tech, Marketplace, Bold Deals) — explicit breakpoints instead
+   of unbounded auto-fit, which either overflowed narrow screens or
+   crammed too many tiny columns onto wide ones. 1 col on very small
+   phones, 2 on regular phones, 3 on tablets, 4 on desktop. */
+@media (max-width: 420px) {
+  .layout-airy, .layout-rounded, .layout-iconbadge,
+  .layout-marketplace, .layout-editorial {
+    grid-template-columns: repeat(1, 1fr);
+  }
+}
+@media (min-width: 900px) {
+  .layout-airy, .layout-rounded, .layout-iconbadge,
+  .layout-marketplace, .layout-editorial {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (min-width: 1200px) {
+  .layout-airy, .layout-rounded, .layout-iconbadge,
+  .layout-marketplace, .layout-editorial {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
 
 /* =========================================================
    SUCCESS STATE (merged in from the old form.css — that file
