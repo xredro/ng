@@ -10,8 +10,8 @@
   --accent: #111111;
   --accent-text: #ffffff;
 }
-.theme-r2 .store-simple-header h1 { color: #111; text-transform: uppercase; letter-spacing: 0.02em; font-family: 'Archivo Black', sans-serif; font-size: 28px; }
-.theme-r2 .store-simple-header p { color: #6E6E6E; font-family: 'Inter', sans-serif; font-size: 14px; }
+.theme-r2 .store-simple-header h1 { color: #111; text-transform: uppercase; letter-spacing: 0.02em; font-family: 'Archivo Black', sans-serif !important; font-size: clamp(21px, 5.8vw, 30px) !important; }
+.theme-r2 .store-simple-header p { color: #6E6E6E; font-family: 'Inter', sans-serif !important; font-size: clamp(12.5px, 3.4vw, 15px) !important; }
 
 .theme-r2 .cat-chip { background: #fff; border: 1.5px solid #111; border-radius: 0; color: #111; }
 .theme-r2 .cat-chip.cat-active { background: #111; color: #fff; }

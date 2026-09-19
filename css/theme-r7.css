@@ -8,8 +8,8 @@
   --accent: #FBE6E6;
   --accent-text: #C0392B;
 }
-.theme-r7 .store-simple-header h1 { font-size: 26px; font-weight: 800; font-family: 'Poppins', sans-serif; }
-.theme-r7 .store-simple-header p { font-size: 14.5px; font-family: 'Poppins', sans-serif; }
+.theme-r7 .store-simple-header h1 { font-size: clamp(20px, 5.5vw, 28px) !important; font-weight: 800; font-family: 'Poppins', sans-serif !important; }
+.theme-r7 .store-simple-header p { font-size: clamp(13px, 3.5vw, 15.5px) !important; font-family: 'Poppins', sans-serif !important; }
 
 .theme-r7 .cat-chip { background: #F4F4F4; border-radius: 8px; }
 .theme-r7 .cat-chip.cat-active { background: #16181A; color: #fff; }

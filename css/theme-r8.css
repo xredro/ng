@@ -9,8 +9,8 @@
   --accent-text: #3A6B35;
 }
 .theme-r8 .store-simple-header { text-align: center; }
-.theme-r8 .store-simple-header h1 { color: #3A2313; font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 600; }
-.theme-r8 .store-simple-header p { color: #8A6A45; font-family: 'Cormorant Garamond', serif; font-size: 16px; }
+.theme-r8 .store-simple-header h1 { color: #3A2313; font-family: 'Cormorant Garamond', serif !important; font-size: clamp(23px, 6.2vw, 34px) !important; font-weight: 600; }
+.theme-r8 .store-simple-header p { color: #8A6A45; font-family: 'Cormorant Garamond', serif !important; font-size: clamp(14px, 3.8vw, 17px) !important; }
 
 .theme-r8 .cat-chip { background: #FFFDF7; border: 1px solid #E4CFA0; }
 .theme-r8 .cat-chip.cat-active { background: #3A6B35; color: #fff; border-color: #3A6B35; }

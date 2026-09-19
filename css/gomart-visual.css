@@ -9,6 +9,13 @@
    Load this AFTER the page's own stylesheet so these rules win.
 ===================================================================== */
 
+/* Respect this app's OWN light/dark toggle rather than the visitor's
+   OS/device setting — without this, a phone set to dark mode can make
+   the browser auto-recolor native controls (checkboxes, dropdowns,
+   scrollbars) even while the in-app toggle is set to light, or vice versa. */
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
 /* ---------- font + accent retint (light mode) ---------- */
 :root {
   --accent: #3DA35D !important;
@@ -36,7 +43,10 @@
   --accent: #3DA35D !important;
 }
 
-* {
+/* Manrope everywhere EXCEPT inside the live storefront preview — that
+   content uses each theme's own Google Font (set with !important in
+   the theme-rX.css files, which win here via higher specificity). */
+*:not(#previewForm):not(#previewForm *) {
   font-family: 'Manrope', Inter, system-ui, sans-serif !important;
 }
 
