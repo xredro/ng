@@ -618,6 +618,13 @@ html {
   .layout-marketplace, .layout-editorial {
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
+  /* the grid only has 1 explicit column at this width — without this,
+     "span 2" on the featured card creates an extra IMPLICIT column
+     (sized by content, not minmax(0,1fr) like the real one), which is
+     exactly what was making one column compressed and the other normal */
+  .layout-editorial .product-card.featured {
+    grid-column: span 1;
+  }
 }
 @media (min-width: 900px) {
   .layout-dense, .layout-airy, .layout-rounded, .layout-iconbadge,
