@@ -1,54 +1,88 @@
 /* =========================================================
-   PAYMENT VERIFICATION
-   =========================================================
-   Self-contained feature file. Does not modify or redefine
-   anything from orders.js — it reuses the existing globals
-   (allOrders, DB_ID, ORDERS, databases, Query, getCardTitle,
-   normalizeAmount, fetchOrders) that are already declared
-   there and loaded on the same page before this file.
+   X-REDRO PAYMENT VERIFICATION
+   ---------------------------------------------------------
+   Statement-first, same-image verification.
 
-   Everything below runs client-side only:
-   - Tesseract.js  → OCR on payment proof images
-   - PDF.js        → text + coordinate extraction from the
-                     bank statement PDF
-   - Plain JS      → all field detection, normalization,
-                     matching and the final VERIFIED /
-                     NOT VERIFIED decision (deterministic,
-                     no AI/LLM involved in the decision).
+   Flow:
+   1. Seller uploads a bank-statement PDF.
+   2. PDF.js extracts transaction rows and headers.
+   3. Seller explicitly selects Date, Name/Description, Credit.
+   4. Rows without a valid positive Credit are skipped.
+   5. Every non-empty cell from valid rows is retained.
+   6. All unpaid orders with payment-proof images are OCR'd once.
+   7. OCR text is normalized, tokenized and indexed by amount/date/token.
+   8. Each statement row searches the image collection.
+   9. Date + Name/Description + Credit MUST match in the SAME image.
+  10. Other row cells are supporting evidence only.
+  11. Results are deterministic: MATCHED, STRONG MATCH, REVIEW REQUIRED,
+      NOT VERIFIED, or SKIPPED.
+  12. No receiving-account/business-name input is used.
+  13. Everything is processed locally in the browser.
 ========================================================= */
-
-/* =========================
-   CONFIG
-========================= */
 
 const VERIFY_CREDIT_HEADER_SYNONYMS = [
   "credit", "cr", "creditamount", "creditamt", "amountcredited",
   "deposit", "deposits", "inflow", "inflows", "moneyin",
-  "received", "amountreceived"
+  "received", "amountreceived", "paidin", "lodgement"
 ];
 
 const VERIFY_HEADER_KEYWORDS = [
   "date", "description", "narration", "details", "remarks",
-  "credit", "debit", "balance", "amount", "cr", "dr", "value date", "transaction"
+  "credit", "debit", "balance", "amount", "cr", "dr",
+  "value date", "transaction", "reference", "ref"
 ];
 
-/* =========================
-   STATE
-========================= */
+const VERIFY_GENERIC_TOKENS = new Set([
+  "the", "and", "for", "from", "to", "of", "by", "with",
+  "transfer", "payment", "transaction", "bank", "account",
+  "amount", "credit", "credited", "debit", "deposits", "deposit",
+  "received", "money", "inflow", "cash", "online", "mobile",
+  "successful", "success", "completed", "paid", "na", "n", "a"
+]);
 
-let verifyState = {
-  businessName: "",
-  statementText: null,       // extracted PDF pages: [{ items: [...] }]
-  statementTransactions: [], // [{ name, date, credit }]
-  pendingPayments: [],       // orders needing verification
-  results: [],                // [{ order, extracted, checks, verdict, reason }]
-  columnPickerResolve: null,
-  pdfPassword: null
+const VERIFY_DATE_REGEXES = [
+  /\b\d{4}-\d{1,2}-\d{1,2}\b/,
+  /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/,
+  /\b\d{1,2}-\d{1,2}-\d{2,4}\b/,
+  /\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/,
+  /\b[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4}\b/
+];
+
+const MONTH_NAMES = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"
 };
 
-/* =========================
-   OVERLAY SCAFFOLDING (injected once, on demand)
-========================= */
+const VERIFY_STORAGE_BUCKET = "696825350032fe17c1eb";
+const VERIFY_PROJECT_ID = "695981480033c7a4eb0d";
+
+let verifyState = createVerifyState();
+
+function createVerifyState() {
+  return {
+    statementText: null,
+    statementTables: [],
+    selectedColumns: null,
+    statementRows: [],
+    validStatementRows: [],
+    skippedStatementRows: [],
+    pendingPayments: [],
+    ocrImages: [],
+    imageIndex: {
+      amountIndex: new Map(),
+      dateIndex: new Map(),
+      tokenIndex: new Map()
+    },
+    results: [],
+    columnPickerResolve: null,
+    _statementBuffer: null,
+    ocrWorker: null
+  };
+}
+
+/* =========================================================
+   OVERLAY / ENTRY
+========================================================= */
 
 function ensureVerifyOverlay() {
   if (document.getElementById("verifyOverlay")) return;
@@ -58,7 +92,7 @@ function ensureVerifyOverlay() {
   overlay.className = "verify-overlay hidden";
   overlay.innerHTML = `
     <div class="verify-panel">
-      <button class="verify-close" onclick="closeVerifyOverlay()">&times;</button>
+      <button class="verify-close" aria-label="Close" onclick="closeVerifyOverlay()">&times;</button>
       <div id="verifyBody"></div>
     </div>
   `;
@@ -67,70 +101,35 @@ function ensureVerifyOverlay() {
 
 function openVerifyOverlay() {
   ensureVerifyOverlay();
-  verifyState = {
-    businessName: "",
-    statementText: null,
-    statementTransactions: [],
-    pendingPayments: [],
-    results: [],
-    columnPickerResolve: null,
-    pdfPassword: null
-  };
+  verifyState = createVerifyState();
   document.getElementById("verifyOverlay").classList.remove("hidden");
-  renderVerifyStepName();
+  renderVerifyStepStatement();
 }
 
 function closeVerifyOverlay() {
   const overlay = document.getElementById("verifyOverlay");
   if (overlay) overlay.classList.add("hidden");
-}
 
-/* =========================
-   STEP 1 — seller enters receiving account/business name
-========================= */
-
-function renderVerifyStepName() {
-  const body = document.getElementById("verifyBody");
-  body.innerHTML = `
-    <h2>Verify Payments</h2>
-    <p class="verify-sub">
-      Enter the name of the receiving bank account or business you're
-      verifying against. This only applies to this session — it isn't
-      pulled from your saved profile, since you may be verifying a
-      different account.
-    </p>
-
-    <div class="form-group">
-      <label>Receiving account / business name</label>
-      <input id="verifyBusinessName" type="text" placeholder="e.g. ABC STORE LTD">
-    </div>
-
-    <button class="verify-btn-primary" onclick="submitVerifyBusinessName()">Continue</button>
-  `;
-  setTimeout(() => document.getElementById("verifyBusinessName")?.focus(), 50);
-}
-
-function submitVerifyBusinessName() {
-  const val = document.getElementById("verifyBusinessName").value.trim();
-  if (!val) {
-    showToast("Enter the receiving account/business name to continue.", "error");
-    return;
+  if (verifyState.ocrWorker) {
+    try {
+      verifyState.ocrWorker.terminate();
+    } catch (_) {}
+    verifyState.ocrWorker = null;
   }
-  verifyState.businessName = val;
-  renderVerifyStepStatement();
 }
 
-/* =========================
-   STEP 2 — upload bank statement PDF
-========================= */
+/* =========================================================
+   STATUS / PROGRESS UI
+========================================================= */
 
 function renderVerifyStepStatement() {
   const body = document.getElementById("verifyBody");
   body.innerHTML = `
-    <h2>Upload Bank Statement</h2>
+    <h2>Verify Payments</h2>
     <p class="verify-sub">
-      Verifying against <strong>${escapeHtml(verifyState.businessName)}</strong>.
-      Upload the statement of account PDF covering the payments you want to check.
+      Upload the bank statement covering the payments you want to check.
+      The statement is used as the source of truth; payment images are searched
+      for matching evidence.
     </p>
 
     <label class="verify-upload">
@@ -138,6 +137,7 @@ function renderVerifyStepStatement() {
       <div class="verify-upload-ui">
         <span class="upload-icon">&#8593;</span>
         <span>Upload statement PDF</span>
+        <small>PDF is processed locally in this browser</small>
       </div>
     </label>
 
@@ -145,25 +145,109 @@ function renderVerifyStepStatement() {
   `;
 }
 
+function renderVerifyProgress(stage, detail, stats = {}) {
+  const body = document.getElementById("verifyBody");
+  if (!body) return;
+
+  const stages = [
+    ["statement", "Loading bank statement"],
+    ["table", "Detecting transaction table"],
+    ["columns", "Selecting statement columns"],
+    ["filter", "Filtering Credit rows"],
+    ["ocr", "OCR processing payment images"],
+    ["index", "Building searchable indexes"],
+    ["match", "Matching transactions"],
+    ["final", "Finalizing results"]
+  ];
+
+  const activeIndex = Math.max(
+    0,
+    stages.findIndex(s => s[0] === stage)
+  );
+
+  body.innerHTML = `
+    <div class="verify-progress">
+      <h2>Verifying payments…</h2>
+      <div class="verify-stage-list">
+        ${stages.map((s, i) => {
+          const cls = i < activeIndex ? "done" : (i === activeIndex ? "active" : "");
+          const icon = i < activeIndex ? "&#10003;" : (i === activeIndex ? "&#9679;" : "&#9675;");
+          return `
+            <div class="verify-stage ${cls}">
+              <span>${icon}</span>
+              <span>${escapeHtml(s[1])}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+
+      <div class="verify-progress-main">
+        <strong>${escapeHtml(detail || "")}</strong>
+        ${stats.total != null ? `
+          <div class="verify-progress-track">
+            <div class="verify-progress-bar" style="width:${Math.max(0, Math.min(100, stats.percent || 0))}%"></div>
+          </div>
+          <div class="verify-progress-count">
+            <span>${Number(stats.current || 0).toLocaleString()} / ${Number(stats.total).toLocaleString()}</span>
+            <span>${Math.max(0, Number(stats.remaining || 0)).toLocaleString()} remaining</span>
+          </div>
+        ` : ""}
+      </div>
+
+      ${stats.extra ? `<div class="verify-progress-extra">${escapeHtml(stats.extra)}</div>` : ""}
+    </div>
+  `;
+}
+
+function updateVerifyProgress(detail, current, total, extra = "") {
+  const main = document.querySelector(".verify-progress-main");
+  if (!main) return;
+
+  const safeTotal = Math.max(0, Number(total) || 0);
+  const safeCurrent = Math.max(0, Math.min(safeTotal, Number(current) || 0));
+  const percent = safeTotal ? Math.round((safeCurrent / safeTotal) * 100) : 0;
+
+  main.innerHTML = `
+    <strong>${escapeHtml(detail || "")}</strong>
+    ${safeTotal ? `
+      <div class="verify-progress-track">
+        <div class="verify-progress-bar" style="width:${percent}%"></div>
+      </div>
+      <div class="verify-progress-count">
+        <span>${safeCurrent.toLocaleString()} / ${safeTotal.toLocaleString()}</span>
+        <span>${Math.max(0, safeTotal - safeCurrent).toLocaleString()} remaining</span>
+      </div>
+    ` : ""}
+  `;
+
+  const extraEl = document.querySelector(".verify-progress-extra");
+  if (extraEl) extraEl.textContent = extra || "";
+}
+
+/* =========================================================
+   STEP 1 — STATEMENT UPLOAD
+========================================================= */
+
 async function handleStatementUpload(input) {
   const file = input.files[0];
   if (!file) return;
 
-  const statusEl = document.getElementById("verifyStatementStatus");
-  statusEl.textContent = "Reading PDF…";
-
-  const buffer = await file.arrayBuffer();
-  verifyState._statementBuffer = buffer;
+  renderVerifyProgress("statement", "Reading statement PDF…");
 
   try {
+    const buffer = await file.arrayBuffer();
+    verifyState._statementBuffer = buffer;
     await loadStatementPdf(buffer, null);
   } catch (err) {
-    if (err && err.name === "PasswordException") {
+    if (err && (err.name === "PasswordException" || err.code === 1)) {
       renderVerifyPasswordPrompt();
       return;
     }
-    console.error(err);
-    statusEl.textContent = "Could not read this PDF. Please try another file.";
+
+    console.error("Statement PDF error:", err);
+    showVerifyError(
+      "Could not read this PDF. Please check that it is a valid statement PDF and try again."
+    );
   }
 }
 
@@ -176,7 +260,7 @@ function renderVerifyPasswordPrompt() {
     </p>
 
     <div class="form-group">
-      <input id="verifyPdfPassword" type="password" placeholder="PDF password">
+      <input id="verifyPdfPassword" type="password" placeholder="PDF password" autocomplete="off">
     </div>
 
     <div id="verifyPasswordError" class="verify-error hidden"></div>
@@ -187,21 +271,35 @@ function renderVerifyPasswordPrompt() {
 }
 
 async function submitVerifyPassword() {
-  const pw = document.getElementById("verifyPdfPassword").value;
+  const input = document.getElementById("verifyPdfPassword");
   const errEl = document.getElementById("verifyPasswordError");
+  if (!input) return;
+
+  const pw = input.value;
+  if (!pw) {
+    errEl.textContent = "Enter the PDF password.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
   errEl.classList.add("hidden");
+  input.disabled = true;
 
   try {
     await loadStatementPdf(verifyState._statementBuffer, pw);
   } catch (err) {
+    console.error("PDF password error:", err);
+    input.disabled = false;
     errEl.textContent = "That password couldn't unlock this PDF. Try again.";
     errEl.classList.remove("hidden");
   }
 }
 
 async function loadStatementPdf(buffer, password) {
+  renderVerifyProgress("statement", "Reading statement PDF…");
+
   const loadingTask = pdfjsLib.getDocument({
-    data: buffer.slice(0), // pdf.js detaches the buffer, keep the original safe
+    data: buffer.slice(0),
     password: password || undefined
   });
 
@@ -209,25 +307,35 @@ async function loadStatementPdf(buffer, password) {
   const pages = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
+    updateVerifyProgress(
+      `statement`,
+      `Reading statement page ${i} of ${pdf.numPages}…`,
+      i - 1,
+      pdf.numPages
+    );
+
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
+
     pages.push(content.items.map(it => ({
       text: it.str,
       x: it.transform[4],
-      y: it.transform[5]
+      y: it.transform[5],
+      width: it.width || 0,
+      height: it.height || 0
     })));
   }
 
   verifyState.statementText = pages;
-  await detectStatementTable();
+  await detectStatementTables();
 }
 
-/* =========================
-   TABLE / COLUMN DETECTION
-========================= */
+/* =========================================================
+   PDF TABLE / COLUMN EXTRACTION
+========================================================= */
 
 function groupIntoRows(items, yTolerance = 3) {
-  const sorted = [...items].sort((a, b) => b.y - a.y); // top to bottom
+  const sorted = [...items].sort((a, b) => b.y - a.y);
   const rows = [];
 
   sorted.forEach(item => {
@@ -248,229 +356,483 @@ function normalizeHeaderWord(s) {
 }
 
 function looksLikeDate(s) {
-  return VERIFY_DATE_REGEXES.some(r => r.test(s));
+  if (!s) return false;
+  return VERIFY_DATE_REGEXES.some(r => r.test(String(s)));
 }
 
 function looksLikeNumber(s) {
-  return /^[₦$€]?\s?[\d.,]+$/.test((s || "").trim()) && /\d/.test(s);
+  return /^[₦$€£]?\s?[\d.,]+$/.test((s || "").trim()) && /\d/.test(s);
 }
 
 function detectHeaderRow(rows) {
   for (let i = 0; i < rows.length; i++) {
-    const text = rows[i].items.map(it => normalizeHeaderWord(it.text)).join(" ");
-    const hits = VERIFY_HEADER_KEYWORDS.filter(k => text.includes(k.replace(/[^a-z]/g, "")));
-    if (hits.length >= 2 && rows[i].items.length >= 2) {
-      return i;
-    }
+    const text = rows[i].items
+      .map(it => normalizeHeaderWord(it.text))
+      .join(" ");
+
+    const hits = VERIFY_HEADER_KEYWORDS.filter(k =>
+      text.includes(k.replace(/[^a-z]/g, ""))
+    );
+
+    if (hits.length >= 2 && rows[i].items.length >= 2) return i;
   }
   return -1;
 }
 
 function buildColumnBoundaries(headerRow) {
-  return headerRow.items.map(it => it.x).sort((a, b) => a - b);
+  return headerRow.items
+    .map(it => Number(it.x))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
 }
 
 function assignToColumn(x, boundaries) {
+  if (!boundaries.length) return -1;
+
   let best = 0;
   let bestDist = Infinity;
+
   boundaries.forEach((b, i) => {
     const d = Math.abs(x - b);
-    if (d < bestDist) { bestDist = d; best = i; }
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
   });
+
   return best;
 }
 
-async function detectStatementTable() {
-  const statusEl = document.getElementById("verifyStatementStatus");
-  if (statusEl) statusEl.textContent = "Detecting the transactions table…";
+function buildTableFromPage(pageItems) {
+  const rows = groupIntoRows(pageItems);
+  const headerIdx = detectHeaderRow(rows);
+  if (headerIdx === -1) return null;
 
-  let allTransactions = [];
+  const headerRow = rows[headerIdx];
+  const boundaries = buildColumnBoundaries(headerRow);
+  if (boundaries.length < 3) return null;
 
-  for (const pageItems of verifyState.statementText) {
-    const rows = groupIntoRows(pageItems);
-    const headerIdx = detectHeaderRow(rows);
-    if (headerIdx === -1) continue;
+  const headerCells = new Array(boundaries.length).fill("");
 
-    const headerRow = rows[headerIdx];
-    const boundaries = buildColumnBoundaries(headerRow);
-    const headerCells = new Array(boundaries.length).fill("");
-    headerRow.items.forEach(it => {
+  headerRow.items.forEach(it => {
+    const col = assignToColumn(it.x, boundaries);
+    if (col < 0) return;
+    headerCells[col] = (headerCells[col] + " " + it.text).trim();
+  });
+
+  const tableRows = [];
+
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const cells = new Array(boundaries.length).fill("");
+
+    rows[i].items.forEach(it => {
       const col = assignToColumn(it.x, boundaries);
-      headerCells[col] = (headerCells[col] + " " + it.text).trim();
+      if (col < 0) return;
+      cells[col] = (cells[col] ? cells[col] + " " : "") + it.text;
     });
 
-    // Build the raw table (rows below the header, until the numbers thin out)
-    const tableRows = [];
-    for (let i = headerIdx + 1; i < rows.length; i++) {
-      const cells = new Array(boundaries.length).fill("");
-      rows[i].items.forEach(it => {
-        const col = assignToColumn(it.x, boundaries);
-        cells[col] = (cells[col] ? cells[col] + " " : "") + it.text;
-      });
-      if (cells.some(c => c.trim())) tableRows.push(cells);
+    if (cells.some(c => String(c).trim())) {
+      tableRows.push(cells.map(c => String(c || "").trim()));
     }
-    if (!tableRows.length) continue;
-
-    // Date column: whichever column matches a date pattern most often
-    let dateCol = -1, dateHits = -1;
-    for (let c = 0; c < boundaries.length; c++) {
-      const hits = tableRows.filter(r => looksLikeDate(r[c])).length;
-      if (hits > dateHits) { dateHits = hits; dateCol = c; }
-    }
-
-    // Credit column: header text matches known synonyms first
-    let creditCol = headerCells.findIndex(h =>
-      VERIFY_CREDIT_HEADER_SYNONYMS.includes(normalizeHeaderWord(h))
-    );
-
-    // Name/description column: not the date column, not a numeric-heavy column,
-    // highest average text length
-    let nameCol = -1, bestAvgLen = -1;
-    for (let c = 0; c < boundaries.length; c++) {
-      if (c === dateCol || c === creditCol) continue;
-      const values = tableRows.map(r => r[c]).filter(Boolean);
-      if (!values.length) continue;
-      const numericRatio = values.filter(looksLikeNumber).length / values.length;
-      if (numericRatio > 0.5) continue; // mostly numbers — not a name column
-      const avgLen = values.reduce((s, v) => s + v.length, 0) / values.length;
-      if (avgLen > bestAvgLen) { bestAvgLen = avgLen; nameCol = c; }
-    }
-
-    if (creditCol === -1) {
-      // Can't confidently detect the Credit column — ask the seller.
-      creditCol = await askUserForCreditColumn(headerCells);
-    }
-
-    if (dateCol === -1 || nameCol === -1 || creditCol === -1) continue;
-
-    tableRows.forEach(r => {
-      const rawDate = r[dateCol];
-      const rawName = r[nameCol];
-      const rawCredit = r[creditCol];
-      if (!rawDate || !rawCredit) return;
-
-      const credit = extractAmount(rawCredit);
-      const date = extractDate(rawDate);
-      if (credit === null || !date) return;
-
-      allTransactions.push({
-        name: (rawName || "").trim(),
-        date: date.date,
-        credit
-      });
-    });
   }
 
-  verifyState.statementTransactions = allTransactions;
+  return {
+    headers: headerCells,
+    rows: tableRows,
+    boundaries
+  };
+}
 
-  if (!allTransactions.length) {
-    if (statusEl) statusEl.textContent =
-      "Couldn't detect a transactions table in this statement. Please check the file and try again.";
+async function detectStatementTables() {
+  renderVerifyProgress("table", "Detecting the transactions table…");
+
+  const tables = [];
+
+  for (let i = 0; i < verifyState.statementText.length; i++) {
+    const table = buildTableFromPage(verifyState.statementText[i]);
+    if (table && table.rows.length) tables.push(table);
+
+    updateVerifyProgress(
+      `table`,
+      `Scanning statement page ${i + 1} of ${verifyState.statementText.length}…`,
+      i + 1,
+      verifyState.statementText.length
+    );
+  }
+
+  verifyState.statementTables = tables;
+
+  if (!tables.length) {
+    showVerifyError(
+      "Couldn't detect a transaction table in this statement. The PDF needs selectable text with a recognizable table header."
+    );
     return;
   }
 
-  runPaymentVerification();
+  renderStatementColumnPicker();
 }
 
-function askUserForCreditColumn(headerCells) {
-  return new Promise(resolve => {
-    const body = document.getElementById("verifyBody");
-    body.innerHTML = `
-      <h2>Which column is Credit / Money Received?</h2>
-      <p class="verify-sub">We couldn't confidently detect this from the statement header.</p>
+/* =========================================================
+   STEP 2 — SELLER SELECTS DATE / NAME-DESCRIPTION / CREDIT
+========================================================= */
 
-      <div class="verify-column-options">
-        ${headerCells.map((h, i) => `
-          <label class="verify-column-option">
-            <input type="radio" name="creditColumn" value="${i}">
-            <span>${escapeHtml(h || "(column " + (i + 1) + ")")}</span>
-          </label>
-        `).join("")}
+function renderStatementColumnPicker() {
+  const body = document.getElementById("verifyBody");
+  const table = verifyState.statementTables[0];
+
+  const headers = table.headers.map((h, i) => h || `Column ${i + 1}`);
+
+  const selectOptions = (id, preferredFn) => headers.map((h, i) =>
+    `<option value="${i}" ${preferredFn(h, i) ? "selected" : ""}>
+      ${escapeHtml(h)}
+    </option>`
+  ).join("");
+
+  body.innerHTML = `
+    <h2>Select Statement Columns</h2>
+    <p class="verify-sub">
+      Select the three primary columns yourself. These choices are authoritative:
+      <strong>Date</strong>, <strong>Name / Description</strong>, and <strong>Credit</strong>.
+      Other columns will still be retained as supporting evidence.
+    </p>
+
+    <div class="verify-column-selects">
+      <div class="form-group">
+        <label for="verifyDateColumn">Date column</label>
+        <select id="verifyDateColumn">
+          ${selectOptions("date", h => {
+            const n = normalizeHeaderWord(h);
+            return n === "date" || n === "valuedate" || n.includes("date");
+          })}
+        </select>
       </div>
 
-      <button class="verify-btn-primary" onclick="confirmCreditColumnChoice()">Continue</button>
-    `;
-    verifyState.columnPickerResolve = resolve;
-  });
+      <div class="form-group">
+        <label for="verifyNameColumn">Name / Description column</label>
+        <select id="verifyNameColumn">
+          ${selectOptions("name", h => {
+            const n = normalizeHeaderWord(h);
+            return n.includes("description") || n.includes("narration") ||
+                   n.includes("details") || n.includes("name") ||
+                   n.includes("remarks") || n.includes("particular");
+          })}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="verifyCreditColumn">Credit column</label>
+        <select id="verifyCreditColumn">
+          ${selectOptions("credit", h =>
+            VERIFY_CREDIT_HEADER_SYNONYMS.includes(normalizeHeaderWord(h))
+          )}
+        </select>
+      </div>
+    </div>
+
+    <div class="verify-table-preview">
+      <div class="verify-preview-title">Statement preview</div>
+      <div class="verify-preview-scroll">
+        <table>
+          <thead>
+            <tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${table.rows.slice(0, 8).map(row => `
+              <tr>${row.map(c => `<td>${escapeHtml(c)}</td>`).join("")}</tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <small>Preview from the first detected transaction table. The selected columns are applied to all detected statement pages with the same table structure.</small>
+    </div>
+
+    <div id="verifyColumnError" class="verify-error hidden"></div>
+    <button class="verify-btn-primary" onclick="confirmStatementColumns()">Continue</button>
+  `;
 }
 
-function confirmCreditColumnChoice() {
-  const picked = document.querySelector('input[name="creditColumn"]:checked');
-  if (!picked) {
-    showToast("Select a column to continue.", "error");
+function confirmStatementColumns() {
+  const dateCol = Number(document.getElementById("verifyDateColumn")?.value);
+  const nameCol = Number(document.getElementById("verifyNameColumn")?.value);
+  const creditCol = Number(document.getElementById("verifyCreditColumn")?.value);
+  const error = document.getElementById("verifyColumnError");
+
+  if (
+    !Number.isInteger(dateCol) ||
+    !Number.isInteger(nameCol) ||
+    !Number.isInteger(creditCol) ||
+    dateCol === nameCol ||
+    dateCol === creditCol ||
+    nameCol === creditCol
+  ) {
+    error.textContent = "Select three different columns for Date, Name / Description, and Credit.";
+    error.classList.remove("hidden");
     return;
   }
-  const idx = Number(picked.value);
-  if (verifyState.columnPickerResolve) {
-    verifyState.columnPickerResolve(idx);
-    verifyState.columnPickerResolve = null;
-  }
+
+  verifyState.selectedColumns = { dateCol, nameCol, creditCol };
+  processStatementRows();
 }
 
-/* =========================
-   NORMALIZATION HELPERS
-========================= */
+/* =========================================================
+   STEP 3 — PRESERVE ALL ROW CONTENT + FILTER CREDIT
+========================================================= */
 
-const VERIFY_DATE_REGEXES = [
-  /\b\d{4}-\d{2}-\d{2}\b/,                          // 2026-09-10
-  /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/,                  // 10/09/2026 or 09/10/26
-  /\b\d{1,2}-\d{1,2}-\d{2,4}\b/,                    // 10-09-2026
-  /\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b/,          // 10 Sep 2026
-  /\b[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4}\b/         // September 10, 2026
-];
+function processStatementRows() {
+  renderVerifyProgress("filter", "Filtering statement rows by Credit…");
 
-const MONTH_NAMES = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"
-};
+  const selected = verifyState.selectedColumns;
+  const statementRows = [];
+  const validRows = [];
+  const skippedRows = [];
+  let globalRowNumber = 0;
 
-function pad2(n) { return String(n).padStart(2, "0"); }
+  verifyState.statementTables.forEach((table, tableIndex) => {
+    table.rows.forEach(cells => {
+      globalRowNumber++;
 
-function extractDate(raw) {
-  if (!raw) return null;
-  const text = raw.trim();
+      const allCells = cells.map((value, index) => ({
+        columnIndex: index,
+        value: String(value || "").trim()
+      })).filter(c => c.value);
 
-  // Extract a time if present (HH:MM or HH:MM:SS)
-  let time = null;
-  const timeMatch = text.match(/\b(\d{1,2}):(\d{2})(:(\d{2}))?\b/);
-  if (timeMatch) {
-    const h = pad2(timeMatch[1]);
-    const m = timeMatch[2];
-    const s = timeMatch[4] || "00";
-    time = `${h}:${m}:${s}`;
+      const rawDate = cells[selected.dateCol] || "";
+      const rawName = cells[selected.nameCol] || "";
+      const rawCredit = cells[selected.creditCol] || "";
+
+      const credit = extractAmount(rawCredit);
+      const dateInfo = extractDate(rawDate);
+
+      const row = {
+        id: `statement-${globalRowNumber}`,
+        rowNumber: globalRowNumber,
+        tableIndex,
+        cells: allCells,
+        rawCells: [...cells],
+        dateRaw: String(rawDate).trim(),
+        nameRaw: String(rawName).trim(),
+        creditRaw: String(rawCredit).trim(),
+        date: dateInfo ? dateInfo.date : null,
+        time: dateInfo ? dateInfo.time : null,
+        credit,
+        status: null,
+        skipReason: null
+      };
+
+      // A payment candidate must have a valid positive Credit.
+      if (credit === null || credit <= 0) {
+        row.status = "SKIPPED";
+        row.skipReason = "No valid positive Credit";
+        skippedRows.push(row);
+      } else {
+        row.status = "PENDING";
+        validRows.push(row);
+      }
+
+      statementRows.push(row);
+    });
+  });
+
+  verifyState.statementRows = statementRows;
+  verifyState.validStatementRows = validRows;
+  verifyState.skippedStatementRows = skippedRows;
+
+  const pendingPayments = Array.isArray(allOrders)
+    ? allOrders.filter(o => o.status === "pending" && o.paymentProof)
+    : [];
+
+  // One OCR record per unique payment-proof image.
+  const seen = new Set();
+  verifyState.pendingPayments = pendingPayments.filter(order => {
+    const id = String(order.paymentProof);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  renderCreditFilterSummary();
+}
+
+function renderCreditFilterSummary() {
+  const body = document.getElementById("verifyBody");
+
+  body.innerHTML = `
+    <h2>Statement Rows Ready</h2>
+    <p class="verify-sub">
+      Rows without a valid positive Credit were skipped before matching.
+      Every non-empty cell from the remaining rows will be retained and searchable.
+    </p>
+
+    <div class="verify-count-grid">
+      <div><strong>${verifyState.statementRows.length.toLocaleString()}</strong><span>Rows detected</span></div>
+      <div><strong>${verifyState.validStatementRows.length.toLocaleString()}</strong><span>Valid Credit</span></div>
+      <div><strong>${verifyState.skippedStatementRows.length.toLocaleString()}</strong><span>Skipped</span></div>
+      <div><strong>${verifyState.pendingPayments.length.toLocaleString()}</strong><span>Payment images</span></div>
+    </div>
+
+    <div class="verify-info-box">
+      <strong>Primary fields:</strong>
+      Date + Name / Description + Credit<br>
+      <strong>Additional row data:</strong>
+      retained as supporting evidence
+    </div>
+
+    <button class="verify-btn-primary" onclick="startImageProcessing()">Continue</button>
+  `;
+}
+
+/* =========================================================
+   OCR / SEARCHABLE PAYMENT IMAGE COLLECTION
+========================================================= */
+
+function paymentImageUrl(fileId) {
+  return `https://nyc.cloud.appwrite.io/v1/storage/buckets/${VERIFY_STORAGE_BUCKET}/files/${encodeURIComponent(fileId)}/view?project=${VERIFY_PROJECT_ID}`;
+}
+
+async function startImageProcessing() {
+  if (!verifyState.pendingPayments.length) {
+    showVerifyNoImages();
+    return;
   }
 
-  // YYYY-MM-DD
-  let m = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
-  if (m) return { date: `${m[1]}-${m[2]}-${m[3]}`, time };
-
-  // "10 Sep 2026" / "September 10, 2026"
-  m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2,4})\b/);
-  if (m) {
-    const mon = MONTH_NAMES[m[2].slice(0, 3).toLowerCase()];
-    if (mon) return { date: `${normalizeYear(m[3])}-${mon}-${pad2(m[1])}`, time };
-  }
-  m = text.match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})\b/);
-  if (m) {
-    const mon = MONTH_NAMES[m[1].slice(0, 3).toLowerCase()];
-    if (mon) return { date: `${normalizeYear(m[3])}-${mon}-${pad2(m[2])}`, time };
-  }
-
-  // DD/MM/YYYY or DD-MM-YYYY (day-first default; swap only if first part > 12)
-  m = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
-  if (m) {
-    let day = Number(m[1]), month = Number(m[2]);
-    if (day > 12 && month <= 12) {
-      // already day-first, fine
-    } else if (month > 12 && day <= 12) {
-      // actually month-first input — swap
-      [day, month] = [month, day];
+  renderVerifyProgress(
+    "ocr",
+    "Preparing payment images…",
+    {
+      current: 0,
+      total: verifyState.pendingPayments.length,
+      remaining: verifyState.pendingPayments.length,
+      percent: 0
     }
-    return { date: `${normalizeYear(m[3])}-${pad2(month)}-${pad2(day)}`, time };
+  );
+
+  let worker = null;
+
+  try {
+    if (Tesseract && typeof Tesseract.createWorker === "function") {
+      worker = await Tesseract.createWorker("eng");
+      verifyState.ocrWorker = worker;
+    }
+  } catch (err) {
+    console.warn("Could not create persistent OCR worker; using Tesseract.recognize.", err);
   }
 
-  return null;
+  const images = [];
+
+  for (let i = 0; i < verifyState.pendingPayments.length; i++) {
+    const order = verifyState.pendingPayments[i];
+    const imageId = String(order.paymentProof);
+    const current = i + 1;
+
+    updateVerifyProgress(
+      `ocr`,
+      `OCR processing payment image ${current} of ${verifyState.pendingPayments.length}…`,
+      current,
+      verifyState.pendingPayments.length,
+      `Completed ${i.toLocaleString()} • Current ${current.toLocaleString()} • Remaining ${(verifyState.pendingPayments.length - current).toLocaleString()}`
+    );
+
+    try {
+      const image = await ocrPaymentImage(order, worker);
+      images.push(image);
+    } catch (err) {
+      console.error(`OCR failed for payment image ${imageId}:`, err);
+      images.push({
+        id: imageId,
+        orderIds: [order.$id],
+        order,
+        rawText: "",
+        normalizedText: "",
+        tokens: [],
+        amounts: [],
+        dates: [],
+        times: [],
+        ocrError: true
+      });
+    }
+
+    // Yield to the browser so progress text can repaint.
+    await nextFrame();
+  }
+
+  if (worker) {
+    try {
+      await worker.terminate();
+    } catch (_) {}
+    verifyState.ocrWorker = null;
+  }
+
+  verifyState.ocrImages = mergeDuplicateImageRecords(images);
+
+  renderVerifyProgress(
+    "index",
+    "Building searchable indexes…",
+    {
+      current: verifyState.ocrImages.length,
+      total: verifyState.ocrImages.length,
+      remaining: 0,
+      percent: 100,
+      extra: `Payment images indexed ${verifyState.ocrImages.length.toLocaleString()} / ${verifyState.ocrImages.length.toLocaleString()}`
+    }
+  );
+
+  await buildImageIndexes();
+  await nextFrame();
+  await runStatementFirstVerification();
 }
+
+async function ocrPaymentImage(order, worker) {
+  const imageId = String(order.paymentProof);
+  const url = paymentImageUrl(imageId);
+
+  let rawText = "";
+
+  if (worker) {
+    const result = await worker.recognize(url);
+    rawText = result?.data?.text || "";
+  } else {
+    const result = await Tesseract.recognize(url, "eng");
+    rawText = result?.data?.text || "";
+  }
+
+  const searchable = buildSearchableImageRecord(rawText);
+
+  return {
+    id: imageId,
+    orderIds: [order.$id],
+    order,
+    rawText,
+    normalizedText: searchable.normalizedText,
+    tokens: searchable.tokens,
+    amounts: searchable.amounts,
+    dates: searchable.dates,
+    times: searchable.times,
+    ocrError: false
+  };
+}
+
+function mergeDuplicateImageRecords(images) {
+  const map = new Map();
+
+  images.forEach(img => {
+    const existing = map.get(img.id);
+    if (!existing) {
+      map.set(img.id, img);
+      return;
+    }
+
+    existing.orderIds = [...new Set([
+      ...(existing.orderIds || []),
+      ...(img.orderIds || [])
+    ])];
+  });
+
+  return [...map.values()];
+}
+
+/* =========================================================
+   NORMALIZATION / TOKENIZATION
+========================================================= */
 
 function normalizeYear(y) {
   y = String(y);
@@ -478,282 +840,790 @@ function normalizeYear(y) {
   return y;
 }
 
-function extractAmount(raw) {
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+function extractDate(raw) {
   if (!raw) return null;
-  let text = raw.trim();
+  const text = String(raw).trim();
+
+  let time = null;
+  const timeMatch = text.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if (timeMatch) {
+    time = `${pad2(timeMatch[1])}:${timeMatch[2]}:${timeMatch[3] || "00"}`;
+  }
+
+  let m = text.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (m) {
+    return {
+      date: `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`,
+      time
+    };
+  }
+
+  m = text.match(/\b(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2,4})\b/);
+  if (m) {
+    const mon = MONTH_NAMES[m[2].slice(0, 3).toLowerCase()];
+    if (mon) {
+      return {
+        date: `${normalizeYear(m[3])}-${mon}-${pad2(m[1])}`,
+        time
+      };
+    }
+  }
+
+  m = text.match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{2,4})\b/);
+  if (m) {
+    const mon = MONTH_NAMES[m[1].slice(0, 3).toLowerCase()];
+    if (mon) {
+      return {
+        date: `${normalizeYear(m[3])}-${mon}-${pad2(m[2])}`,
+        time
+      };
+    }
+  }
+
+  m = text.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+  if (m) {
+    let day = Number(m[1]);
+    let month = Number(m[2]);
+
+    if (month > 12 && day <= 12) {
+      [day, month] = [month, day];
+    }
+
+    if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+      return {
+        date: `${normalizeYear(m[3])}-${pad2(month)}-${pad2(day)}`,
+        time
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractAllDates(text) {
+  const found = new Set();
+  const source = String(text || "");
+
+  const candidates = source.match(
+    /\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b\d{1,2}-\d{1,2}-\d{2,4}\b|\b\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}\b|\b[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{2,4}\b/gi
+  ) || [];
+
+  candidates.forEach(c => {
+    const d = extractDate(c);
+    if (d) found.add(d.date);
+  });
+
+  return [...found];
+}
+
+function extractAllTimes(text) {
+  const found = new Set();
+  const matches = String(text || "").match(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g) || [];
+
+  matches.forEach(t => {
+    const p = t.split(":");
+    found.add(`${pad2(p[0])}:${p[1]}:${p[2] || "00"}`);
+  });
+
+  return [...found];
+}
+
+function extractAmount(raw) {
+  if (raw === null || raw === undefined) return null;
+
+  let text = String(raw).trim();
   if (!/\d/.test(text)) return null;
 
-  // Strip currency symbols/codes
-  text = text.replace(/₦|NGN|N|\$|USD|EUR|€|GBP|£/gi, "").trim();
-  text = text.replace(/^amount:?\s*/i, "").trim();
+  text = text
+    .replace(/₦|NGN|N|USD|\$|EUR|€|GBP|£/gi, "")
+    .replace(/\bamount\b\s*:?\s*/gi, "")
+    .trim();
 
-  // Detect European format: 1.250,50  → thousands "." decimal ","
+  // Parentheses are treated as negative values. They are never valid Credit.
+  const negative = /^\(.*\)$/.test(text) || /^-/.test(text);
+  if (negative) return null;
+
   const europeanStyle = /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(text);
+
   if (europeanStyle) {
     text = text.replace(/\./g, "").replace(",", ".");
   } else {
-    // Standard: 15,000.00 or 15000 → strip thousands commas
     text = text.replace(/,/g, "");
   }
 
-  const num = parseFloat(text);
-  return isNaN(num) ? null : Math.round(num * 100) / 100;
+  const num = Number.parseFloat(text);
+  if (!Number.isFinite(num)) return null;
+
+  return Math.round(num * 100) / 100;
 }
 
-function normalizeName(s) {
-  return (s || "")
+function extractAllAmounts(text) {
+  const found = new Set();
+  const source = String(text || "");
+
+  const matches = source.match(
+    /(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*[\d.,]+|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d+(?:\.\d{1,2})\b/g
+  ) || [];
+
+  matches.forEach(m => {
+    const amount = extractAmount(m);
+    if (amount !== null) found.add(amount.toFixed(2));
+  });
+
+  return [...found].map(Number);
+}
+
+function normalizeSearchText(s) {
+  return String(s || "")
+    .normalize("NFKC")
     .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, "")
+    .replace(/₦/g, " NGN ")
+    .replace(/&/g, " AND ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function namesAreSimilar(a, b) {
-  const na = normalizeName(a);
-  const nb = normalizeName(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  if (na.includes(nb) || nb.includes(na)) return true;
+function tokenizeSearchText(s) {
+  const normalized = normalizeSearchText(s);
+  if (!normalized) return [];
 
-  // token overlap — most tokens of the shorter name appear in the longer name
-  const ta = na.split(" ").filter(Boolean);
-  const tb = nb.split(" ").filter(Boolean);
-  const [shorter, longer] = ta.length <= tb.length ? [ta, tb] : [tb, ta];
-  if (!shorter.length) return false;
-  const overlap = shorter.filter(tok => longer.includes(tok)).length;
-  return overlap / shorter.length >= 0.6;
+  return [...new Set(
+    normalized
+      .split(" ")
+      .map(t => t.trim())
+      .filter(t => t.length >= 2)
+  )];
 }
 
-/* =========================
-   OCR — PAYMENT IMAGE PROCESSING
-========================= */
-
-function extractCandidateNames(ocrText) {
-  return ocrText
-    .split("\n")
-    .map(l => l.trim())
-    .filter(l => l.length >= 2)
-    .filter(l => !looksLikeDate(l))
-    .filter(l => !looksLikeNumber(l))
-    .filter(l => /[A-Za-z]/.test(l)) // must contain at least some letters
-    .filter(l => !/^(amount|date|time|ref|reference|transaction|status|account|bank)\b/i.test(l));
+function meaningfulTokens(s) {
+  return tokenizeSearchText(s).filter(t =>
+    !VERIFY_GENERIC_TOKENS.has(t.toLowerCase()) &&
+    !/^\d{1,2}$/.test(t) &&
+    t !== "NGN"
+  );
 }
 
-function identifySenderFromOcr(ocrText, businessName) {
-  const candidates = extractCandidateNames(ocrText);
-  if (!candidates.length) return { sender: null, ambiguous: false, noCandidates: true };
-
-  const receiverMatches = candidates.filter(c => namesAreSimilar(c, businessName));
-  if (!receiverMatches.length) {
-    // Can't find the receiving name among candidates — can't confidently
-    // identify which remaining name is the sender either.
-    return { sender: null, ambiguous: true };
-  }
-
-  const remaining = candidates.filter(c => !receiverMatches.includes(c));
-  if (remaining.length === 0) return { sender: null, ambiguous: true };
-  if (remaining.length === 1) return { sender: remaining[0], ambiguous: false };
-
-  // More than one remaining candidate — pick the longest alphabetic one,
-  // but flag as ambiguous if two are close in length (can't be confident).
-  const sorted = [...remaining].sort((a, b) => b.length - a.length);
-  if (sorted.length >= 2 && sorted[0].length - sorted[1].length < 3) {
-    return { sender: null, ambiguous: true };
-  }
-  return { sender: sorted[0], ambiguous: false };
-}
-
-async function ocrPaymentImage(imageUrl) {
-  const { data } = await Tesseract.recognize(imageUrl, "eng");
-  const text = data.text || "";
-
-  const nameResult = identifySenderFromOcr(text, verifyState.businessName);
-  const amountMatch = text.match(/[₦$€]\s?[\d.,]+|NGN\s?[\d.,]+|EUR\s?[\d.,]+|\b\d{1,3}(,\d{3})*(\.\d{1,2})?\b/);
-  const amount = amountMatch ? extractAmount(amountMatch[0]) : null;
-  const dateInfo = (() => {
-    for (const line of text.split("\n")) {
-      const d = extractDate(line);
-      if (d) return d;
-    }
-    return null;
-  })();
+function buildSearchableImageRecord(rawText) {
+  const normalizedText = normalizeSearchText(rawText);
+  const tokens = tokenizeSearchText(rawText);
 
   return {
-    name: nameResult.sender || null,
-    nameAmbiguous: !!nameResult.ambiguous,
-    amount: amount,
-    date: dateInfo ? dateInfo.date : null,
-    time: dateInfo ? dateInfo.time : null
+    normalizedText,
+    tokens,
+    amounts: extractAllAmounts(rawText),
+    dates: extractAllDates(rawText),
+    times: extractAllTimes(rawText)
   };
 }
 
-/* =========================
-   VERIFICATION ENGINE (deterministic)
-========================= */
+/* =========================================================
+   INDEXES
+========================================================= */
 
-async function runPaymentVerification() {
-  const body = document.getElementById("verifyBody");
+function addIndexValue(index, key, imageId) {
+  if (!key) return;
 
-  verifyState.pendingPayments = allOrders.filter(o =>
-    o.status === "pending" && o.paymentProof
-  );
+  if (!index.has(key)) index.set(key, new Set());
+  index.get(key).add(imageId);
+}
 
-  if (!verifyState.pendingPayments.length) {
-    body.innerHTML = `
-      <h2>Nothing to verify</h2>
-      <p class="verify-sub">There are no unpaid orders with a payment proof image right now.</p>
-      <button class="verify-btn-primary" onclick="closeVerifyOverlay()">Close</button>
-    `;
-    return;
+async function buildImageIndexes() {
+  const amountIndex = new Map();
+  const dateIndex = new Map();
+  const tokenIndex = new Map();
+
+  verifyState.ocrImages.forEach((image, index) => {
+    image.amounts.forEach(amount =>
+      addIndexValue(amountIndex, Number(amount).toFixed(2), image.id)
+    );
+
+    image.dates.forEach(date =>
+      addIndexValue(dateIndex, date, image.id)
+    );
+
+    image.tokens.forEach(token =>
+      addIndexValue(tokenIndex, token.toLowerCase(), image.id)
+    );
+
+    if (index % 25 === 0) {
+      updateVerifyProgress(
+        "index",
+        `Indexing payment images ${index + 1} of ${verifyState.ocrImages.length}…`,
+        index + 1,
+        verifyState.ocrImages.length,
+        `Amount index ${amountIndex.size.toLocaleString()} • Date index ${dateIndex.size.toLocaleString()} • Token index ${tokenIndex.size.toLocaleString()}`
+      );
+    }
+  });
+
+  verifyState.imageIndex = {
+    amountIndex,
+    dateIndex,
+    tokenIndex
+  };
+}
+
+/* =========================================================
+   STATEMENT-FIRST MATCHING
+========================================================= */
+
+function getImageById(id) {
+  return verifyState.ocrImages.find(img => img.id === id) || null;
+}
+
+function getAmountCandidates(amount) {
+  const set = verifyState.imageIndex.amountIndex.get(Number(amount).toFixed(2));
+  return set ? [...set] : [];
+}
+
+function intersectIds(a, b) {
+  const bSet = new Set(b);
+  return a.filter(id => bSet.has(id));
+}
+
+function imageHasAmount(image, amount) {
+  return image.amounts.some(v => Math.abs(Number(v) - Number(amount)) < 0.01);
+}
+
+function imageHasDate(image, date) {
+  return !!date && image.dates.includes(date);
+}
+
+function textFieldMatchesImage(value, image) {
+  const field = String(value || "").trim();
+  if (!field || !image.normalizedText) return false;
+
+  const normalizedField = normalizeSearchText(field);
+  if (!normalizedField) return false;
+
+  if (image.normalizedText.includes(normalizedField)) return true;
+
+  const tokens = meaningfulTokens(field);
+  if (!tokens.length) {
+    // If the field has no useful alphabetic identity tokens, do not
+    // manufacture a match from generic words.
+    return false;
   }
 
-  body.innerHTML = `
-    <h2>Verifying payments…</h2>
-    <p class="verify-sub" id="verifyProgressLabel">Starting…</p>
-    <div class="verify-results" id="verifyResultsList"></div>
-  `;
+  const imageTokens = new Set(image.tokens.map(t => t.toLowerCase()));
+  const matched = tokens.filter(t => imageTokens.has(t.toLowerCase())).length;
 
-  const resultsList = document.getElementById("verifyResultsList");
-  const progressLabel = document.getElementById("verifyProgressLabel");
-  const results = [];
+  // For a one-token name/description, require that token.
+  // For longer fields, require a majority of meaningful tokens.
+  const ratio = matched / tokens.length;
+  return tokens.length === 1 ? matched === 1 : ratio >= 0.6;
+}
 
-  for (let i = 0; i < verifyState.pendingPayments.length; i++) {
-    const order = verifyState.pendingPayments[i];
-    progressLabel.textContent = `Checking payment ${i + 1} of ${verifyState.pendingPayments.length}…`;
+function extractEvidenceFromCell(cellValue) {
+  const value = String(cellValue || "").trim();
+  if (!value) return null;
 
-    const imageUrl = `https://nyc.cloud.appwrite.io/v1/storage/buckets/${PRODUCT_IMAGES_BUCKET}/files/${order.paymentProof}/view?project=695981480033c7a4eb0d`;
+  return {
+    value,
+    amount: extractAmount(value),
+    dates: extractAllDates(value),
+    tokens: meaningfulTokens(value)
+  };
+}
 
-    let extracted;
-    try {
-      extracted = await ocrPaymentImage(imageUrl);
-    } catch (err) {
-      console.error(err);
-      extracted = { name: null, amount: null, date: null, time: null };
+function cellMatchesImage(cellValue, image) {
+  const evidence = extractEvidenceFromCell(cellValue);
+  if (!evidence) return false;
+
+  if (
+    evidence.amount !== null &&
+    imageHasAmount(image, evidence.amount)
+  ) {
+    return true;
+  }
+
+  if (
+    evidence.dates.length &&
+    evidence.dates.some(d => imageHasDate(image, d))
+  ) {
+    return true;
+  }
+
+  if (evidence.tokens.length) {
+    const imageTokens = new Set(image.tokens.map(t => t.toLowerCase()));
+    const matched = evidence.tokens.filter(t => imageTokens.has(t.toLowerCase())).length;
+
+    if (evidence.tokens.length === 1) {
+      return matched === 1;
     }
 
-    const verdict = matchPaymentToStatement(extracted, verifyState.statementTransactions);
-    const result = { order, extracted, ...verdict };
+    if (matched / evidence.tokens.length >= 0.6) {
+      return true;
+    }
+  }
+
+  const normalized = normalizeSearchText(valueForSearch(cellValue));
+  return normalized.length >= 4 && image.normalizedText.includes(normalized);
+}
+
+function valueForSearch(v) {
+  return String(v || "")
+    .replace(/\bNGN\b/gi, " ")
+    .replace(/₦/g, " ")
+    .trim();
+}
+
+function findSupportingEvidence(row, image) {
+  const primaryIndexes = new Set([
+    verifyState.selectedColumns.dateCol,
+    verifyState.selectedColumns.nameCol,
+    verifyState.selectedColumns.creditCol
+  ]);
+
+  const matches = [];
+
+  row.cells.forEach(cell => {
+    if (primaryIndexes.has(cell.columnIndex)) return;
+
+    if (cellMatchesImage(cell.value, image)) {
+      matches.push(cell.value);
+    }
+  });
+
+  return [...new Set(matches)];
+}
+
+function findCoreMatchesForRow(row) {
+  if (row.credit === null || row.credit <= 0) {
+    return {
+      type: "SKIPPED",
+      row,
+      candidates: [],
+      reason: "No valid positive Credit."
+    };
+  }
+
+  if (!row.date) {
+    return {
+      type: "REVIEW REQUIRED",
+      row,
+      candidates: [],
+      reason: "The selected Date column could not be normalized for this row."
+    };
+  }
+
+  if (!row.nameRaw) {
+    return {
+      type: "REVIEW REQUIRED",
+      row,
+      candidates: [],
+      reason: "The selected Name / Description cell is empty."
+    };
+  }
+
+  // Candidate narrowing starts with the mandatory Credit amount.
+  let candidateIds = getAmountCandidates(row.credit);
+
+  if (!candidateIds.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No payment image contains the statement Credit amount."
+    };
+  }
+
+  // Date must also occur in the SAME image.
+  candidateIds = candidateIds.filter(id => {
+    const image = getImageById(id);
+    return image && imageHasDate(image, row.date);
+  });
+
+  if (!candidateIds.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No payment image contains both the statement Credit amount and Date."
+    };
+  }
+
+  // Name / Description must be present in the SAME candidate image.
+  const nameMatches = candidateIds.filter(id => {
+    const image = getImageById(id);
+    return image && textFieldMatchesImage(row.nameRaw, image);
+  });
+
+  if (!nameMatches.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No single payment image contains the required Credit, Date, and Name / Description."
+    };
+  }
+
+  return {
+    type: "CORE",
+    row,
+    candidates: nameMatches
+  };
+}
+
+async function runStatementFirstVerification() {
+  renderVerifyProgress(
+    "match",
+    "Matching statement transactions…",
+    {
+      current: 0,
+      total: verifyState.validStatementRows.length,
+      remaining: verifyState.validStatementRows.length,
+      percent: 0
+    }
+  );
+
+  const results = [];
+  const validRows = verifyState.validStatementRows;
+  const imageCount = verifyState.ocrImages.length;
+
+  // A payment-proof image should verify at most one statement row.
+  // If the same image would satisfy another row later, that row is
+  // treated as ambiguous instead of reusing the same evidence twice.
+  const claimedImageIds = new Set();
+
+  for (let i = 0; i < validRows.length; i++) {
+    const row = validRows[i];
+    const current = i + 1;
+
+    const core = findCoreMatchesForRow(row);
+
+    let result;
+
+    if (core.type === "CORE") {
+      const allCandidates = core.candidates.map(id => getImageById(id)).filter(Boolean);
+      const candidates = allCandidates.filter(image => !claimedImageIds.has(image.id));
+
+      if (!candidates.length) {
+        result = {
+          row,
+          verdict: "REVIEW REQUIRED",
+          imageCandidates: allCandidates,
+          matchedImage: null,
+          checks: {
+            date: true,
+            name: true,
+            credit: true,
+            supporting: 0
+          },
+          supporting: [],
+          reason: "The required fields match a payment image, but that same image has already been assigned to another statement row."
+        };
+      } else {
+        const enriched = candidates.map(image => ({
+          image,
+          supporting: findSupportingEvidence(row, image)
+        }));
+
+      // Extra row content is supporting evidence. It can distinguish
+      // otherwise identical core matches, but it can never rescue a core mismatch.
+      enriched.sort((a, b) => b.supporting.length - a.supporting.length);
+
+      const bestSupport = enriched[0]?.supporting?.length || 0;
+      const equallyStrong = enriched.filter(
+        x => x.supporting.length === bestSupport
+      );
+
+      if (enriched.length > 1 && bestSupport === 0) {
+        result = {
+          row,
+          verdict: "REVIEW REQUIRED",
+          imageCandidates: candidates,
+          matchedImage: null,
+          checks: {
+            date: true,
+            name: true,
+            credit: true,
+            supporting: 0
+          },
+          supporting: [],
+          reason: "Multiple payment images satisfy the required Date, Name / Description, and Credit. More evidence is needed to choose one."
+        };
+      } else if (enriched.length > 1 && equallyStrong.length > 1) {
+        result = {
+          row,
+          verdict: "REVIEW REQUIRED",
+          imageCandidates: candidates,
+          matchedImage: null,
+          checks: {
+            date: true,
+            name: true,
+            credit: true,
+            supporting: bestSupport
+          },
+          supporting: enriched[0]?.supporting || [],
+          reason: "Multiple payment images remain equally plausible after checking additional statement-row content."
+        };
+      } else {
+        const best = enriched[0];
+
+          result = {
+            row,
+            verdict: bestSupport > 0 ? "STRONG MATCH" : "MATCHED",
+            imageCandidates: candidates,
+            matchedImage: best.image,
+            checks: {
+              date: true,
+              name: true,
+              credit: true,
+              supporting: bestSupport
+            },
+            supporting: best.supporting,
+            reason: bestSupport
+              ? `${bestSupport} additional statement value${bestSupport === 1 ? "" : "s"} also found in the same payment image.`
+              : "The required Date, Name / Description, and Credit were found together in the same payment image."
+          };
+        }
+      }
+    } else {
+      result = {
+        row,
+        verdict: core.type,
+        imageCandidates: core.candidates || [],
+        matchedImage: null,
+        checks: {
+          date: false,
+          name: false,
+          credit: false,
+          supporting: 0
+        },
+        supporting: [],
+        reason: core.reason
+      };
+    }
+
+    if (result.matchedImage) {
+      claimedImageIds.add(result.matchedImage.id);
+    }
+
     results.push(result);
 
-    resultsList.insertAdjacentHTML("beforeend", renderVerifyResultCard(result));
-
-    if (verdict.verdict === "VERIFIED") {
-      try {
-        await databases.updateDocument(DB_ID, ORDERS, order.$id, { status: "paid" });
-      } catch (err) {
-        console.error("Failed to auto-update order status:", err);
+    // Update order status only when the required core three matched in one image.
+    if (
+      (result.verdict === "MATCHED" || result.verdict === "STRONG MATCH") &&
+      result.matchedImage
+    ) {
+      const orderIds = result.matchedImage.orderIds || [];
+      for (const orderId of orderIds) {
+        try {
+          await databases.updateDocument(DB_ID, ORDERS, orderId, {
+            status: "paid"
+          });
+        } catch (err) {
+          console.error("Failed to update matched order status:", orderId, err);
+        }
       }
     }
+
+    const verifiedCount = results.filter(
+      r => r.verdict === "MATCHED" || r.verdict === "STRONG MATCH"
+    ).length;
+    const reviewCount = results.filter(r => r.verdict === "REVIEW REQUIRED").length;
+    const notVerifiedCount = results.filter(r => r.verdict === "NOT VERIFIED").length;
+
+    updateVerifyProgress(
+      "match",
+      `Processed ${current.toLocaleString()} of ${validRows.length.toLocaleString()} statement rows…`,
+      current,
+      validRows.length,
+      `Matched ${verifiedCount.toLocaleString()} • Review ${reviewCount.toLocaleString()} • Not verified ${notVerifiedCount.toLocaleString()} • Payment images ${imageCount.toLocaleString()}`
+    );
+
+    if (current % 10 === 0) await nextFrame();
   }
 
-  verifyState.results = results;
-  renderVerifySummary(results);
-  fetchOrders(); // single refresh at the end, not per-payment
+  // Add skipped rows after valid matching so every original row is represented.
+  verifyState.results = [
+    ...results,
+    ...verifyState.skippedStatementRows.map(row => ({
+      row,
+      verdict: "SKIPPED",
+      imageCandidates: [],
+      matchedImage: null,
+      checks: {
+        date: false,
+        name: false,
+        credit: false,
+        supporting: 0
+      },
+      supporting: [],
+      reason: row.skipReason
+    }))
+  ];
+
+  await renderFinalVerificationResults();
 }
 
-function matchPaymentToStatement(extracted, transactions) {
-  const checks = { sender: false, amount: false, date: false };
-  let reason = "";
+/* =========================================================
+   RESULTS
+========================================================= */
 
-  if (extracted.name === null) {
-    return {
-      verdict: "NOT VERIFIED",
-      checks,
-      reason: extracted.nameAmbiguous
-        ? "Could not confidently distinguish the sender's name from the receiving name."
-        : "No sender name could be detected on the payment image."
-    };
+async function renderFinalVerificationResults() {
+  renderVerifyProgress("final", "Finalizing verification results…");
+
+  const matched = verifyState.results.filter(
+    r => r.verdict === "MATCHED" || r.verdict === "STRONG MATCH"
+  ).length;
+  const strong = verifyState.results.filter(r => r.verdict === "STRONG MATCH").length;
+  const review = verifyState.results.filter(r => r.verdict === "REVIEW REQUIRED").length;
+  const notVerified = verifyState.results.filter(r => r.verdict === "NOT VERIFIED").length;
+  const skipped = verifyState.results.filter(r => r.verdict === "SKIPPED").length;
+
+  const body = document.getElementById("verifyBody");
+
+  body.innerHTML = `
+    <h2>Payment Verification Complete</h2>
+    <p class="verify-sub">
+      Matching was performed from statement rows against the complete OCR/searchable
+      payment-image collection. The three primary fields had to match in the same image.
+    </p>
+
+    <div class="verify-count-grid verify-final-counts">
+      <div class="matched"><strong>${matched.toLocaleString()}</strong><span>Matched</span></div>
+      <div class="strong"><strong>${strong.toLocaleString()}</strong><span>Strong match</span></div>
+      <div class="review"><strong>${review.toLocaleString()}</strong><span>Review required</span></div>
+      <div class="failed"><strong>${notVerified.toLocaleString()}</strong><span>Not verified</span></div>
+      <div class="skipped"><strong>${skipped.toLocaleString()}</strong><span>Skipped</span></div>
+    </div>
+
+    <div class="verify-summary">
+      <p><strong>Statement rows detected:</strong> ${verifyState.statementRows.length.toLocaleString()}</p>
+      <p><strong>Valid Credit rows:</strong> ${verifyState.validStatementRows.length.toLocaleString()}</p>
+      <p><strong>Rows skipped:</strong> ${verifyState.skippedStatementRows.length.toLocaleString()}</p>
+      <p><strong>Payment images examined:</strong> ${verifyState.ocrImages.length.toLocaleString()}</p>
+    </div>
+
+    <div class="verify-results" id="verifyResultsList">
+      ${verifyState.results.map(renderVerifyResultCard).join("")}
+    </div>
+
+    <button class="verify-btn-primary" onclick="closeVerifyOverlay()">Done</button>
+  `;
+
+  // Keep the existing order list in sync after matched orders were updated.
+  try {
+    await fetchOrders();
+  } catch (err) {
+    console.warn("Could not refresh orders after verification:", err);
   }
-
-  if (extracted.amount === null) {
-    return { verdict: "NOT VERIFIED", checks, reason: "No payment amount could be detected." };
-  }
-
-  // Find statement rows matching on name — the required comparisons are
-  // sender, amount, date; time only disambiguates between close matches.
-  const nameMatches = transactions.filter(t => namesAreSimilar(t.name, extracted.name));
-  if (!nameMatches.length) {
-    return { verdict: "NOT VERIFIED", checks, reason: "No matching statement transaction was found." };
-  }
-  checks.sender = true;
-
-  const amountMatches = nameMatches.filter(t =>
-    extracted.amount !== null && Math.abs(t.credit - extracted.amount) < 0.01
-  );
-  if (!amountMatches.length) {
-    return {
-      verdict: "NOT VERIFIED",
-      checks,
-      reason: "Credit amount does not match the payment amount."
-    };
-  }
-  checks.amount = true;
-
-  if (extracted.date === null) {
-    return { verdict: "NOT VERIFIED", checks, reason: "No payment date could be detected." };
-  }
-
-  const dateMatches = amountMatches.filter(t => t.date === extracted.date);
-  if (!dateMatches.length) {
-    return {
-      verdict: "NOT VERIFIED",
-      checks,
-      reason: "Transaction date does not match the statement."
-    };
-  }
-  checks.date = true;
-
-  return { verdict: "VERIFIED", checks, reason: "" };
 }
-
-/* =========================
-   RESULTS RENDERING
-========================= */
 
 function renderVerifyResultCard(result) {
-  const title = getCardTitle(result.order);
-  const isVerified = result.verdict === "VERIFIED";
+  const row = result.row;
+  const title = row.nameRaw || `Statement row ${row.rowNumber}`;
+
+  const statusClass = {
+    "MATCHED": "matched",
+    "STRONG MATCH": "strong",
+    "REVIEW REQUIRED": "review",
+    "NOT VERIFIED": "not-verified",
+    "SKIPPED": "skipped"
+  }[result.verdict] || "not-verified";
 
   const line = (ok, label) =>
-    `<div class="verify-check ${ok ? "ok" : "fail"}">${ok ? "&#10003;" : "&#10007;"} ${label}</div>`;
+    `<div class="verify-check ${ok ? "ok" : "fail"}">
+      ${ok ? "&#10003;" : "&#10007;"} ${escapeHtml(label)}
+    </div>`;
+
+  const supportingHtml = result.supporting?.length
+    ? `<div class="verify-supporting">
+        <strong>Supporting evidence:</strong>
+        ${result.supporting.map(v => `<span>${escapeHtml(v)}</span>`).join("")}
+       </div>`
+    : "";
 
   return `
-    <div class="verify-result-card ${isVerified ? "verified" : "not-verified"}">
+    <div class="verify-result-card ${statusClass}">
       <div class="verify-result-head">
         <strong>${escapeHtml(title)}</strong>
-        <span class="verify-verdict-tag">${result.verdict}</span>
+        <span class="verify-verdict-tag">${escapeHtml(result.verdict)}</span>
       </div>
-      ${line(result.checks.sender, "Sender matched")}
-      ${line(result.checks.amount, "Amount matched")}
-      ${line(result.checks.date, "Date matched")}
-      ${!isVerified ? `<p class="verify-reason">Reason: ${escapeHtml(result.reason)}</p>` : ""}
+
+      <div class="verify-row-meta">
+        Row ${row.rowNumber}
+        ${row.date ? ` • ${escapeHtml(row.date)}` : ""}
+        ${row.credit != null ? ` • ₦${Number(row.credit).toLocaleString()}` : ""}
+      </div>
+
+      ${result.verdict !== "SKIPPED" ? `
+        ${line(!!result.checks?.date, "Date matched")}
+        ${line(!!result.checks?.name, "Name / Description matched")}
+        ${line(!!result.checks?.credit, "Credit matched")}
+      ` : `
+        <div class="verify-check fail">&#10007; No valid positive Credit — row skipped</div>
+      `}
+
+      ${result.matchedImage ? `
+        <div class="verify-check ok">&#10003; Required fields found in the same payment image</div>
+      ` : ""}
+
+      ${result.imageCandidates?.length ? `
+        <div class="verify-candidate-note">
+          ${result.imageCandidates.length} payment image${result.imageCandidates.length === 1 ? "" : "s"} satisfied the core search.
+        </div>
+      ` : ""}
+
+      ${supportingHtml}
+
+      <p class="verify-reason">${escapeHtml(result.reason || "")}</p>
     </div>
   `;
 }
 
-function renderVerifySummary(results) {
-  const verified = results.filter(r => r.verdict === "VERIFIED").length;
-  const notVerified = results.length - verified;
+function showVerifyNoImages() {
+  const body = document.getElementById("verifyBody");
 
-  const summary = document.createElement("div");
-  summary.className = "verify-summary";
-  summary.innerHTML = `
-    <h3>Payment Verification Complete</h3>
-    <p>Verified: <strong>${verified}</strong></p>
-    <p>Not Verified: <strong>${notVerified}</strong></p>
-    <p>Total examined: <strong>${results.length}</strong></p>
-    <button class="verify-btn-primary" onclick="closeVerifyOverlay()">Done</button>
+  body.innerHTML = `
+    <h2>No Payment Images Found</h2>
+    <p class="verify-sub">
+      The statement was processed, but there are no unpaid orders with payment-proof
+      images available for comparison.
+    </p>
+
+    <div class="verify-count-grid">
+      <div><strong>${verifyState.statementRows.length.toLocaleString()}</strong><span>Rows detected</span></div>
+      <div><strong>${verifyState.validStatementRows.length.toLocaleString()}</strong><span>Valid Credit</span></div>
+      <div><strong>${verifyState.skippedStatementRows.length.toLocaleString()}</strong><span>Skipped</span></div>
+    </div>
+
+    <button class="verify-btn-primary" onclick="closeVerifyOverlay()">Close</button>
   `;
-  document.getElementById("verifyBody").appendChild(summary);
-  document.getElementById("verifyProgressLabel").textContent = "Done.";
 }
 
-/* =========================
-   SMALL UTILITY
-========================= */
+function showVerifyError(message) {
+  const body = document.getElementById("verifyBody");
+  if (!body) return;
+
+  body.innerHTML = `
+    <h2>Verification could not continue</h2>
+    <div class="verify-error">${escapeHtml(message)}</div>
+    <button class="verify-btn-primary" onclick="renderVerifyStepStatement()">Try Again</button>
+  `;
+}
+
+/* =========================================================
+   SMALL UTILITIES
+========================================================= */
+
+function nextFrame() {
+  return new Promise(resolve => requestAnimationFrame(() => resolve()));
+}
 
 function escapeHtml(s) {
-  return (s || "").replace(/[&<>"']/g, c => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
   }[c]));
 }
