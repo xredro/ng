@@ -87,6 +87,27 @@
     </div>
   </section>
 
+  <!-- CUSTOMER WHATSAPP HANDOFF -->
+  <section>
+    <h2>Customer WhatsApp</h2>
+
+    <div class="status-row">
+      <span>
+        Send customers to WhatsApp after they submit an order
+        <small class="setting-help">Off by default. Customers are redirected only when this is enabled and a payment proof image was submitted.</small>
+      </span>
+      <label class="switch">
+        <input id="whatsappOrderRedirectEnabled" type="checkbox">
+        <span class="switch-slider"></span>
+      </label>
+    </div>
+
+    <label>WhatsApp number</label>
+    <input id="whatsappNumber" type="tel" inputmode="tel" placeholder="08012345678">
+
+    <button class="primary" id="saveWhatsAppSettings" onclick="saveWhatsAppSettings()">Save WhatsApp settings</button>
+  </section>
+
   <!-- SUBSCRIPTION -->
   <section>
     <h2>Subscription</h2>
