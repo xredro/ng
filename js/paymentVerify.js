@@ -355,6 +355,46 @@ function normalizeHeaderWord(s) {
   return (s || "").toLowerCase().replace(/[^a-z]/g, "");
 }
 
+function normalizeHeaderLabel(s) {
+  return normalizeHeaderWord(s)
+    .replace(/^value$/, "date")
+    .replace(/^valuedate$/, "date")
+    .replace(/^postingdate$/, "date")
+    .replace(/^transactiondate$/, "date")
+    .replace(/^transactiondatetime$/, "datetime")
+    .replace(/^datetime$/, "datetime")
+    .replace(/^timestamp$/, "datetime")
+    .replace(/^time$/, "time")
+    .replace(/^transactiontime$/, "time")
+    .replace(/^counterparty$/, "name")
+    .replace(/^customername$/, "name")
+    .replace(/^sender$/, "name")
+    .replace(/^beneficiary$/, "name")
+    .replace(/^narration$/, "description")
+    .replace(/^details$/, "description")
+    .replace(/^particulars?$/, "description")
+    .replace(/^remarks?$/, "description")
+    .replace(/^transactiondetails$/, "description")
+    .replace(/^transactiondescription$/, "description")
+    .replace(/^reference$/, "reference")
+    .replace(/^ref$/, "reference")
+    .replace(/^refcode$/, "reference")
+    .replace(/^trace$/, "reference")
+    .replace(/^tracecode$/, "reference")
+    .replace(/^creditamount$/, "credit")
+    .replace(/^amountcredited$/, "credit")
+    .replace(/^amountreceived$/, "credit")
+    .replace(/^received$/, "credit")
+    .replace(/^deposit$/, "credit")
+    .replace(/^inflow$/, "credit")
+    .replace(/^deposits$/, "credit")
+    .replace(/^debitamount$/, "debit")
+    .replace(/^amountdebited$/, "debit")
+    .replace(/^balance$/, "balance")
+    .replace(/^runningbalance$/, "balance")
+    .replace(/^channel$/, "channel");
+}
+
 function looksLikeDate(s) {
   if (!s) return false;
   return VERIFY_DATE_REGEXES.some(r => r.test(String(s)));
@@ -364,80 +404,364 @@ function looksLikeNumber(s) {
   return /^[₦$€£]?\s?[\d.,]+$/.test((s || "").trim()) && /\d/.test(s);
 }
 
-function detectHeaderRow(rows) {
-  for (let i = 0; i < rows.length; i++) {
-    const text = rows[i].items
-      .map(it => normalizeHeaderWord(it.text))
-      .join(" ");
+/*
+ * PDF.js exposes text as individual positioned fragments. A header such as
+ * "Reference / Code" can therefore arrive as two fragments. The old parser
+ * treated BOTH fragments as separate columns, which created phantom columns
+ * ("Column 2", "Column 3", ...). Header fragments are first merged into
+ * actual header cells, then those cells define the real table schema.
+ */
+const VERIFY_HEADER_PATTERNS = [
+  "transaction details / narration",
+  "narration / description",
+  "reference / code",
+  "transaction description",
+  "transaction details",
+  "running balance",
+  "posting date",
+  "transaction date",
+  "value date",
+  "customer name",
+  "credit amount",
+  "amount credited",
+  "amount received",
+  "debit amount",
+  "amount debited",
+  "transaction time",
+  "timestamp",
+  "counterparty",
+  "description",
+  "narration",
+  "particulars",
+  "remarks",
+  "reference",
+  "trace",
+  "channel",
+  "balance",
+  "credit",
+  "debit",
+  "datetime",
+  "date",
+  "time",
+  "name",
+  "ref"
+];
 
-    const hits = VERIFY_HEADER_KEYWORDS.filter(k =>
-      text.includes(k.replace(/[^a-z]/g, ""))
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findHeaderLabelsInItem(item) {
+  const text = String(item.text || "").replace(/\s+/g, " ").trim();
+  const lower = text.toLowerCase();
+  if (!text) return [];
+
+  const matches = [];
+  const occupied = [];
+
+  const patterns = [...VERIFY_HEADER_PATTERNS].sort(
+    (a, b) => b.length - a.length
+  );
+
+  patterns.forEach(pattern => {
+    const regex = new RegExp(escapeRegExp(pattern), "gi");
+    let match;
+
+    while ((match = regex.exec(lower))) {
+      const start = match.index;
+      const end = start + match[0].length;
+
+      const overlaps = occupied.some(r => start < r.end && end > r.start);
+      if (overlaps) continue;
+
+      occupied.push({ start, end });
+      matches.push({
+        start,
+        end,
+        text: text.slice(start, end)
+      });
+    }
+  });
+
+  matches.sort((a, b) => a.start - b.start);
+
+  const itemX = Number(item.x) || 0;
+  const itemWidth = Number(item.width) || 0;
+  const charWidth = text.length ? itemWidth / text.length : 0;
+
+  return matches.map(m => ({
+    x: itemX + (m.start * charWidth),
+    end: itemX + (m.end * charWidth),
+    center: itemX + (((m.start + m.end) / 2) * charWidth),
+    text: m.text
+  }));
+}
+
+function groupHeaderCells(headerRow) {
+  const items = [...headerRow.items]
+    .filter(it => String(it.text || "").trim())
+    .sort((a, b) => a.x - b.x);
+
+  const cells = [];
+
+  items.forEach(item => {
+    const semantic = findHeaderLabelsInItem(item);
+
+    if (semantic.length) {
+      semantic.forEach(cell => cells.push(cell));
+      return;
+    }
+
+    // If a header fragment has no recognized semantic label, retain it as a
+    // real header cell rather than inventing "Column N".
+    cells.push({
+      x: Number(item.x) || 0,
+      end: (Number(item.x) || 0) + (Number(item.width) || 0),
+      center: (Number(item.x) || 0) + (Number(item.width) || 0) / 2,
+      text: String(item.text || "").replace(/\s+/g, " ").trim()
+    });
+  });
+
+  cells.sort((a, b) => a.x - b.x);
+
+  // Remove duplicate semantic matches that can occur when a PDF text item
+  // contains both a long and short synonym.
+  const deduped = [];
+  cells.forEach(cell => {
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      Math.abs(previous.x - cell.x) < 3 &&
+      normalizeHeaderWord(previous.text) === normalizeHeaderWord(cell.text)
+    ) {
+      return;
+    }
+    deduped.push(cell);
+  });
+
+  return deduped;
+}
+
+function detectHeaderRow(rows) {
+  let bestIndex = -1;
+  let bestScore = 0;
+
+  rows.forEach((row, index) => {
+    const cells = groupHeaderCells(row);
+    if (cells.length < 3) return;
+
+    const normalized = cells.map(c => normalizeHeaderLabel(c.text));
+    const hasDate = normalized.some(n =>
+      n === "date" || n === "datetime" || n === "time"
+    );
+    const hasCredit = normalized.some(n =>
+      n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)
+    );
+    const hasDescription = normalized.some(n =>
+      n === "description" || n === "name" || n === "reference" ||
+      n === "debit" || n === "balance" || n === "channel"
     );
 
-    if (hits.length >= 2 && rows[i].items.length >= 2) return i;
-  }
-  return -1;
+    let score = 0;
+    if (hasDate) score += 3;
+    if (hasCredit) score += 4;
+    if (hasDescription) score += 2;
+
+    // A genuine transaction header should contain at least Date/Time and
+    // Credit, plus another transaction-related field.
+    if (score >= 7 && score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
 }
 
 function buildColumnBoundaries(headerRow) {
-  return headerRow.items
-    .map(it => Number(it.x))
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b);
+  const cells = groupHeaderCells(headerRow);
+
+  return cells
+    .map(cell => ({
+      x: cell.x,
+      end: cell.end,
+      center: cell.center,
+      header: cell.text
+    }))
+    .filter(c => Number.isFinite(c.center));
 }
 
-function assignToColumn(x, boundaries) {
+function assignToColumn(x, width, boundaries) {
   if (!boundaries.length) return -1;
 
-  let best = 0;
-  let bestDist = Infinity;
+  const start = Number(x) || 0;
 
-  boundaries.forEach((b, i) => {
-    const d = Math.abs(x - b);
-    if (d < bestDist) {
-      bestDist = d;
-      best = i;
-    }
-  });
+  // Statement tables are overwhelmingly left-anchored by column. Use the
+  // header's actual x-start rather than the distance to a header text item;
+  // this prevents long transaction strings from jumping into the next
+  // column simply because their text width is large.
+  let best = 0;
+
+  for (let i = 1; i < boundaries.length; i++) {
+    if (start >= boundaries[i].x) best = i;
+    else break;
+  }
 
   return best;
 }
 
-function buildTableFromPage(pageItems) {
-  const rows = groupIntoRows(pageItems);
-  const headerIdx = detectHeaderRow(rows);
-  if (headerIdx === -1) return null;
+function splitItemAcrossColumns(item, boundaries) {
+  const text = String(item.text || "").trim();
+  if (!text || boundaries.length === 0) return [];
 
-  const headerRow = rows[headerIdx];
-  const boundaries = buildColumnBoundaries(headerRow);
-  if (boundaries.length < 3) return null;
+  const start = Number(item.x) || 0;
+  const width = Math.max(0, Number(item.width) || 0);
+  const end = start + width;
 
-  const headerCells = new Array(boundaries.length).fill("");
+  let firstCol = assignToColumn(start, width, boundaries);
+  if (firstCol < 0) firstCol = 0;
 
-  headerRow.items.forEach(it => {
-    const col = assignToColumn(it.x, boundaries);
-    if (col < 0) return;
-    headerCells[col] = (headerCells[col] + " " + it.text).trim();
+  const cuts = [];
+  for (let i = firstCol + 1; i < boundaries.length; i++) {
+    const cutX = Number(boundaries[i].x);
+    if (cutX > start && cutX < end) cuts.push({ col: i, x: cutX });
+  }
+
+  if (!cuts.length) {
+    return [{ col: firstCol, text }];
+  }
+
+  const points = [
+    { col: firstCol, x: start },
+    ...cuts,
+    { col: boundaries.length, x: end }
+  ];
+
+  const output = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const left = points[i];
+    const right = points[i + 1];
+
+    const ratioStart = width ? Math.max(0, Math.min(1, (left.x - start) / width)) : 0;
+    const ratioEnd = width ? Math.max(0, Math.min(1, (right.x - start) / width)) : 1;
+
+    let charStart = Math.floor(ratioStart * text.length);
+    let charEnd = Math.ceil(ratioEnd * text.length);
+
+    if (i > 0) charStart = Math.max(0, charStart - 1);
+    if (i < points.length - 2) charEnd = Math.min(text.length, charEnd + 1);
+
+    let part = text.slice(charStart, charEnd).trim();
+
+    // Prefer word boundaries for natural bank descriptions.
+    if (i < points.length - 2) {
+      const lastSpace = part.lastIndexOf(" ");
+      if (lastSpace > Math.max(4, part.length * 0.55)) {
+        part = part.slice(0, lastSpace).trim();
+        charEnd = charStart + lastSpace;
+      }
+    }
+
+    if (part) output.push({ col: left.col, text: part });
+  }
+
+  return output;
+}
+
+function rowLooksLikeRepeatedHeader(cells, headers) {
+  const normalizedCells = cells.map(c => normalizeHeaderWord(c));
+  const normalizedHeaders = headers.map(h => normalizeHeaderWord(h));
+
+  let matches = 0;
+  normalizedHeaders.forEach((h, i) => {
+    if (h && normalizedCells[i] && normalizedCells[i] === h) matches++;
   });
 
+  return matches >= Math.max(2, Math.ceil(headers.length * 0.5));
+}
+
+function rowLooksLikeTransaction(cells, headers) {
+  const dateIndexes = [];
+  const creditIndexes = [];
+
+  headers.forEach((h, i) => {
+    const n = normalizeHeaderLabel(h);
+    if (n === "date" || n === "datetime" || n === "time") dateIndexes.push(i);
+    if (n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)) creditIndexes.push(i);
+  });
+
+  const hasDate = dateIndexes.some(i => looksLikeDate(cells[i]));
+  const hasCredit = creditIndexes.some(i => extractAmount(cells[i]) !== null);
+
+  // Some bank statements have date/time split across cells. A transaction
+  // row still needs a recognizable date OR a valid credit value.
+  return hasDate || hasCredit;
+}
+
+function buildTableFromPage(pageItems, schemaHint = null) {
+  const rows = groupIntoRows(pageItems);
+
+  let headerIdx = -1;
+  let boundaries = [];
+  let headers = [];
+
+  if (schemaHint?.headers?.length && schemaHint?.boundaries?.length) {
+    headers = [...schemaHint.headers];
+    boundaries = schemaHint.boundaries.map(b => ({ ...b }));
+
+    // Repeated header is optional on continuation pages.
+    headerIdx = detectHeaderRow(rows);
+  } else {
+    headerIdx = detectHeaderRow(rows);
+    if (headerIdx === -1) return null;
+
+    const headerCells = groupHeaderCells(rows[headerIdx]);
+    if (headerCells.length < 3) return null;
+
+    headers = headerCells.map(c => c.text);
+    boundaries = buildColumnBoundaries(rows[headerIdx]);
+
+    // Never manufacture blank "Column N" names here. If the PDF did not
+    // expose a real header, that position is not considered a column.
+    if (headers.length !== boundaries.length) return null;
+  }
+
+  const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0;
   const tableRows = [];
 
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const cells = new Array(boundaries.length).fill("");
+  for (let i = dataStart; i < rows.length; i++) {
+    const cells = new Array(headers.length).fill("");
 
     rows[i].items.forEach(it => {
-      const col = assignToColumn(it.x, boundaries);
-      if (col < 0) return;
-      cells[col] = (cells[col] ? cells[col] + " " : "") + it.text;
+      splitItemAcrossColumns(it, boundaries).forEach(part => {
+        const col = part.col;
+        if (col < 0 || col >= cells.length) return;
+
+        const value = String(part.text || "").trim();
+        if (!value) return;
+
+        cells[col] = cells[col]
+          ? `${cells[col]} ${value}`
+          : value;
+      });
     });
 
-    if (cells.some(c => String(c).trim())) {
-      tableRows.push(cells.map(c => String(c || "").trim()));
-    }
+    const cleaned = cells.map(c => String(c || "").trim().replace(/\s+/g, " "));
+
+    if (!cleaned.some(Boolean)) continue;
+    if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
+
+    // Reject page furniture/footers instead of turning it into a fake
+    // transaction row. A row must look like a transaction before it enters
+    // the verification dataset.
+    if (!rowLooksLikeTransaction(cleaned, headers)) continue;
+
+    tableRows.push(cleaned);
   }
 
   return {
-    headers: headerCells,
+    headers,
     rows: tableRows,
     boundaries
   };
@@ -448,9 +772,35 @@ async function detectStatementTables() {
 
   const tables = [];
 
+  let canonicalSchema = null;
+
   for (let i = 0; i < verifyState.statementText.length; i++) {
-    const table = buildTableFromPage(verifyState.statementText[i]);
-    if (table && table.rows.length) tables.push(table);
+    // The first real transaction table establishes the exact column schema.
+    // Continuation pages reuse it instead of inventing new columns from
+    // arbitrary PDF.js text fragments.
+    const table = buildTableFromPage(
+      verifyState.statementText[i],
+      canonicalSchema
+    );
+
+    if (table && table.rows.length) {
+      if (!canonicalSchema) {
+        canonicalSchema = {
+          headers: [...table.headers],
+          boundaries: table.boundaries.map(b => ({ ...b }))
+        };
+      }
+
+      // Only tables with the same real header structure belong to the same
+      // statement transaction table. Page furniture is ignored.
+      const sameSchema =
+        table.headers.length === canonicalSchema.headers.length &&
+        table.headers.every((h, index) =>
+          normalizeHeaderWord(h) === normalizeHeaderWord(canonicalSchema.headers[index])
+        );
+
+      if (sameSchema) tables.push(table);
+    }
 
     updateVerifyProgress(
       `table`,

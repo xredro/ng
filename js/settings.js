@@ -8,6 +8,7 @@ GLOBAL CONSTANTS / CONFIG
 ========================= */
 const DB_ID = "695c4fce0039f513dc83";
 const USERS = "695c501b001d24549b03";
+const FORMS = "form";
 const SUBS = "subscriptions";
 const PAYMENTS = "payments";
 
@@ -28,6 +29,7 @@ GLOBAL STATE VARIABLES
 let profileDocId = null;
 let user;
 let res;
+let formDoc = null;
 
 /* =========================
 CORE BUSINESS LOGIC
@@ -239,6 +241,52 @@ const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
 
 function goToPaymentUpload() {
   window.location.href = PAYMENT_UPLOAD_URL;
+}
+
+/* =========================
+STOREFRONT WHATSAPP SETTINGS
+========================= */
+async function saveWhatsAppSettings() {
+  const numberInput = document.getElementById("whatsappNumber");
+  const toggle = document.getElementById("whatsappOrderRedirectEnabled");
+  const number = String(numberInput?.value || "").trim();
+  const enabled = !!toggle?.checked;
+
+  if (enabled) {
+    const digits = number.replace(/\D/g, "");
+    if (digits.length < 10) {
+      showToast("Enter a valid WhatsApp number before turning this on.", "warning");
+      toggle.checked = false;
+      return;
+    }
+  }
+
+  try {
+    if (!formDoc) {
+      formDoc = await databases.getDocument(DB_ID, FORMS, user.$id);
+    }
+
+    await databases.updateDocument(DB_ID, FORMS, user.$id, {
+      whatsappNumber: number,
+      whatsappOrderRedirectEnabled: enabled
+    });
+
+    formDoc.whatsappNumber = number;
+    formDoc.whatsappOrderRedirectEnabled = enabled;
+
+    showToast(
+      enabled
+        ? "WhatsApp order handoff enabled"
+        : "WhatsApp order handoff turned off",
+      "success"
+    );
+  } catch (err) {
+    console.error("Failed to save WhatsApp settings:", err);
+    showToast(
+      "Could not save WhatsApp settings. Make sure the two WhatsApp attributes exist on the form collection.",
+      "error"
+    );
+  }
 }
 
 /* =========================

@@ -597,6 +597,11 @@ function renderProducts(field) {
         <input placeholder="e.g. Audio" value="${p.category || "General"}"
           onchange="updateProduct('${field.id}', ${i}, 'category', this.value); renderFields();">
 
+        <label>Description <span style="opacity:.55;">(optional)</span></label>
+        <textarea class="product-description-input" rows="3"
+          placeholder="Short description of this product"
+          onchange="updateProduct('${field.id}', ${i}, 'description', this.value)">${p.description || ""}</textarea>
+
         <button type="button" class="product-editor-delete"
           onclick="removeProduct('${field.id}', ${i}); closeProductEditor('${field.id}');">
           Delete product
@@ -709,7 +714,8 @@ function normalizeProducts(field) {
     price: p?.price ?? "",
     imageId: p?.imageId ?? "",
     imageUrl: p?.imageUrl ?? "",
-    category: p?.category ?? "General"
+    category: p?.category ?? "General",
+    description: p?.description ?? ""
   }));
 }
 

@@ -52,6 +52,7 @@ function buildRawFormData() {
         if (qty > 0) {
           selected.push({
             name: p.name,
+            description: p.description || "",
             qty,
             price: Number(p.price || 0)
           });
@@ -108,8 +109,53 @@ function validateFormInputs() {
 }
 
 /* =========================
-CORE BUSINESS LOGIC
+WHATSAPP ORDER HANDOFF
 ========================= */
+function normalizeWhatsAppNumber(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = "234" + digits.slice(1);
+  return digits;
+}
+
+function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId) {
+  const phone = normalizeWhatsAppNumber(whatsappNumber);
+  if (!phone || phone.length < 10) return null;
+
+  const productLines = [];
+  rawFormData.forEach(item => {
+    if (item.type !== "product") return;
+
+    (item.value || []).forEach(product => {
+      const lineTotal = Number(product.qty || 0) * Number(product.price || 0);
+      const description = String(product.description || "").trim();
+      productLines.push(
+        `• ${product.qty} × ${product.name}` +
+        `${description ? ` — ${description}` : ""}` +
+        `${lineTotal ? ` — ₦${lineTotal.toLocaleString("en-NG")}` : ""}`
+      );
+    });
+  });
+
+  const message = [
+    "Hello, I just placed an order on X-Redro.",
+    "",
+    "Order details:",
+    ...productLines,
+    "",
+    `Total: ₦${Number(totalAmount || 0).toLocaleString("en-NG")}`,
+    "",
+    "Payment proof:",
+    paymentImageUrl(paymentFileId)
+  ].join("\n");
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
+function paymentImageUrl(fileId) {
+  return `https://nyc.cloud.appwrite.io/v1/storage/buckets/${PRODUCT_IMAGES_BUCKET}/files/${encodeURIComponent(fileId)}/view?project=695981480033c7a4eb0d`;
+}
+
 async function submitOrder() {
   // validate normal inputs first
   if (!validateFormInputs()) return;

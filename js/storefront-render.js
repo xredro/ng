@@ -43,6 +43,9 @@ function storefrontProductCard(mode, field, p, i, opts) {
   const startQty = opts.live ? (opts.cart[`${field.id}_${i}`] || 0) : 0;
   const category = storefrontEscape(p.category || "General");
   const name = storefrontEscape(p.name);
+  const description = String(p.description || "").trim();
+  const safeDescription = storefrontEscape(description);
+  const qtyBadge = `<span class="product-qty-badge" id="badge-${field.id}-${i}" aria-label="Quantity added">${startQty}</span>`;
 
   const qtyButtons = opts.live
     ? `<button onclick="${opts.qtyFn}('${field.id}', ${i}, -1)">-</button>
@@ -57,6 +60,7 @@ function storefrontProductCard(mode, field, p, i, opts) {
         <label for="${cbId}" class="popup-close">&times;</label>
         <div class="popup-image">${img}</div>
         <h3>${name}</h3>
+        ${safeDescription ? `<p class="popup-desc">${safeDescription}</p>` : ""}
         <div class="popup-price">${price}</div>
         <div class="product-qty">${qtyButtons}</div>
       </div>
@@ -69,8 +73,10 @@ function storefrontProductCard(mode, field, p, i, opts) {
     return `
       <div class="product-card" data-category="${category}">
         <input type="checkbox" id="${cbId}" class="pop-toggle">
+        ${qtyBadge}
         <div class="card-icon-badge">${img}</div>
         <div class="product-name">${name}</div>
+        ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
         <div class="product-price">${price}</div>
         <label for="${cbId}" class="more-btn">${moreLabel}</label>
         ${popup}
@@ -81,9 +87,11 @@ function storefrontProductCard(mode, field, p, i, opts) {
     return `
       <div class="product-card list-row" data-category="${category}">
         <input type="checkbox" id="${cbId}" class="pop-toggle">
+        ${qtyBadge}
         <div class="product-image">${img}</div>
         <div class="list-row-body">
           <div class="product-name">${name}</div>
+          ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
           <div class="product-price">${price}</div>
           <label for="${cbId}" class="more-btn">${moreLabel}</label>
         </div>
@@ -95,8 +103,10 @@ function storefrontProductCard(mode, field, p, i, opts) {
     return `
       <div class="product-card organic-row" data-category="${category}">
         <input type="checkbox" id="${cbId}" class="pop-toggle">
+        ${qtyBadge}
         <div class="product-image circle-photo">${img}</div>
         <div class="product-name">${name}</div>
+        ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
         <div class="product-price">${price}</div>
         <label for="${cbId}" class="more-btn">${moreLabel}</label>
         ${popup}
@@ -107,9 +117,11 @@ function storefrontProductCard(mode, field, p, i, opts) {
     return `
       <div class="product-card luxury-row" data-category="${category}">
         <input type="checkbox" id="${cbId}" class="pop-toggle">
+        ${qtyBadge}
         <div class="product-image">${img}</div>
         <div class="luxury-details">
           <div class="product-name">${name}</div>
+          ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
           <div class="product-price">${price}</div>
           <label for="${cbId}" class="more-btn">${moreLabel}</label>
         </div>
@@ -121,8 +133,10 @@ function storefrontProductCard(mode, field, p, i, opts) {
     return `
       <div class="product-card ${i === 0 ? "featured" : ""}" data-category="${category}">
         <input type="checkbox" id="${cbId}" class="pop-toggle">
+        ${qtyBadge}
         <div class="product-image">${img}</div>
         <div class="product-name">${name}</div>
+        ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
         <div class="product-price">${price}</div>
         <label for="${cbId}" class="more-btn">${moreLabel}</label>
         ${popup}
@@ -135,8 +149,10 @@ function storefrontProductCard(mode, field, p, i, opts) {
   return `
     <div class="product-card" data-category="${category}">
       <input type="checkbox" id="${cbId}" class="pop-toggle">
+      ${qtyBadge}
       <div class="product-image">${img}</div>
       <div class="product-name">${name}</div>
+      ${safeDescription ? `<div class="product-description">${safeDescription}</div>` : ""}
       <div class="product-price">${price}</div>
       <label for="${cbId}" class="more-btn">${moreLabel}</label>
       ${popup}
