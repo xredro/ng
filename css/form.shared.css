@@ -404,6 +404,40 @@ html {
 
 /* ---- unified product card: image, name, price, "+" quick-view ---- */
 .product-card { position: relative; }
+
+/* ---- quantity badge: always visible at the top-right of each product card ---- */
+.product-qty-badge {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 4;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 17, 17, 0.88);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.product-description {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.popup-desc {
+  overflow-wrap: anywhere;
+}
+
 .product-card .more-btn {
   position: absolute;
   bottom: var(--space-2);

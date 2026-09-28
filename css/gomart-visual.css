@@ -591,3 +591,20 @@ button:not(.remove):not(.expand-btn):not(.burger):not(.theme-toggle) {
 .logo-dark { display: none; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }
+
+.product-description-input {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--surface-elevated);
+  color: var(--text);
+}
+.product-description-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
