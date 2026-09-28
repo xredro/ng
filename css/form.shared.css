@@ -724,3 +724,9 @@ body {
   .success-title { font-size: 20px; line-height: 1.4; }
   .success-subtitle { font-size: 15px; line-height: 1.6; margin-top: 10px; }
 }
+
+
+/* Customer WhatsApp handoff */
+.whatsapp-handoff-box { margin: 18px auto 8px; max-width: 420px; padding: 14px; border-radius: 14px; background: rgba(37,211,102,.08); text-align:center; }
+.whatsapp-handoff-box p { margin: 0 0 10px; }
+.whatsapp-handoff-btn { display:inline-flex; align-items:center; justify-content:center; padding:11px 16px; border-radius:10px; text-decoration:none; font-weight:700; background:#25d366; color:#fff; }
