@@ -187,10 +187,6 @@ function renderVerifyProgress(stage, detail, stats = {}) {
           <div class="verify-progress-track">
             <div class="verify-progress-bar" style="width:${Math.max(0, Math.min(100, stats.percent || 0))}%"></div>
           </div>
-          <div class="verify-progress-count">
-            <span>${Number(stats.current || 0).toLocaleString()} / ${Number(stats.total).toLocaleString()}</span>
-            <span>${Math.max(0, Number(stats.remaining || 0)).toLocaleString()} remaining</span>
-          </div>
         ` : ""}
       </div>
 
@@ -212,10 +208,6 @@ function updateVerifyProgress(detail, current, total, extra = "") {
     ${safeTotal ? `
       <div class="verify-progress-track">
         <div class="verify-progress-bar" style="width:${percent}%"></div>
-      </div>
-      <div class="verify-progress-count">
-        <span>${safeCurrent.toLocaleString()} / ${safeTotal.toLocaleString()}</span>
-        <span>${Math.max(0, safeTotal - safeCurrent).toLocaleString()} remaining</span>
       </div>
     ` : ""}
   `;
@@ -672,6 +664,38 @@ function rowLooksLikeTransaction(cells, headers) {
   return hasDate || hasCredit;
 }
 
+
+function cleanExtractedCell(value, header = "") {
+  let text = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .replace(/[\u00A0\u2007\u202F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const h = normalizeHeaderLabel(header);
+
+  // PDF fonts sometimes expose the naira glyph as a detached "n"/"0".
+  // Remove only an isolated leading artifact when the remainder is clearly
+  // a monetary/reference value; do not globally strip legitimate letters.
+  if (h === "credit" || h === "debit" || h === "balance") {
+    text = text.replace(/^(?:n|ngn|₦|□|■|0\s*)(?=\d)/i, "");
+  }
+  if (h === "reference") {
+    text = text.replace(/^(?:□|■|n)(?=\d{5,})/i, "");
+  }
+
+  // Remove common extraction-only square glyphs left behind by unsupported
+  // currency fonts, but keep real alphanumeric cell content intact.
+  text = text.replace(/^[□■]+(?=\d)/, "");
+
+  return text.trim();
+}
+
+function cleanRowCells(cells, headers) {
+  return cells.map((value, i) => cleanExtractedCell(value, headers[i] || ""));
+}
+
 function buildTableFromPage(pageItems, schemaHint = null) {
   const rows = groupIntoRows(pageItems);
 
@@ -720,7 +744,7 @@ function buildTableFromPage(pageItems, schemaHint = null) {
       });
     });
 
-    const cleaned = cells.map(c => String(c || "").trim().replace(/\s+/g, " "));
+    const cleaned = cleanRowCells(cells, headers);
 
     if (!cleaned.some(Boolean)) continue;
     if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
@@ -980,27 +1004,21 @@ function renderCreditFilterSummary() {
   const body = document.getElementById("verifyBody");
 
   body.innerHTML = `
-    <h2>Statement Rows Ready</h2>
+    <h2>Statement Ready</h2>
     <p class="verify-sub">
-      Rows without a valid positive Credit were skipped before matching.
-      Every non-empty cell from the remaining rows will be retained and searchable.
+      The transaction table has been reconstructed from the PDF and the selected
+      Date, Name / Description and Credit fields will be used as primary evidence.
+      Additional statement content is retained for deeper comparison.
     </p>
 
-    <div class="verify-count-grid">
-      <div><strong>${verifyState.statementRows.length.toLocaleString()}</strong><span>Rows detected</span></div>
-      <div><strong>${verifyState.validStatementRows.length.toLocaleString()}</strong><span>Valid Credit</span></div>
-      <div><strong>${verifyState.skippedStatementRows.length.toLocaleString()}</strong><span>Skipped</span></div>
-      <div><strong>${verifyState.pendingPayments.length.toLocaleString()}</strong><span>Payment images</span></div>
-    </div>
-
     <div class="verify-info-box">
-      <strong>Primary fields:</strong>
-      Date + Name / Description + Credit<br>
-      <strong>Additional row data:</strong>
-      retained as supporting evidence
+      <strong>Verification method</strong><br>
+      Each payment image is checked against the best available unused statement
+      transaction. The complete OCR text and the complete statement row are compared,
+      not just the three primary fields.
     </div>
 
-    <button class="verify-btn-primary" onclick="startImageProcessing()">Continue</button>
+    <button class="verify-btn-primary" onclick="startImageProcessing()">Continue to payment images</button>
   `;
 }
 
@@ -1427,19 +1445,18 @@ function textFieldMatchesImage(value, image) {
   if (image.normalizedText.includes(normalizedField)) return true;
 
   const tokens = meaningfulTokens(field);
-  if (!tokens.length) {
-    // If the field has no useful alphabetic identity tokens, do not
-    // manufacture a match from generic words.
-    return false;
-  }
+  if (!tokens.length) return false;
 
-  const imageTokens = new Set(image.tokens.map(t => t.toLowerCase()));
+  const imageTokens = new Set((image.tokens || []).map(t => t.toLowerCase()));
   const matched = tokens.filter(t => imageTokens.has(t.toLowerCase())).length;
-
-  // For a one-token name/description, require that token.
-  // For longer fields, require a majority of meaningful tokens.
   const ratio = matched / tokens.length;
-  return tokens.length === 1 ? matched === 1 : ratio >= 0.6;
+
+  // Names/counterparties are identity evidence. Avoid accepting a single
+  // shared surname or generic narration word when a multi-token identity is
+  // available.
+  if (tokens.length === 1) return matched === 1;
+  if (tokens.length === 2) return matched === 2;
+  return ratio >= 0.75 && matched >= 2;
 }
 
 function extractEvidenceFromCell(cellValue) {
@@ -1593,13 +1610,56 @@ function findCoreMatchesForRow(row) {
   };
 }
 
-async function runStatementFirstVerification() {
-  renderVerifyProgress(
-    "match",
-    "Matching each payment image to its best unused statement row…",
-    { current: 0, total: verifyState.ocrImages.length, remaining: verifyState.ocrImages.length, percent: 0 }
-  );
+function renderLiveImageCheck(image, index, total, candidates, statusText = "Checking…") {
+  const body = document.getElementById("verifyBody");
+  if (!body) return;
+  const percent = total ? Math.round(((index + 1) / total) * 100) : 0;
+  const candidateHtml = candidates.length
+    ? candidates.slice(0, 3).map((c, i) => `
+        <div class="verify-live-candidate">
+          <span>Candidate ${i + 1}</span>
+          <strong>${escapeHtml(c.row.nameRaw || "Unnamed transaction")}</strong>
+          <small>${escapeHtml(c.row.dateRaw || "Date unavailable")} · ${c.row.credit != null ? `₦${Number(c.row.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Credit unavailable"}</small>
+          <em>Match strength ${Math.min(99, Math.round(c.score))}%</em>
+        </div>
+      `).join("")
+    : `<div class="verify-live-empty">No compatible unused statement transaction found yet.</div>`;
 
+  body.innerHTML = `
+    <div class="verify-progress">
+      <h2>Checking payment image</h2>
+      <div class="verify-stage-list">
+        <div class="verify-stage done"><span>✓</span><span>Statement reconstructed</span></div>
+        <div class="verify-stage done"><span>✓</span><span>Payment OCR extracted</span></div>
+        <div class="verify-stage active"><span>●</span><span>Comparing this payment</span></div>
+        <div class="verify-stage"><span>○</span><span>Finalizing result</span></div>
+      </div>
+      <div class="verify-progress-main">
+        <strong>${escapeHtml(statusText)}</strong>
+        <div class="verify-progress-track"><div class="verify-progress-bar" style="width:${percent}%"></div></div>
+      </div>
+      <div class="verify-live-image-card">
+        <div class="verify-live-image-wrap">
+          <img src="${escapeHtml(paymentImageUrl(image.id))}" alt="Payment proof being checked" loading="eager">
+        </div>
+        <div class="verify-live-image-info">
+          <strong>Payment proof</strong>
+          <div class="verify-live-facts">
+            <span>Amount: ${image.amounts.length ? image.amounts.map(a => `₦${Number(a).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`).join(", ") : "not detected"}</span>
+            <span>Date: ${image.dates.length ? image.dates.join(", ") : "not detected"}</span>
+            <span>Time: ${image.times.length ? image.times.slice(0,3).join(", ") : "not detected"}</span>
+          </div>
+        </div>
+      </div>
+      <div class="verify-live-candidates">
+        <div class="verify-live-title">Best statement matches</div>
+        ${candidateHtml}
+      </div>
+    </div>
+  `;
+}
+
+async function runStatementFirstVerification() {
   const images = verifyState.ocrImages;
   const availableRows = verifyState.validStatementRows.filter(r => r.credit > 0);
   const rowsByAmount = new Map();
@@ -1608,69 +1668,93 @@ async function runStatementFirstVerification() {
     if (!rowsByAmount.has(key)) rowsByAmount.set(key, []);
     rowsByAmount.get(key).push(row);
   });
+
   const usedRowIds = new Set();
   const results = [];
 
   for (let i = 0; i < images.length; i++) {
     const image = images[i];
-    const current = i + 1;
     const candidateRows = [];
     const seenRowIds = new Set();
+
     for (const amount of image.amounts || []) {
       const rows = rowsByAmount.get(Number(amount).toFixed(2)) || [];
-      for (const row of rows) {
-        if (!seenRowIds.has(row.id)) { seenRowIds.add(row.id); candidateRows.push(row); }
-      }
+      rows.forEach(row => {
+        if (!usedRowIds.has(row.id) && !seenRowIds.has(row.id)) {
+          seenRowIds.add(row.id);
+          candidateRows.push(row);
+        }
+      });
     }
 
-    // Amount is the first narrowing key. Date then narrows the exact rows,
-    // so a payment image does not repeatedly analyze unrelated statement rows.
+    // Amount -> date is only candidate narrowing. The final decision always
+    // compares the complete statement row against the complete OCR image.
     const datedCandidates = candidateRows.filter(row =>
-      !usedRowIds.has(row.id) && row.date && (image.dates || []).includes(row.date)
+      row.date && (image.dates || []).includes(row.date)
     );
-    const rowsToScore = datedCandidates.length ? datedCandidates : candidateRows.filter(r => !usedRowIds.has(r.id));
-    const candidates = [];
-    for (const row of rowsToScore) {
-      const scored = scoreImageAgainstStatementRow(image, row);
-      if (scored) candidates.push(scored);
-    }
+    const rowsToScore = datedCandidates.length ? datedCandidates : candidateRows;
+    const candidates = rowsToScore
+      .map(row => scoreImageAgainstStatementRow(image, row))
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
 
-    candidates.sort((a,b) => b.score - a.score);
+    renderLiveImageCheck(
+      image,
+      i,
+      images.length,
+      candidates,
+      `Comparing payment image ${i + 1} against its strongest unused statement candidates…`
+    );
+    await nextFrame();
+
     const best = candidates[0];
     const second = candidates[1];
     let result;
 
-    if (!best) {
+    // More than two viable rows is explicitly unsafe: force manual review.
+    if (candidates.length > 2) {
+      result = {
+        row: best?.row || makeUnmatchedImageRow(image, i),
+        verdict: "REVIEW REQUIRED",
+        imageCandidates: candidates.slice(0, 3).map(c => c.row),
+        matchedImage: null,
+        checks: { date: true, name: true, credit: true, supporting: best?.supporting?.length || 0 },
+        supporting: best?.supporting || [],
+        reason: `${candidates.length} unused statement transactions are compatible with this payment image. More than two possible matches requires manual review. No statement row was marked used.`
+      };
+    } else if (!best) {
       result = {
         row: makeUnmatchedImageRow(image, i),
         verdict: "NOT VERIFIED",
-        imageCandidates: [], matchedImage: null,
-        checks: { date:false, name:false, credit:false, supporting:0 },
+        imageCandidates: [],
+        matchedImage: image,
+        checks: { date: false, name: false, credit: false, supporting: 0 },
         supporting: [],
-        reason: "No unused statement row contains the required Credit, Date, and Name / Description in a single row."
+        reason: "No unused statement transaction contains the required Credit, Date and Name / Description in the same transaction."
       };
-    } else if (second && second.score === best.score && best.supporting.length === second.supporting.length) {
+    } else if (second && (best.score - second.score < 12 || best.supporting.length === second.supporting.length)) {
       result = {
         row: best.row,
         verdict: "REVIEW REQUIRED",
         imageCandidates: [best.row, second.row],
-        matchedImage: null,
-        checks: { date:true, name:true, credit:true, supporting:best.supporting.length },
+        matchedImage: image,
+        checks: { date: true, name: true, credit: true, supporting: best.supporting.length },
         supporting: best.supporting,
-        reason: "More than one unused statement row is equally compatible with this payment image. No row was marked used."
+        reason: "Two unused statement transactions are close enough in evidence that automatic selection would be unsafe. No row was marked used."
       };
     } else {
       usedRowIds.add(best.row.id);
+      best.row.status = "USED";
       result = {
         row: best.row,
-        verdict: best.supporting.length ? "STRONG MATCH" : "MATCHED",
+        verdict: best.supporting.length >= 2 ? "STRONG MATCH" : "MATCHED",
         imageCandidates: [best.row],
         matchedImage: image,
-        checks: { date:true, name:true, credit:true, supporting:best.supporting.length },
+        checks: { date: true, name: true, credit: true, supporting: best.supporting.length },
         supporting: best.supporting,
         reason: best.supporting.length
-          ? `${best.supporting.length} additional statement value${best.supporting.length === 1 ? "" : "s"} also found in the same payment image.`
-          : "This payment image is the best match for this unused statement row. The required Date, Name / Description, and Credit all match in the same row."
+          ? `The payment image matched the same statement transaction on Date, Name / Description and Credit, with ${best.supporting.length} additional field match${best.supporting.length === 1 ? "" : "es"}.`
+          : "The payment image matched one unused statement transaction on the required Date, Name / Description and Credit fields."
       };
 
       for (const orderId of image.orderIds || []) {
@@ -1683,39 +1767,13 @@ async function runStatementFirstVerification() {
     }
 
     results.push(result);
-
-    const matched = results.filter(r => r.verdict === "MATCHED" || r.verdict === "STRONG MATCH").length;
-    const review = results.filter(r => r.verdict === "REVIEW REQUIRED").length;
-    const notVerified = results.filter(r => r.verdict === "NOT VERIFIED").length;
-    updateVerifyProgress(
-      "match",
-      `Processed payment image ${current.toLocaleString()} of ${images.length.toLocaleString()}…`,
-      current,
-      images.length,
-      `Matched ${matched.toLocaleString()} • Review ${review.toLocaleString()} • Not verified ${notVerified.toLocaleString()} • Unused statement rows ${Math.max(0, availableRows.length - usedRowIds.size).toLocaleString()}`
-    );
-    if (current % 5 === 0) await nextFrame();
+    await nextFrame();
   }
 
-  // Rows that were never claimed remain visible, but are not re-analyzed as
-  // payment images. This makes the one-image -> one-unused-row behavior explicit.
-  const unmatchedRows = availableRows.filter(r => !usedRowIds.has(r.id));
-  unmatchedRows.forEach(row => results.push({
-    row,
-    verdict: "NOT VERIFIED",
-    imageCandidates: [], matchedImage: null,
-    checks: { date:false, name:false, credit:false, supporting:0 },
-    supporting: [],
-    reason: "No available payment image claimed this statement row."
-  }));
-
-  verifyState.results = [
-    ...results,
-    ...verifyState.skippedStatementRows.map(row => ({
-      row, verdict:"SKIPPED", imageCandidates:[], matchedImage:null,
-      checks:{date:false,name:false,credit:false,supporting:0}, supporting:[], reason:row.skipReason
-    }))
-  ];
+  // Results are image-driven. Unused statement rows are not re-analyzed and
+  // are not rendered as fake payment results. This keeps the review focused on
+  // exactly what the seller's payment images were checked against.
+  verifyState.results = results;
 
   await renderFinalVerificationResults();
 }
@@ -1729,24 +1787,107 @@ function makeUnmatchedImageRow(image, index) {
   };
 }
 
+function normalizedTokenSet(text) {
+  return new Set(meaningfulTokens(text).map(t => t.toLowerCase()));
+}
+
+function compareCellToImage(cellValue, image) {
+  const value = String(cellValue || "").trim();
+  if (!value) return { score: 0, matched: false, detail: "" };
+
+  const normalized = normalizeSearchText(value);
+  if (!normalized) return { score: 0, matched: false, detail: "" };
+
+  if (image.normalizedText.includes(normalized)) {
+    return { score: 18, matched: true, detail: value };
+  }
+
+  const tokens = normalizedTokenSet(value);
+  if (!tokens.size) return { score: 0, matched: false, detail: "" };
+  const imageTokens = new Set((image.tokens || []).map(t => String(t).toLowerCase()));
+  let hits = 0;
+  tokens.forEach(t => { if (imageTokens.has(t)) hits++; });
+  const ratio = hits / tokens.size;
+
+  if (ratio >= 0.8) return { score: 14, matched: true, detail: value };
+  if (ratio >= 0.6 && tokens.size >= 2) return { score: 9, matched: true, detail: value };
+  if (ratio >= 0.5 && tokens.size >= 3) return { score: 6, matched: true, detail: value };
+
+  return { score: 0, matched: false, detail: "" };
+}
+
+function compareWholeRowToImage(row, image) {
+  const values = (row.cells || [])
+    .map(c => String(c.value || "").trim())
+    .filter(Boolean);
+  const rowText = values.join(" ");
+  const rowTokens = normalizedTokenSet(rowText);
+  if (!rowTokens.size) return { score: 0, coverage: 0, hits: 0 };
+
+  const imageTokens = new Set((image.tokens || []).map(t => String(t).toLowerCase()));
+  let hits = 0;
+  rowTokens.forEach(t => { if (imageTokens.has(t)) hits++; });
+  const coverage = hits / rowTokens.size;
+
+  // Whole-row comparison is deliberately supporting evidence only. It cannot
+  // create a match when the mandatory amount/date/name requirements fail.
+  if (coverage >= 0.80) return { score: 22, coverage, hits };
+  if (coverage >= 0.65) return { score: 15, coverage, hits };
+  if (coverage >= 0.50) return { score: 8, coverage, hits };
+  return { score: 0, coverage, hits };
+}
+
 function scoreImageAgainstStatementRow(image, row) {
   if (!row.date || row.credit == null || row.credit <= 0 || !row.nameRaw) return null;
   if (!imageHasAmount(image, row.credit)) return null;
   if (!imageHasDate(image, row.date)) return null;
   if (!textFieldMatchesImage(row.nameRaw, image)) return null;
 
-  let score = 100; // mandatory three fields already satisfied
-  const supporting = findSupportingEvidence(row, image);
-  score += supporting.length * 10;
+  let score = 100;
+  const supporting = [];
+  const cellMatches = [];
 
-  // Time is useful supporting evidence even when it is not a primary field.
-  const rowTime = row.cells.map(c => c.value).find(v => /\b\d{1,2}:\d{2}(?::\d{2})?\b/.test(String(v || "")));
-  if (rowTime && image.times.length) {
-    const normalized = extractAllTimes(rowTime);
-    if (normalized.some(t => image.times.includes(t))) { score += 8; supporting.push(rowTime); }
+  // Primary fields receive explicit weight. All remaining non-empty cells are
+  // then compared against the same OCR record as supporting evidence.
+  const primaryIndexes = new Set([
+    verifyState.selectedColumns.dateCol,
+    verifyState.selectedColumns.nameCol,
+    verifyState.selectedColumns.creditCol
+  ]);
+
+  row.cells.forEach(cell => {
+    if (primaryIndexes.has(cell.columnIndex)) return;
+    const compared = compareCellToImage(cell.value, image);
+    if (compared.matched) {
+      score += compared.score;
+      supporting.push(cell.value);
+      cellMatches.push({ value: cell.value, score: compared.score });
+    }
+  });
+
+  // Exact supporting date/time/reference/amount evidence gets additional weight.
+  const wholeRow = compareWholeRowToImage(row, image);
+  if (wholeRow.score) {
+    score += wholeRow.score;
+    supporting.push(`Whole transaction content (${wholeRow.hits} matching terms)`);
   }
 
-  return { row, score, supporting:[...new Set(supporting)] };
+  const rowTime = row.cells.map(c => c.value).find(v => /\b\d{1,2}:\d{2}(?::\d{2})?\b/.test(String(v || "")));
+  if (rowTime && (image.times || []).length) {
+    const rowTimes = extractAllTimes(rowTime);
+    if (rowTimes.some(t => image.times.includes(t))) {
+      score += 15;
+      supporting.push(rowTime);
+    }
+  }
+
+  return {
+    row,
+    score,
+    supporting: [...new Set(supporting)],
+    cellMatches,
+    core: { date: true, name: true, credit: true }
+  };
 }
 
 /* =========================================================
@@ -1779,13 +1920,6 @@ async function renderFinalVerificationResults() {
       <div class="review"><strong>${review.toLocaleString()}</strong><span>Review required</span></div>
       <div class="failed"><strong>${notVerified.toLocaleString()}</strong><span>Not verified</span></div>
       <div class="skipped"><strong>${skipped.toLocaleString()}</strong><span>Skipped</span></div>
-    </div>
-
-    <div class="verify-summary">
-      <p><strong>Statement rows detected:</strong> ${verifyState.statementRows.length.toLocaleString()}</p>
-      <p><strong>Valid Credit rows:</strong> ${verifyState.validStatementRows.length.toLocaleString()}</p>
-      <p><strong>Rows skipped:</strong> ${verifyState.skippedStatementRows.length.toLocaleString()}</p>
-      <p><strong>Payment images examined:</strong> ${verifyState.ocrImages.length.toLocaleString()}</p>
     </div>
 
     <div class="verify-results" id="verifyResultsList">
@@ -1835,9 +1969,8 @@ function renderVerifyResultCard(result) {
       </div>
 
       <div class="verify-row-meta">
-        Row ${row.rowNumber}
-        ${row.date ? ` • ${escapeHtml(row.date)}` : ""}
-        ${row.credit != null ? ` • ₦${Number(row.credit).toLocaleString()}` : ""}
+        ${row.date ? escapeHtml(row.date) : "Date unavailable"}
+        ${row.credit != null ? ` • ₦${Number(row.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : ""}
       </div>
 
       ${result.verdict !== "SKIPPED" ? `
@@ -1849,6 +1982,10 @@ function renderVerifyResultCard(result) {
       `}
 
       ${result.matchedImage ? `
+        <div class="verify-matched-image">
+          <img src="${escapeHtml(paymentImageUrl(result.matchedImage.id))}" alt="Matched payment proof" loading="lazy">
+          <div><strong>Payment image checked</strong><small>${escapeHtml(result.matchedImage.dates?.[0] || "Date not detected")} · ${result.matchedImage.amounts?.[0] != null ? `₦${Number(result.matchedImage.amounts[0]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Amount not detected"}</small></div>
+        </div>
         <div class="verify-check ok">&#10003; Required fields found in the same payment image</div>
       ` : ""}
 
@@ -1859,6 +1996,23 @@ function renderVerifyResultCard(result) {
       ` : ""}
 
       ${supportingHtml}
+
+      ${result.matchedImage ? `
+        <div class="verify-comparison-breakdown">
+          <strong>Comparison used</strong>
+          <span class="compare-ok">Date ✓</span>
+          <span class="compare-ok">Name / Description ✓</span>
+          <span class="compare-ok">Credit ✓</span>
+          ${result.supporting?.slice(0, 6).map(v => `<span class="compare-support">${escapeHtml(v)} ✓</span>`).join("") || ""}
+        </div>
+      ` : ""}
+
+      ${result.verdict === "REVIEW REQUIRED" && result.imageCandidates?.length ? `
+        <div class="verify-review-candidates">
+          <strong>Possible matches</strong>
+          ${result.imageCandidates.slice(0, 3).map((r, i) => `<span>Candidate ${i + 1}: ${escapeHtml(r.nameRaw || "Unnamed transaction")} · ${escapeHtml(r.dateRaw || "Date unavailable")} · ${r.credit != null ? `₦${Number(r.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Credit unavailable"}</span>`).join("")}
+        </div>
+      ` : ""}
 
       <p class="verify-reason">${escapeHtml(result.reason || "")}</p>
     </div>
