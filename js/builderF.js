@@ -783,8 +783,11 @@ function previewNoSubmit() {
 function previewChangeQty(fieldId, index, delta) {
   const key = `${fieldId}_${index}`;
   previewCart[key] = Math.max(0, (previewCart[key] || 0) + delta);
+  const qty = previewCart[key];
   const el = document.getElementById(`qty-${fieldId}-${index}`);
-  if (el) el.innerText = previewCart[key];
+  const badgeEl = document.getElementById(`badge-${fieldId}-${index}`);
+  if (el) el.innerText = qty;
+  if (badgeEl) badgeEl.innerText = qty;
   previewUpdateTotal();
 }
 

@@ -30,6 +30,9 @@ let CURRENT_THEME_CLASS = "theme-r1";
 
 let CURRENT_FORM_ID = "";
 let FORM_OWNER_ID = "";
+let whatsappNumber = "";
+let whatsappOrderRedirectEnabled = false;
+let pendingWhatsAppUrl = "";
 
 const cart = {};
 
@@ -114,13 +117,20 @@ WHATSAPP ORDER HANDOFF
 function normalizeWhatsAppNumber(value) {
   let digits = String(value || "").replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("0")) digits = "234" + digits.slice(1);
+  if (digits.startsWith("0") && digits.length === 11) digits = "234" + digits.slice(1);
+  if (digits.startsWith("2340") && digits.length === 14) digits = "234" + digits.slice(4);
   return digits;
+}
+
+function isValidWhatsAppNumber(value) {
+  const digits = normalizeWhatsAppNumber(value);
+  // Nigerian mobile numbers: +234 7xx/8xx/9xx followed by 8 digits.
+  return /^234\d{10}$/.test(digits);
 }
 
 function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId) {
   const phone = normalizeWhatsAppNumber(whatsappNumber);
-  if (!phone || phone.length < 10) return null;
+  if (!whatsappOrderRedirectEnabled || !isValidWhatsAppNumber(phone)) return null;
 
   const productLines = [];
   rawFormData.forEach(item => {
@@ -181,7 +191,8 @@ async function submitOrder() {
       const uploadedFile = await storage.createFile(
         PRODUCT_IMAGES_BUCKET,
         Appwrite.ID.unique(),
-        file
+        file,
+        [Appwrite.Permission.read(Appwrite.Role.any())]
       );
 
       paymentFileId = uploadedFile.$id;
@@ -248,7 +259,24 @@ async function submitOrder() {
     );
 
     console.log("ORDER CREATED:", res);
-    renderSuccessState();
+
+    const waUrl = (whatsappOrderRedirectEnabled && paymentFileId)
+      ? buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId)
+      : null;
+
+    if (waUrl) {
+      pendingWhatsAppUrl = waUrl;
+      renderSuccessState(true);
+      // Use a user-visible navigation rather than silently calling a
+      // custom app scheme. The fallback button remains available if the
+      // browser/WhatsApp app blocks automatic navigation.
+      setTimeout(() => {
+        try { window.location.href = waUrl; } catch (_) {}
+      }, 350);
+    } else {
+      pendingWhatsAppUrl = "";
+      renderSuccessState(false);
+    }
 
   } catch (err) {
     console.error("FAILED TO SEND ORDER:", err);
@@ -265,7 +293,11 @@ function changeQty(fieldId, index, delta) {
   const key = `${fieldId}_${index}`;
   cart[key] = Math.max(0, (cart[key] || 0) + delta);
 
-  document.getElementById(`qty-${fieldId}-${index}`).innerText = cart[key];
+  const qty = cart[key];
+  const qtyEl = document.getElementById(`qty-${fieldId}-${index}`);
+  const badgeEl = document.getElementById(`badge-${fieldId}-${index}`);
+  if (qtyEl) qtyEl.innerText = qty;
+  if (badgeEl) badgeEl.innerText = qty;
   updateTotal();
 }
 
@@ -356,7 +388,7 @@ function renderForm() {
   });
 }
 
-function renderSuccessState() {
+function renderSuccessState(whatsappReady = false) {
   const container = document.getElementById("formRoot");
 
   container.innerHTML = `
@@ -370,6 +402,13 @@ function renderSuccessState() {
         <p class="success-subtitle">
           The seller will contact you shortly.
         </p>
+
+        ${whatsappReady ? `
+          <div class="whatsapp-handoff-box">
+            <p>Your order details and payment proof are ready to send to the seller.</p>
+            <a class="whatsapp-handoff-btn" href="${pendingWhatsAppUrl}" target="_blank" rel="noopener">Continue to WhatsApp</a>
+          </div>
+        ` : ""}
 
         <p class="powered">powered by X Redro</p>
       </div>
@@ -419,6 +458,8 @@ async function initForm() {
 
     CURRENT_FORM_ID = fid;
     FORM_OWNER_ID = doc.userId || "";
+    whatsappNumber = String(doc.whatsappNumber || "").trim();
+    whatsappOrderRedirectEnabled = doc.whatsappOrderRedirectEnabled === true;
 
     renderForm();
   } catch (err) {

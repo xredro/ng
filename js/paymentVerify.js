@@ -412,6 +412,11 @@ function looksLikeNumber(s) {
  * actual header cells, then those cells define the real table schema.
  */
 const VERIFY_HEADER_PATTERNS = [
+  "date / date-time",
+  "date / datetime",
+  "date / date time",
+  "time / timestamp",
+  "name / description",
   "transaction details / narration",
   "narration / description",
   "reference / code",
@@ -503,43 +508,50 @@ function groupHeaderCells(headerRow) {
     .sort((a, b) => a.x - b.x);
 
   const cells = [];
+  const patterns = [...VERIFY_HEADER_PATTERNS].sort((a,b) => b.length - a.length);
 
-  items.forEach(item => {
-    const semantic = findHeaderLabelsInItem(item);
-
-    if (semantic.length) {
-      semantic.forEach(cell => cells.push(cell));
-      return;
+  // PDF.js may split one visible header into several text fragments, e.g.
+  // ["Reference", "/", "Code"]. Merge only when the combined visible text
+  // is a known header. This prevents fragments such as "n" or "0" from
+  // becoming fake columns.
+  for (let i = 0; i < items.length; i++) {
+    let best = null;
+    let bestEnd = i;
+    for (let end = i; end < Math.min(items.length, i + 4); end++) {
+      const candidate = items.slice(i, end + 1).map(x => String(x.text || '').trim()).join(' ').replace(/\s+/g, ' ').trim();
+      const norm = normalizeHeaderWord(candidate);
+      const matched = patterns.find(p => normalizeHeaderWord(p) === norm);
+      if (matched) {
+        best = matched;
+        bestEnd = end;
+      }
+    }
+    if (best) {
+      const first = items[i], last = items[bestEnd];
+      cells.push({
+        x: Number(first.x) || 0,
+        end: (Number(last.x)||0) + (Number(last.width)||0),
+        center: ((Number(first.x)||0) + ((Number(last.x)||0)+(Number(last.width)||0))) / 2,
+        text: items.slice(i,bestEnd+1).map(x => String(x.text||'').trim()).join(' ').replace(/\s+/g,' ').trim()
+      });
+      i = bestEnd;
+      continue;
     }
 
-    // If a header fragment has no recognized semantic label, retain it as a
-    // real header cell rather than inventing "Column N".
-    cells.push({
-      x: Number(item.x) || 0,
-      end: (Number(item.x) || 0) + (Number(item.width) || 0),
-      center: (Number(item.x) || 0) + (Number(item.width) || 0) / 2,
-      text: String(item.text || "").replace(/\s+/g, " ").trim()
-    });
-  });
-
-  cells.sort((a, b) => a.x - b.x);
-
-  // Remove duplicate semantic matches that can occur when a PDF text item
-  // contains both a long and short synonym.
-  const deduped = [];
-  cells.forEach(cell => {
-    const previous = deduped[deduped.length - 1];
-    if (
-      previous &&
-      Math.abs(previous.x - cell.x) < 3 &&
-      normalizeHeaderWord(previous.text) === normalizeHeaderWord(cell.text)
-    ) {
-      return;
+    const single = String(items[i].text || '').replace(/\s+/g,' ').trim();
+    if (patterns.some(p => normalizeHeaderWord(p) === normalizeHeaderWord(single))) {
+      cells.push({
+        x: Number(items[i].x)||0,
+        end: (Number(items[i].x)||0)+(Number(items[i].width)||0),
+        center: (Number(items[i].x)||0)+(Number(items[i].width)||0)/2,
+        text: single
+      });
     }
-    deduped.push(cell);
-  });
+    // Unknown fragments are deliberately ignored. They are not promoted to
+    // phantom columns.
+  }
 
-  return deduped;
+  return cells;
 }
 
 function detectHeaderRow(rows) {
@@ -611,62 +623,23 @@ function assignToColumn(x, width, boundaries) {
 }
 
 function splitItemAcrossColumns(item, boundaries) {
-  const text = String(item.text || "").trim();
-  if (!text || boundaries.length === 0) return [];
+  const text = String(item.text || '').trim();
+  if (!text || !boundaries.length) return [];
 
+  // Never slice PDF.js text by character position. That was causing
+  // truncated names/descriptions and stray leading characters in amounts
+  // and references. Each PDF text item belongs to the column containing
+  // its horizontal center; adjacent fragments from the same cell are
+  // concatenated later by buildTableFromPage().
   const start = Number(item.x) || 0;
   const width = Math.max(0, Number(item.width) || 0);
-  const end = start + width;
-
-  let firstCol = assignToColumn(start, width, boundaries);
-  if (firstCol < 0) firstCol = 0;
-
-  const cuts = [];
-  for (let i = firstCol + 1; i < boundaries.length; i++) {
-    const cutX = Number(boundaries[i].x);
-    if (cutX > start && cutX < end) cuts.push({ col: i, x: cutX });
+  const center = start + width / 2;
+  let col = 0;
+  for (let i = 1; i < boundaries.length; i++) {
+    if (center >= boundaries[i].x) col = i;
+    else break;
   }
-
-  if (!cuts.length) {
-    return [{ col: firstCol, text }];
-  }
-
-  const points = [
-    { col: firstCol, x: start },
-    ...cuts,
-    { col: boundaries.length, x: end }
-  ];
-
-  const output = [];
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const left = points[i];
-    const right = points[i + 1];
-
-    const ratioStart = width ? Math.max(0, Math.min(1, (left.x - start) / width)) : 0;
-    const ratioEnd = width ? Math.max(0, Math.min(1, (right.x - start) / width)) : 1;
-
-    let charStart = Math.floor(ratioStart * text.length);
-    let charEnd = Math.ceil(ratioEnd * text.length);
-
-    if (i > 0) charStart = Math.max(0, charStart - 1);
-    if (i < points.length - 2) charEnd = Math.min(text.length, charEnd + 1);
-
-    let part = text.slice(charStart, charEnd).trim();
-
-    // Prefer word boundaries for natural bank descriptions.
-    if (i < points.length - 2) {
-      const lastSpace = part.lastIndexOf(" ");
-      if (lastSpace > Math.max(4, part.length * 0.55)) {
-        part = part.slice(0, lastSpace).trim();
-        charEnd = charStart + lastSpace;
-      }
-    }
-
-    if (part) output.push({ col: left.col, text: part });
-  }
-
-  return output;
+  return [{ col, text }];
 }
 
 function rowLooksLikeRepeatedHeader(cells, headers) {
@@ -830,7 +803,7 @@ function renderStatementColumnPicker() {
   const body = document.getElementById("verifyBody");
   const table = verifyState.statementTables[0];
 
-  const headers = table.headers.map((h, i) => h || `Column ${i + 1}`);
+  const headers = table.headers.filter(Boolean);
 
   const selectOptions = (id, preferredFn) => headers.map((h, i) =>
     `<option value="${i}" ${preferredFn(h, i) ? "selected" : ""}>
@@ -1623,194 +1596,157 @@ function findCoreMatchesForRow(row) {
 async function runStatementFirstVerification() {
   renderVerifyProgress(
     "match",
-    "Matching statement transactions…",
-    {
-      current: 0,
-      total: verifyState.validStatementRows.length,
-      remaining: verifyState.validStatementRows.length,
-      percent: 0
-    }
+    "Matching each payment image to its best unused statement row…",
+    { current: 0, total: verifyState.ocrImages.length, remaining: verifyState.ocrImages.length, percent: 0 }
   );
 
+  const images = verifyState.ocrImages;
+  const availableRows = verifyState.validStatementRows.filter(r => r.credit > 0);
+  const rowsByAmount = new Map();
+  availableRows.forEach(row => {
+    const key = Number(row.credit).toFixed(2);
+    if (!rowsByAmount.has(key)) rowsByAmount.set(key, []);
+    rowsByAmount.get(key).push(row);
+  });
+  const usedRowIds = new Set();
   const results = [];
-  const validRows = verifyState.validStatementRows;
-  const imageCount = verifyState.ocrImages.length;
 
-  // A payment-proof image should verify at most one statement row.
-  // If the same image would satisfy another row later, that row is
-  // treated as ambiguous instead of reusing the same evidence twice.
-  const claimedImageIds = new Set();
-
-  for (let i = 0; i < validRows.length; i++) {
-    const row = validRows[i];
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
     const current = i + 1;
+    const candidateRows = [];
+    const seenRowIds = new Set();
+    for (const amount of image.amounts || []) {
+      const rows = rowsByAmount.get(Number(amount).toFixed(2)) || [];
+      for (const row of rows) {
+        if (!seenRowIds.has(row.id)) { seenRowIds.add(row.id); candidateRows.push(row); }
+      }
+    }
 
-    const core = findCoreMatchesForRow(row);
+    // Amount is the first narrowing key. Date then narrows the exact rows,
+    // so a payment image does not repeatedly analyze unrelated statement rows.
+    const datedCandidates = candidateRows.filter(row =>
+      !usedRowIds.has(row.id) && row.date && (image.dates || []).includes(row.date)
+    );
+    const rowsToScore = datedCandidates.length ? datedCandidates : candidateRows.filter(r => !usedRowIds.has(r.id));
+    const candidates = [];
+    for (const row of rowsToScore) {
+      const scored = scoreImageAgainstStatementRow(image, row);
+      if (scored) candidates.push(scored);
+    }
 
+    candidates.sort((a,b) => b.score - a.score);
+    const best = candidates[0];
+    const second = candidates[1];
     let result;
 
-    if (core.type === "CORE") {
-      const allCandidates = core.candidates.map(id => getImageById(id)).filter(Boolean);
-      const candidates = allCandidates.filter(image => !claimedImageIds.has(image.id));
-
-      if (!candidates.length) {
-        result = {
-          row,
-          verdict: "REVIEW REQUIRED",
-          imageCandidates: allCandidates,
-          matchedImage: null,
-          checks: {
-            date: true,
-            name: true,
-            credit: true,
-            supporting: 0
-          },
-          supporting: [],
-          reason: "The required fields match a payment image, but that same image has already been assigned to another statement row."
-        };
-      } else {
-        const enriched = candidates.map(image => ({
-          image,
-          supporting: findSupportingEvidence(row, image)
-        }));
-
-      // Extra row content is supporting evidence. It can distinguish
-      // otherwise identical core matches, but it can never rescue a core mismatch.
-      enriched.sort((a, b) => b.supporting.length - a.supporting.length);
-
-      const bestSupport = enriched[0]?.supporting?.length || 0;
-      const equallyStrong = enriched.filter(
-        x => x.supporting.length === bestSupport
-      );
-
-      if (enriched.length > 1 && bestSupport === 0) {
-        result = {
-          row,
-          verdict: "REVIEW REQUIRED",
-          imageCandidates: candidates,
-          matchedImage: null,
-          checks: {
-            date: true,
-            name: true,
-            credit: true,
-            supporting: 0
-          },
-          supporting: [],
-          reason: "Multiple payment images satisfy the required Date, Name / Description, and Credit. More evidence is needed to choose one."
-        };
-      } else if (enriched.length > 1 && equallyStrong.length > 1) {
-        result = {
-          row,
-          verdict: "REVIEW REQUIRED",
-          imageCandidates: candidates,
-          matchedImage: null,
-          checks: {
-            date: true,
-            name: true,
-            credit: true,
-            supporting: bestSupport
-          },
-          supporting: enriched[0]?.supporting || [],
-          reason: "Multiple payment images remain equally plausible after checking additional statement-row content."
-        };
-      } else {
-        const best = enriched[0];
-
-          result = {
-            row,
-            verdict: bestSupport > 0 ? "STRONG MATCH" : "MATCHED",
-            imageCandidates: candidates,
-            matchedImage: best.image,
-            checks: {
-              date: true,
-              name: true,
-              credit: true,
-              supporting: bestSupport
-            },
-            supporting: best.supporting,
-            reason: bestSupport
-              ? `${bestSupport} additional statement value${bestSupport === 1 ? "" : "s"} also found in the same payment image.`
-              : "The required Date, Name / Description, and Credit were found together in the same payment image."
-          };
-        }
-      }
-    } else {
+    if (!best) {
       result = {
-        row,
-        verdict: core.type,
-        imageCandidates: core.candidates || [],
-        matchedImage: null,
-        checks: {
-          date: false,
-          name: false,
-          credit: false,
-          supporting: 0
-        },
+        row: makeUnmatchedImageRow(image, i),
+        verdict: "NOT VERIFIED",
+        imageCandidates: [], matchedImage: null,
+        checks: { date:false, name:false, credit:false, supporting:0 },
         supporting: [],
-        reason: core.reason
+        reason: "No unused statement row contains the required Credit, Date, and Name / Description in a single row."
       };
-    }
+    } else if (second && second.score === best.score && best.supporting.length === second.supporting.length) {
+      result = {
+        row: best.row,
+        verdict: "REVIEW REQUIRED",
+        imageCandidates: [best.row, second.row],
+        matchedImage: null,
+        checks: { date:true, name:true, credit:true, supporting:best.supporting.length },
+        supporting: best.supporting,
+        reason: "More than one unused statement row is equally compatible with this payment image. No row was marked used."
+      };
+    } else {
+      usedRowIds.add(best.row.id);
+      result = {
+        row: best.row,
+        verdict: best.supporting.length ? "STRONG MATCH" : "MATCHED",
+        imageCandidates: [best.row],
+        matchedImage: image,
+        checks: { date:true, name:true, credit:true, supporting:best.supporting.length },
+        supporting: best.supporting,
+        reason: best.supporting.length
+          ? `${best.supporting.length} additional statement value${best.supporting.length === 1 ? "" : "s"} also found in the same payment image.`
+          : "This payment image is the best match for this unused statement row. The required Date, Name / Description, and Credit all match in the same row."
+      };
 
-    if (result.matchedImage) {
-      claimedImageIds.add(result.matchedImage.id);
-    }
-
-    results.push(result);
-
-    // Update order status only when the required core three matched in one image.
-    if (
-      (result.verdict === "MATCHED" || result.verdict === "STRONG MATCH") &&
-      result.matchedImage
-    ) {
-      const orderIds = result.matchedImage.orderIds || [];
-      for (const orderId of orderIds) {
+      for (const orderId of image.orderIds || []) {
         try {
-          await databases.updateDocument(DB_ID, ORDERS, orderId, {
-            status: "paid"
-          });
+          await databases.updateDocument(DB_ID, ORDERS, orderId, { status: "paid" });
         } catch (err) {
           console.error("Failed to update matched order status:", orderId, err);
         }
       }
     }
 
-    const verifiedCount = results.filter(
-      r => r.verdict === "MATCHED" || r.verdict === "STRONG MATCH"
-    ).length;
-    const reviewCount = results.filter(r => r.verdict === "REVIEW REQUIRED").length;
-    const notVerifiedCount = results.filter(r => r.verdict === "NOT VERIFIED").length;
+    results.push(result);
 
+    const matched = results.filter(r => r.verdict === "MATCHED" || r.verdict === "STRONG MATCH").length;
+    const review = results.filter(r => r.verdict === "REVIEW REQUIRED").length;
+    const notVerified = results.filter(r => r.verdict === "NOT VERIFIED").length;
     updateVerifyProgress(
       "match",
-      `Processed ${current.toLocaleString()} of ${validRows.length.toLocaleString()} statement rows…`,
+      `Processed payment image ${current.toLocaleString()} of ${images.length.toLocaleString()}…`,
       current,
-      validRows.length,
-      `Matched ${verifiedCount.toLocaleString()} • Review ${reviewCount.toLocaleString()} • Not verified ${notVerifiedCount.toLocaleString()} • Payment images ${imageCount.toLocaleString()}`
+      images.length,
+      `Matched ${matched.toLocaleString()} • Review ${review.toLocaleString()} • Not verified ${notVerified.toLocaleString()} • Unused statement rows ${Math.max(0, availableRows.length - usedRowIds.size).toLocaleString()}`
     );
-
-    if (current % 10 === 0) await nextFrame();
+    if (current % 5 === 0) await nextFrame();
   }
 
-  // Add skipped rows after valid matching so every original row is represented.
+  // Rows that were never claimed remain visible, but are not re-analyzed as
+  // payment images. This makes the one-image -> one-unused-row behavior explicit.
+  const unmatchedRows = availableRows.filter(r => !usedRowIds.has(r.id));
+  unmatchedRows.forEach(row => results.push({
+    row,
+    verdict: "NOT VERIFIED",
+    imageCandidates: [], matchedImage: null,
+    checks: { date:false, name:false, credit:false, supporting:0 },
+    supporting: [],
+    reason: "No available payment image claimed this statement row."
+  }));
+
   verifyState.results = [
     ...results,
     ...verifyState.skippedStatementRows.map(row => ({
-      row,
-      verdict: "SKIPPED",
-      imageCandidates: [],
-      matchedImage: null,
-      checks: {
-        date: false,
-        name: false,
-        credit: false,
-        supporting: 0
-      },
-      supporting: [],
-      reason: row.skipReason
+      row, verdict:"SKIPPED", imageCandidates:[], matchedImage:null,
+      checks:{date:false,name:false,credit:false,supporting:0}, supporting:[], reason:row.skipReason
     }))
   ];
 
   await renderFinalVerificationResults();
+}
+
+function makeUnmatchedImageRow(image, index) {
+  return {
+    id: `unmatched-image-${image.id}-${index}`,
+    rowNumber: `Payment image ${index + 1}`,
+    cells: [], date: null, credit: null,
+    nameRaw: `Payment image ${index + 1}`
+  };
+}
+
+function scoreImageAgainstStatementRow(image, row) {
+  if (!row.date || row.credit == null || row.credit <= 0 || !row.nameRaw) return null;
+  if (!imageHasAmount(image, row.credit)) return null;
+  if (!imageHasDate(image, row.date)) return null;
+  if (!textFieldMatchesImage(row.nameRaw, image)) return null;
+
+  let score = 100; // mandatory three fields already satisfied
+  const supporting = findSupportingEvidence(row, image);
+  score += supporting.length * 10;
+
+  // Time is useful supporting evidence even when it is not a primary field.
+  const rowTime = row.cells.map(c => c.value).find(v => /\b\d{1,2}:\d{2}(?::\d{2})?\b/.test(String(v || "")));
+  if (rowTime && image.times.length) {
+    const normalized = extractAllTimes(rowTime);
+    if (normalized.some(t => image.times.includes(t))) { score += 8; supporting.push(rowTime); }
+  }
+
+  return { row, score, supporting:[...new Set(supporting)] };
 }
 
 /* =========================================================

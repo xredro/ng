@@ -246,6 +246,32 @@ function goToPaymentUpload() {
 /* =========================
 STOREFRONT WHATSAPP SETTINGS
 ========================= */
+async function loadWhatsAppSettings() {
+  try {
+    const found = await databases.listDocuments(DB_ID, FORMS, [
+      Query.equal("userId", user.$id),
+      Query.limit(1)
+    ]);
+    formDoc = found.documents[0] || null;
+    const numberInput = document.getElementById("whatsappNumber");
+    const toggle = document.getElementById("whatsappOrderRedirectEnabled");
+    if (numberInput) numberInput.value = formDoc?.whatsappNumber || "";
+    if (toggle) toggle.checked = formDoc?.whatsappOrderRedirectEnabled === true;
+  } catch (err) {
+    console.error("Failed to load WhatsApp settings:", err);
+  }
+}
+
+function normalizeSettingsWhatsAppNumber(value) {
+  let digits = String(value || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0") && digits.length === 11) digits = "234" + digits.slice(1);
+  return digits;
+}
+
+function validSettingsWhatsAppNumber(value) {
+  return /^234\d{10}$/.test(normalizeSettingsWhatsAppNumber(value));
+}
 async function saveWhatsAppSettings() {
   const numberInput = document.getElementById("whatsappNumber");
   const toggle = document.getElementById("whatsappOrderRedirectEnabled");
@@ -254,8 +280,8 @@ async function saveWhatsAppSettings() {
 
   if (enabled) {
     const digits = number.replace(/\D/g, "");
-    if (digits.length < 10) {
-      showToast("Enter a valid WhatsApp number before turning this on.", "warning");
+    if (!validSettingsWhatsAppNumber(number)) {
+      showToast("Enter a valid Nigerian WhatsApp mobile number, e.g. 08012345678 or +2348012345678.", "warning");
       toggle.checked = false;
       return;
     }
@@ -263,10 +289,15 @@ async function saveWhatsAppSettings() {
 
   try {
     if (!formDoc) {
-      formDoc = await databases.getDocument(DB_ID, FORMS, user.$id);
+      const found = await databases.listDocuments(DB_ID, FORMS, [
+        Query.equal("userId", user.$id),
+        Query.limit(1)
+      ]);
+      formDoc = found.documents[0] || null;
     }
+    if (!formDoc) throw new Error("No storefront form exists for this account.");
 
-    await databases.updateDocument(DB_ID, FORMS, user.$id, {
+    await databases.updateDocument(DB_ID, FORMS, formDoc.$id, {
       whatsappNumber: number,
       whatsappOrderRedirectEnabled: enabled
     });
@@ -342,4 +373,4 @@ function closePasswordModal(e) {
 /* =========================
 INITIALIZATION / BOOTSTRAP LOGIC
 ========================= */
-loadUser();
+loadUser().then(() => loadWhatsAppSettings());
