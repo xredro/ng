@@ -1140,16 +1140,55 @@ async function ocrPaymentImage(order, worker) {
   const url = paymentImageUrl(imageId);
 
   let rawText = "";
+  let firstResult = null;
 
   if (worker) {
-    const result = await worker.recognize(url);
-    rawText = result?.data?.text || "";
+    // PSM 6 is a good default for the structured receipt/screen images.
+    try {
+      await worker.setParameters({ tessedit_pageseg_mode: "6" });
+    } catch (_) {}
+    firstResult = await worker.recognize(url);
+    rawText = firstResult?.data?.text || "";
   } else {
-    const result = await Tesseract.recognize(url, "eng");
-    rawText = result?.data?.text || "";
+    firstResult = await Tesseract.recognize(url, "eng", {
+      tessedit_pageseg_mode: "6"
+    });
+    rawText = firstResult?.data?.text || "";
   }
 
-  const searchable = buildSearchableImageRecord(rawText);
+  let searchable = buildSearchableImageRecord(rawText);
+
+  // A common receipt-OCR failure is losing a digit/group separator from a
+  // currency value, e.g. reading "₦18,500.00" as "₦18.00". Do not guess the
+  // missing digits. Instead, run a second segmentation pass and merge its OCR
+  // evidence with the first pass when the first amount looks suspicious.
+  const suspiciousCurrency = /(?:₦|NGN|N)\s*\d{1,3}\.\d{1,2}(?!\d)/i.test(rawText) &&
+    searchable.amounts.some(a => a > 0 && a < 100);
+
+  if (suspiciousCurrency) {
+    let secondText = "";
+    try {
+      if (worker) {
+        await worker.setParameters({ tessedit_pageseg_mode: "11" });
+        const second = await worker.recognize(url);
+        secondText = second?.data?.text || "";
+        await worker.setParameters({ tessedit_pageseg_mode: "6" });
+      } else {
+        const second = await Tesseract.recognize(url, "eng", {
+          tessedit_pageseg_mode: "11"
+        });
+        secondText = second?.data?.text || "";
+      }
+    } catch (err) {
+      console.warn("Secondary OCR pass failed:", err);
+    }
+
+    if (secondText) {
+      const secondary = buildSearchableImageRecord(secondText);
+      rawText = `${rawText}\n${secondText}`;
+      searchable = buildSearchableImageRecord(rawText);
+    }
+  }
 
   return {
     id: imageId,
@@ -1317,15 +1356,44 @@ function extractAmount(raw) {
 
 function extractAllAmounts(text) {
   const found = new Set();
-  const source = String(text || "");
+  const source = String(text || "").normalize("NFKC");
 
+  // Keep currency-labelled amounts as the strongest OCR evidence. OCR can
+  // separate grouped digits (e.g. "N 18 500.00") or detach a comma, so we
+  // also inspect a short window after each currency marker and reconstruct
+  // contiguous numeric groups without inventing digits.
+  const currencyRe = /(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*([^\n]{1,36})/gi;
+  let m;
+  while ((m = currencyRe.exec(source))) {
+    const tail = m[1];
+
+    // Normal, grouped or decimal amount immediately after currency marker.
+    const direct = tail.match(/^\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:[.,][0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/);
+    if (direct) {
+      const amount = extractAmount(direct[1]);
+      if (amount !== null && amount > 0) found.add(amount.toFixed(2));
+    }
+
+    // OCR sometimes turns "18,500.00" into "18 500.00" or "18 500 00".
+    // Reconstruct only when the numeric pieces are adjacent in the currency
+    // window; this does not guess missing digits.
+    const grouped = tail.match(/^\s*(\d{1,3})[\s,](\d{3})(?:[.,](\d{1,2}))?/);
+    if (grouped) {
+      const amountText = `${grouped[1]},${grouped[2]}${grouped[3] ? `.${grouped[3]}` : ""}`;
+      const amount = extractAmount(amountText);
+      if (amount !== null && amount > 0) found.add(amount.toFixed(2));
+    }
+  }
+
+  // Also collect unlabelled grouped/decimal amounts. These are weaker OCR
+  // evidence but useful for receipts where the currency symbol was missed.
   const matches = source.match(
-    /(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*[\d.,]+|\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d+(?:\.\d{1,2})\b/g
+    /\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?\b|\b\d+(?:\.\d{1,2})\b/g
   ) || [];
 
-  matches.forEach(m => {
-    const amount = extractAmount(m);
-    if (amount !== null) found.add(amount.toFixed(2));
+  matches.forEach(matched => {
+    const amount = extractAmount(matched);
+    if (amount !== null && amount > 0) found.add(amount.toFixed(2));
   });
 
   return [...found].map(Number);
