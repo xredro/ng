@@ -300,7 +300,6 @@ async function loadStatementPdf(buffer, password) {
 
   for (let i = 1; i <= pdf.numPages; i++) {
     updateVerifyProgress(
-      `statement`,
       `Reading statement page ${i} of ${pdf.numPages}…`,
       i - 1,
       pdf.numPages
@@ -800,7 +799,6 @@ async function detectStatementTables() {
     }
 
     updateVerifyProgress(
-      `table`,
       `Scanning statement page ${i + 1} of ${verifyState.statementText.length}…`,
       i + 1,
       verifyState.statementText.length
@@ -1048,10 +1046,25 @@ async function startImageProcessing() {
   );
 
   let worker = null;
+  let activeImageNumber = 0;
+  const totalImages = verifyState.pendingPayments.length;
 
   try {
     if (Tesseract && typeof Tesseract.createWorker === "function") {
-      worker = await Tesseract.createWorker("eng");
+      worker = await Tesseract.createWorker("eng", 1, {
+        logger: message => {
+          if (!message || activeImageNumber < 1) return;
+          const inner = Math.max(0, Math.min(1, Number(message.progress) || 0));
+          const overall = ((activeImageNumber - 1 + inner) / totalImages) * 100;
+          const label = message.status ? String(message.status).replace(/_/g, " ") : "recognizing text";
+          updateVerifyProgress(
+            `OCR image ${activeImageNumber} of ${totalImages} • ${label}`,
+            Math.round(overall),
+            100,
+            `Payment image ${activeImageNumber} of ${totalImages} • OCR engine ${Math.round(inner * 100)}%`
+          );
+        }
+      });
       verifyState.ocrWorker = worker;
     }
   } catch (err) {
@@ -1064,13 +1077,13 @@ async function startImageProcessing() {
     const order = verifyState.pendingPayments[i];
     const imageId = String(order.paymentProof);
     const current = i + 1;
+    activeImageNumber = current;
 
     updateVerifyProgress(
-      `ocr`,
       `OCR processing payment image ${current} of ${verifyState.pendingPayments.length}…`,
       current,
       verifyState.pendingPayments.length,
-      `Completed ${i.toLocaleString()} • Current ${current.toLocaleString()} • Remaining ${(verifyState.pendingPayments.length - current).toLocaleString()}`
+      `Current payment image ${current.toLocaleString()} • Remaining ${(verifyState.pendingPayments.length - current).toLocaleString()}`
     );
 
     try {
@@ -1109,11 +1122,11 @@ async function startImageProcessing() {
     "index",
     "Building searchable indexes…",
     {
-      current: verifyState.ocrImages.length,
-      total: verifyState.ocrImages.length,
-      remaining: 0,
-      percent: 100,
-      extra: `Payment images indexed ${verifyState.ocrImages.length.toLocaleString()} / ${verifyState.ocrImages.length.toLocaleString()}`
+      current: 0,
+      total: Math.max(1, verifyState.ocrImages.length),
+      remaining: verifyState.ocrImages.length,
+      percent: 0,
+      extra: `Preparing ${verifyState.ocrImages.length.toLocaleString()} payment images for matching`
     }
   );
 
@@ -1393,11 +1406,10 @@ async function buildImageIndexes() {
 
     if (index % 25 === 0) {
       updateVerifyProgress(
-        "index",
         `Indexing payment images ${index + 1} of ${verifyState.ocrImages.length}…`,
         index + 1,
         verifyState.ocrImages.length,
-        `Amount index ${amountIndex.size.toLocaleString()} • Date index ${dateIndex.size.toLocaleString()} • Token index ${tokenIndex.size.toLocaleString()}`
+        `Current image ${index + 1} • Building amount, date and text indexes`
       );
     }
   });
