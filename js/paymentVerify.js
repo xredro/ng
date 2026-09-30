@@ -582,34 +582,63 @@ function detectHeaderRow(rows) {
 }
 
 function buildColumnBoundaries(headerRow) {
-  const cells = groupHeaderCells(headerRow);
-
-  return cells
+  const cells = groupHeaderCells(headerRow)
     .map(cell => ({
-      x: cell.x,
-      end: cell.end,
-      center: cell.center,
+      x: Number(cell.x) || 0,
+      end: (Number(cell.x) || 0) + (Number(cell.width) || 0),
+      center: Number(cell.center),
       header: cell.text
     }))
-    .filter(c => Number.isFinite(c.center));
+    .filter(c => Number.isFinite(c.center))
+    .sort((a, b) => a.center - b.center);
+
+  if (!cells.length) return [];
+
+  // Do NOT use the left edge of the header as a data-column boundary.
+  // Bank-statement PDFs commonly center header labels inside a wider column,
+  // while transaction text starts considerably to the left of that label.
+  // Using the header left edge therefore shifts every data cell one column
+  // to the left (Date absorbs Time, Time absorbs Name, etc.).
+  //
+  // Instead, boundaries are the midpoints between adjacent header CENTERS.
+  // The first/last boundaries extend outward around the first/last centers.
+  const boundaries = cells.map((cell, i) => {
+    const previous = cells[i - 1];
+    const next = cells[i + 1];
+    const left = previous
+      ? (previous.center + cell.center) / 2
+      : cell.center - Math.max(24, (cell.center - cell.x) + 24);
+    const right = next
+      ? (cell.center + next.center) / 2
+      : cell.center + Math.max(24, (cell.end - cell.center) + 24);
+
+    return {
+      x: left,
+      end: right,
+      center: cell.center,
+      header: cell.header
+    };
+  });
+
+  return boundaries;
 }
 
 function assignToColumn(x, width, boundaries) {
   if (!boundaries.length) return -1;
+  const center = (Number(x) || 0) + Math.max(0, Number(width) || 0) / 2;
 
-  const start = Number(x) || 0;
-
-  // Statement tables are overwhelmingly left-anchored by column. Use the
-  // header's actual x-start rather than the distance to a header text item;
-  // this prevents long transaction strings from jumping into the next
-  // column simply because their text width is large.
-  let best = 0;
-
-  for (let i = 1; i < boundaries.length; i++) {
-    if (start >= boundaries[i].x) best = i;
-    else break;
+  for (let i = 0; i < boundaries.length; i++) {
+    if (center >= boundaries[i].x && center < boundaries[i].end) return i;
   }
 
+  // For text that slightly crosses an inferred boundary, choose the nearest
+  // column center rather than forcing it into the previous column.
+  let best = 0;
+  let distance = Infinity;
+  boundaries.forEach((b, i) => {
+    const d = Math.abs(center - b.center);
+    if (d < distance) { distance = d; best = i; }
+  });
   return best;
 }
 
@@ -617,20 +646,11 @@ function splitItemAcrossColumns(item, boundaries) {
   const text = String(item.text || '').trim();
   if (!text || !boundaries.length) return [];
 
-  // Never slice PDF.js text by character position. That was causing
-  // truncated names/descriptions and stray leading characters in amounts
-  // and references. Each PDF text item belongs to the column containing
-  // its horizontal center; adjacent fragments from the same cell are
-  // concatenated later by buildTableFromPage().
-  const start = Number(item.x) || 0;
-  const width = Math.max(0, Number(item.width) || 0);
-  const center = start + width / 2;
-  let col = 0;
-  for (let i = 1; i < boundaries.length; i++) {
-    if (center >= boundaries[i].x) col = i;
-    else break;
-  }
-  return [{ col, text }];
+  // Never slice a PDF.js text item character-by-character. Assign the
+  // COMPLETE fragment to the physical column containing its center. This
+  // preserves names, references, amounts and long descriptions intact.
+  const col = assignToColumn(item.x, item.width, boundaries);
+  return col >= 0 ? [{ col, text }] : [];
 }
 
 function rowLooksLikeRepeatedHeader(cells, headers) {
