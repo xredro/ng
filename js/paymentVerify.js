@@ -307,14 +307,30 @@ async function loadStatementPdf(buffer, password) {
 
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
 
-    pages.push(content.items.map(it => ({
-      text: it.str,
-      x: it.transform[4],
-      y: it.transform[5],
-      width: it.width || 0,
-      height: it.height || 0
-    })));
+    // Keep the PDF's real 2-D coordinate system. We do not need to display
+    // this canvas; it is a spatial working surface used to reconstruct the
+    // table before any normalization or matching happens.
+    pages.push({
+      width: viewport.width,
+      height: viewport.height,
+      items: content.items.map((it, itemIndex) => {
+        const x = Number(it.transform?.[4]) || 0;
+        const y = Number(it.transform?.[5]) || 0;
+        const width = Math.max(0, Number(it.width) || 0);
+        const height = Math.max(0, Number(it.height) || 0);
+        return {
+          id: `p${i}-t${itemIndex}`,
+          text: String(it.str || ''),
+          x, y, width, height,
+          right: x + width,
+          top: y + height,
+          centerX: x + width / 2,
+          centerY: y + height / 2
+        };
+      })
+    });
   }
 
   verifyState.statementText = pages;
@@ -325,21 +341,73 @@ async function loadStatementPdf(buffer, password) {
    PDF TABLE / COLUMN EXTRACTION
 ========================================================= */
 
-function groupIntoRows(items, yTolerance = 3) {
-  const sorted = [...items].sort((a, b) => b.y - a.y);
-  const rows = [];
+function build2DPageModel(page) {
+  const items = Array.isArray(page?.items) ? page.items : (Array.isArray(page) ? page : []);
+  const heights = items.map(i => Number(i.height) || 0).filter(h => h > 0).sort((a,b)=>a-b);
+  const medianHeight = heights.length ? heights[Math.floor(heights.length / 2)] : 10;
+  const yTolerance = Math.max(2, Math.min(5, medianHeight * 0.45));
 
-  sorted.forEach(item => {
-    let row = rows.find(r => Math.abs(r.y - item.y) <= yTolerance);
-    if (!row) {
-      row = { y: item.y, items: [] };
-      rows.push(row);
+  // This is the virtual/off-screen 2-D canvas. Coordinates are preserved,
+  // not rasterized, so large statements do not pay the memory cost of a
+  // pixel-by-pixel canvas. Every fragment is a positioned rectangle.
+  const canvas = {
+    width: Number(page?.width) || 0,
+    height: Number(page?.height) || 0,
+    items: items.map(item => ({
+      ...item,
+      x: Number(item.x) || 0,
+      y: Number(item.y) || 0,
+      width: Math.max(0, Number(item.width) || 0),
+      height: Math.max(0, Number(item.height) || 0),
+      right: Number.isFinite(item.right) ? item.right : (Number(item.x)||0)+(Number(item.width)||0),
+      top: Number.isFinite(item.top) ? item.top : (Number(item.y)||0)+(Number(item.height)||0),
+      centerX: Number.isFinite(item.centerX) ? item.centerX : (Number(item.x)||0)+(Number(item.width)||0)/2,
+      centerY: Number.isFinite(item.centerY) ? item.centerY : (Number(item.y)||0)+(Number(item.height)||0)/2
+    }))
+  };
+
+  const sorted = [...canvas.items]
+    .filter(i => String(i.text || '').trim())
+    .sort((a,b) => b.centerY - a.centerY || a.x - b.x);
+
+  const rows = [];
+  for (const item of sorted) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const row of rows) {
+      const d = Math.abs(row.centerY - item.centerY);
+      if (d <= yTolerance && d < bestDistance) {
+        best = row;
+        bestDistance = d;
+      }
     }
-    row.items.push(item);
+    if (!best) {
+      best = { centerY: item.centerY, items: [] };
+      rows.push(best);
+    }
+    best.items.push(item);
+    best.centerY = best.items.reduce((sum, x) => sum + x.centerY, 0) / best.items.length;
+  }
+
+  rows.sort((a,b)=>b.centerY-a.centerY);
+  rows.forEach((row, index) => {
+    row.index = index;
+    row.items.sort((a,b)=>a.x-b.x);
+    row.x = row.items.length ? Math.min(...row.items.map(x=>x.x)) : 0;
+    row.right = row.items.length ? Math.max(...row.items.map(x=>x.right)) : 0;
   });
 
-  rows.forEach(r => r.items.sort((a, b) => a.x - b.x));
-  return rows;
+  canvas.rows = rows;
+  return canvas;
+}
+
+function groupIntoRows(itemsOrPage, yTolerance) {
+  // Compatibility wrapper: the rest of the verifier can continue to work
+  // with rows, while extraction itself is now based on a 2-D page model.
+  if (itemsOrPage && !Array.isArray(itemsOrPage) && Array.isArray(itemsOrPage.items)) {
+    return build2DPageModel(itemsOrPage).rows;
+  }
+  return build2DPageModel({ items: Array.isArray(itemsOrPage) ? itemsOrPage : [] }).rows;
 }
 
 function normalizeHeaderWord(s) {
@@ -572,24 +640,37 @@ function detectHeaderRow(rows) {
 }
 
 function buildColumnBoundaries(headerRow) {
-  const cells = groupHeaderCells(headerRow).map(cell => ({
-    x:Number(cell.x)||0,
-    end:Number.isFinite(Number(cell.end)) ? Number(cell.end) : (Number(cell.x)||0)+Math.max(0,Number(cell.width)||0),
-    center:Number(cell.center),
-    header:String(cell.text||"").trim()
-  })).filter(c=>Number.isFinite(c.center)).sort((a,b)=>a.x-b.x);
-  if(!cells.length)return [];
-  // Use header LEFT edges as the column anchors. Header labels are usually
-  // centered inside their cells, while transaction text starts much farther
-  // left. Midpoints between header left edges therefore give a better initial
-  // data band than midpoints between header centers.
-  return cells.map((c,i)=>{
-    const prev=cells[i-1],next=cells[i+1];
-    const left=prev?(prev.x+c.x)/2:c.x-Math.max(24,c.x-((c.end+c.x)/2)+20);
-    const right=next?(c.x+next.x)/2:c.end+Math.max(24,c.end-c.x+20);
-    return {x:left,end:right,center:c.center,header:c.header,headerX:c.x,headerEnd:c.end};
+  const cells = groupHeaderCells(headerRow)
+    .map(cell => ({
+      x: Number(cell.x) || 0,
+      end: Number.isFinite(Number(cell.end)) ? Number(cell.end) : (Number(cell.x)||0)+(Number(cell.width)||0),
+      center: Number(cell.center),
+      header: String(cell.text || '').trim()
+    }))
+    .filter(c => Number.isFinite(c.center))
+    .sort((a,b)=>a.center-b.center);
+
+  if (!cells.length) return [];
+
+  // Column zones are created from the CENTER of the real header cells.
+  // Boundaries are halfway between neighboring centers. This prevents a
+  // left-shifted data fragment from being swallowed by the preceding column.
+  return cells.map((c, i) => {
+    const prev = cells[i-1];
+    const next = cells[i+1];
+    const left = prev ? (prev.center + c.center) / 2 : Math.min(c.x, c.center - Math.max(24, c.end-c.x));
+    const right = next ? (c.center + next.center) / 2 : Math.max(c.end, c.center + Math.max(24, c.end-c.x));
+    return {
+      x: left,
+      end: right,
+      center: c.center,
+      header: c.header,
+      headerX: c.x,
+      headerEnd: c.end
+    };
   });
 }
+
 function columnAtX(x,boundaries) {
   if (!boundaries.length) return -1;
   for (let i=0;i<boundaries.length;i++) if (x>=boundaries[i].x && x<boundaries[i].end) return i;
@@ -602,24 +683,48 @@ function assignToColumn(x,width,boundaries) {
   return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
 }
 function estimateTextFragmentPositions(item) {
-  const text=String(item.text||""), x=Number(item.x)||0, width=Math.max(0,Number(item.width)||0);
-  if(!text||width<=0)return [];
-  const charWidth=width/text.length, parts=[], re=/\S+/g; let m;
-  while((m=re.exec(text))){const left=x+m.index*charWidth,right=x+(m.index+m[0].length)*charWidth;parts.push({text:m[0],center:(left+right)/2});}
-  return parts;
+  const text = String(item.text || '').replace(/\s+/g, ' ').trim();
+  const x = Number(item.x) || 0;
+  const width = Math.max(0, Number(item.width) || 0);
+  if (!text) return [];
+
+  const words = [];
+  const re = /\S+/g;
+  let m;
+  const charWidth = width > 0 && text.length ? width / text.length : 0;
+  while ((m = re.exec(text))) {
+    const left = x + m.index * charWidth;
+    const right = x + (m.index + m[0].length) * charWidth;
+    words.push({ text: m[0], x: left, right, center: (left + right) / 2 });
+  }
+  return words;
 }
-function splitItemAcrossColumns(item,boundaries) {
-  const text=String(item.text||"").replace(/\s+/g," ").trim();
-  if(!text||!boundaries.length)return [];
-  const x=Number(item.x)||0,width=Math.max(0,Number(item.width)||0),end=x+width;
-  const center=x+width/2;
-  const first=columnAtX(x+Math.min(0.5,width/2),boundaries),last=columnAtX(Math.max(x,end-Math.min(0.5,width/2)),boundaries);
-  const crossed=boundaries.filter(b=>b.x>x+0.5&&b.x<end-0.5).length;
-  if(crossed<=1||first===last||width<=0)return [{col:columnAtX(center,boundaries),text}];
-  const groups=new Map();
-  estimateTextFragmentPositions({...item,text}).forEach(part=>{const col=columnAtX(part.center,boundaries);if(col<0)return;if(!groups.has(col))groups.set(col,[]);groups.get(col).push(part.text);});
-  if(!groups.size)return [{col:columnAtX(center,boundaries),text}];
-  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([col,words])=>({col,text:words.join(" ")}));
+
+function splitItemAcrossColumns(item, boundaries) {
+  const text = String(item.text || '').replace(/\s+/g, ' ').trim();
+  if (!text || !boundaries.length) return [];
+
+  const words = estimateTextFragmentPositions(item);
+  if (!words.length) return [];
+
+  const groups = new Map();
+  words.forEach(word => {
+    const col = columnAtX(word.center, boundaries);
+    if (col < 0) return;
+    if (!groups.has(col)) groups.set(col, []);
+    groups.get(col).push(word.text);
+  });
+
+  // If PDF.js gave us a normal single-column item, this is simply one group.
+  // If it gave us a visually merged item, word positions split it back into
+  // the appropriate columns without ever slicing the actual characters.
+  if (!groups.size) {
+    return [{ col: columnAtX((Number(item.x)||0)+(Number(item.width)||0)/2, boundaries), text }];
+  }
+
+  return [...groups.entries()]
+    .sort((a,b)=>a[0]-b[0])
+    .map(([col, wordsInColumn]) => ({ col, text: wordsInColumn.join(' ') }));
 }
 
 function rowLooksLikeRepeatedHeader(cells, headers) {
@@ -653,42 +758,125 @@ function rowLooksLikeTransaction(cells, headers) {
 }
 
 
-function stripExtractionArtifacts(text){
-  return String(text||"").normalize("NFKC").replace(/[\u0000-\u001F]/g,"").replace(/[\u00A0\u2007\u202F]/g," ").replace(/[□■�]/g," ").replace(/\s+/g," ").trim();
+function stripExtractionArtifacts(text) {
+  return String(text || '')
+    .normalize('NFKC')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[□■�￼]/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
-function cleanExtractedCell(value,header=""){
-  let text=stripExtractionArtifacts(value), h=normalizeHeaderLabel(header);
-  if(h==="credit"||h==="debit"||h==="balance") text=text.replace(/^[-–—]+\s*/,"").replace(/^(?:[nNoO0]|[0-9])\s+(?=(?:₦|NGN|N)\b)/i,"").replace(/^(?:[nNoO0])(?=\s*\d)/i,"").trim();
-  if(h==="reference") text=text.replace(/^[|IlOoNn]+\s*(?=\d{5,})/i,"").trim();
+
+function cleanExtractedCell(value, header = '') {
+  let text = stripExtractionArtifacts(value);
+  const h = normalizeHeaderLabel(header);
+  if (!text) return '';
+
+  // A lone dash is a missing cell, never evidence.
+  if (/^[-–—_]+$/.test(text)) return '';
+
+  if (h === 'credit' || h === 'debit' || h === 'balance') {
+    text = text.replace(/^[|Il]+\s*(?=(?:₦|NGN|N)\b)/i, '');
+    text = text.replace(/^[-–—]+\s*/, '').trim();
+  }
+  if (h === 'reference') {
+    text = text.replace(/^[|IlOoNn]+\s*(?=\d{5,})/i, '').trim();
+  }
   return text;
 }
-function cleanRowCells(cells,headers){return cells.map((v,i)=>cleanExtractedCell(v,headers[i]||""));}
-function amountCandidatesFromText(raw){
-  const source=stripExtractionArtifacts(raw); if(!source||!/\d/.test(source))return [];
-  const found=new Map();
-  const add=(txt,strength)=>{
-    let c=String(txt||"").replace(/[₦$€£]|\b(?:NGN|USD|EUR|GBP)\b/gi,"").replace(/^[^\d]+|[^\d.,\s]+$/g,"").trim();
-    if(!c||/^[-(]/.test(c))return;
-    c=c.replace(/(?<=\d)\s+(?=\d{3}(?:\D|$))/g,",").replace(/(\d)\s+(\d{2})$/g,"$1.$2");
-    if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(c))c=c.replace(/\./g,"").replace(",",".");else c=c.replace(/,/g,"");
-    const n=Number.parseFloat(c);if(!Number.isFinite(n)||n<=0)return;
-    const v=Math.round(n*100)/100,k=v.toFixed(2),old=found.get(k);if(!old||strength>old.strength)found.set(k,{value:v,strength,raw:txt});
-  };
-  let m,re=/(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*([0-9][0-9,.\s]{0,24})/gi;
-  while((m=re.exec(source))){const t=m[1],d=t.match(/^\s*\d{1,3}(?:(?:,|\.)\d{3})*(?:[.,]\d{1,2})?(?!\d)(?!\s+\d)/);if(d)add(d[0],100);const sp=t.match(/^\s*\d{1,3}\s+\d{3}(?:\s+\d{3})?(?:[.,]\d{1,2})?/);if(sp)add(sp[0],98);}
-  (source.match(/\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?\b/g)||[]).forEach(v=>add(v,75));
-  (source.match(/(?<![\d,\.])\d+(?:\.\d{1,2})(?![\d,])/g)||[]).forEach(v=>add(v,45));
-  if(/^\s*(?:[₦N]|NGN)?\s*\d{3,9}(?:\.\d{1,2})?\s*$/i.test(source))add(source,35);
-  const values=[...found.values()];
-  const filtered=values.filter(item=>{
-    if(item.strength>=75)return true;
-    const digits=String(Math.round(item.value*100)/100).replace(/\.00$/,'');
-    return !values.some(other=>other!==item && other.strength>=item.strength+20 && String(Math.trunc(other.value)).endsWith(digits));
-  });
-  return filtered.sort((a,b)=>b.strength-a.strength||b.value-a.value);
+function cleanRowCells(cells, headers) {
+  return cells.map((v,i)=>cleanExtractedCell(v, headers[i] || ''));
 }
-function extractAmount(raw){const c=amountCandidatesFromText(raw);return c.length?c[0].value:null;}
-function extractAllAmounts(text){return amountCandidatesFromText(text).map(x=>x.value);}
+
+function parseNumericAmountCandidate(raw) {
+  let c = String(raw || '')
+    .replace(/[₦$€£]/g, '')
+    .replace(/\b(?:NGN|USD|EUR|GBP)\b/gi, '')
+    .replace(/[^0-9.,\s]/g, '')
+    .trim();
+  if (!c) return null;
+
+  // Spaces between thousands are valid OCR output: 18 500 -> 18500.
+  if (/^\d{1,3}(?:\s\d{3})+(?:[.,]\d{1,2})?$/.test(c)) c = c.replace(/\s+/g, ',');
+  else c = c.replace(/\s+/g, '');
+
+  // Nigerian statement/payment amounts normally use comma thousands and a
+  // decimal fraction. Handle the common European-style alternative too.
+  if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(c)) {
+    c = c.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(c)) {
+    c = c.replace(/,/g, '');
+  } else {
+    c = c.replace(/,/g, '');
+  }
+
+  const n = Number.parseFloat(c);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function amountCandidatesFromText(raw) {
+  const source = stripExtractionArtifacts(raw);
+  if (!source || !/\d/.test(source)) return [];
+  const found = new Map();
+
+  const add = (rawValue, strength, reason) => {
+    const value = parseNumericAmountCandidate(rawValue);
+    if (value === null) return;
+    const integerDigits = String(Math.trunc(value)).replace(/\D/g, '');
+
+    // Never treat common non-money numeric artifacts as payment amounts.
+    // Dates, times, phone/account/reference IDs are especially dangerous.
+    if (integerDigits.length < 2 || integerDigits.length > 7) return;
+    if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(String(rawValue).trim())) return;
+
+    const key = value.toFixed(2);
+    const previous = found.get(key);
+    const evidence = { value, strength, raw: String(rawValue), reason, repaired: reason === 'currency-labelled-ocr-repair' };
+    if (!previous || strength > previous.strength) found.set(key, evidence);
+  };
+
+  // Currency-labelled numbers are the strongest evidence.
+  const currency = /(?:₦|NGN|\bN\b|USD|EUR|GBP|[$€£])\s*([0-9OoIl][0-9OoIl,\.\s]{0,20})/gi;
+  let m;
+  while ((m = currency.exec(source))) {
+    const fragment = m[1].trim();
+    const repairedFragment = fragment.replace(/[Oo]/g, '0').replace(/(?<=^|[\s,])(?:[Il])(?=\d)/g, '1');
+    const candidate = repairedFragment.match(/^\d{1,3}(?:(?:,|\.)\d{3})*(?:[.,]\d{1,2})?$/) ||
+      repairedFragment.match(/^\d{1,3}(?:\s\d{3})+(?:[.,]\d{1,2})?$/);
+    if (candidate) add(candidate[0], fragment === repairedFragment ? 100 : 72, fragment === repairedFragment ? 'currency-labelled' : 'currency-labelled-ocr-repair');
+  }
+
+  // Grouped amounts without a currency symbol. These are much safer than
+  // arbitrary digit runs because bank amounts commonly use separators.
+  const grouped = source.match(/(?<![\d,\.])\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?(?![\d,\.])/g) || [];
+  grouped.forEach(v => add(v, 82, 'grouped-number'));
+
+  // Plain 4–7 digit numbers can be payment amounts, but deliberately score
+  // them weakly. They are only useful when the statement matcher asks for the
+  // exact same value; long reference IDs are excluded.
+  const plain = source.match(/(?<![\d,:./-])\d{4,7}(?:\.\d{1,2})?(?![\d,:./-])/g) || [];
+  plain.forEach(v => add(v, 48, 'plain-number'));
+
+  const values = [...found.values()];
+  // If OCR repair recovered a statement-sized value, do not expose a smaller
+  // suffix such as 8,500 that came from the same corrupted token (e.g. l8,500).
+  const repaired = values.filter(v => v.reason === 'currency-labelled-ocr-repair');
+  const filtered = values.filter(v => !repaired.some(r =>
+    v.value !== r.value &&
+    String(Math.trunc(r.value)).endsWith(String(Math.trunc(v.value)))
+  ));
+  return filtered.sort((a,b)=>b.strength-a.strength || b.value-a.value);
+}
+function extractAmount(raw) {
+  const c = amountCandidatesFromText(raw);
+  return c.length ? c[0].value : null;
+}
+function extractAllAmounts(text) {
+  return amountCandidatesFromText(text).map(x=>x.value);
+}
 
 function mergeContinuationRows(rows,boundaries,headers){
   if(!rows.length||!boundaries.length)return rows;const out=[];
@@ -697,7 +885,10 @@ function mergeContinuationRows(rows,boundaries,headers){
 }
 
 function buildTableFromPage(pageItems, schemaHint = null) {
-  let rows = groupIntoRows(pageItems);
+  const pageModel = (pageItems && !Array.isArray(pageItems) && Array.isArray(pageItems.items))
+    ? build2DPageModel(pageItems)
+    : build2DPageModel({ items: Array.isArray(pageItems) ? pageItems : [] });
+  let rows = pageModel.rows;
 
   let headerIdx = -1;
   let boundaries = [];
@@ -1147,15 +1338,62 @@ async function ocrPaymentImage(order,worker){
   q=buildSearchableImageRecord(texts.join("\n"));
   if(q.amounts.length===0||q.dates.length===0)try{texts.push(await recognize(url,12));}catch(e){console.warn("Block OCR pass failed",e);}
   const rawText=texts.filter(Boolean).join("\n--- OCR PASS ---\n"); q=buildSearchableImageRecord(rawText);
-  const repaired=new Map((q.amountEvidence||[]).map(e=>[e.value.toFixed(2),e]));
-  for(const e of q.amountEvidence||[]){const rawAmount=String(e.raw||"");const digits=rawAmount.replace(/\D/g,"");if(e.strength>=90&&/(?:₦|NGN|\bN\b)/i.test(rawAmount)&&digits.length>=5&&digits.length<=7){const v=Number(digits.slice(1));if(Number.isFinite(v)&&v>=100&&!repaired.has(v.toFixed(2)))repaired.set(v.toFixed(2),{value:v,strength:Math.max(1,e.strength-45),raw:e.raw,repaired:true});}}
-  // If OCR preserved the currency marker separately from the numeric token,
-  // derive the same conservative one-leading-digit repair from raw OCR, but
-  // only when the repaired value actually exists in the statement.
-  const currencyRaw=rawText.match(/(?:₦|NGN|\bN\b)\s*[0-9][0-9,\.\s]{4,24}/gi)||[];
-  currencyRaw.forEach(fragment=>{const digits=fragment.replace(/\D/g,"");if(digits.length>=5&&digits.length<=7){const original=Number(digits);const repairedValue=Number(digits.slice(1));const statementValues=new Set((verifyState.validStatementRows||[]).filter(r=>r.credit>0).map(r=>Number(r.credit).toFixed(2)));if(statementValues.has(repairedValue.toFixed(2))&&!statementValues.has(original.toFixed(2)))repaired.set(repairedValue.toFixed(2),{value:repairedValue,strength:40,raw:fragment,repaired:true});}});
-  q.amountEvidence=[...repaired.values()];
-  q.amounts=q.amountEvidence.filter(e=>!e.repaired).map(e=>e.value);
+  // Keep raw OCR evidence separate from repaired evidence. A repair may only
+  // become searchable if it can be justified against an actual statement
+  // credit. This prevents OCR fragments such as 4, 8, 0, or a reference ID
+  // from silently becoming a payment amount.
+  const statementCredits = new Set(
+    (verifyState.validStatementRows || [])
+      .filter(r => Number(r.credit) > 0)
+      .map(r => Number(r.credit).toFixed(2))
+  );
+
+  const evidence = new Map((q.amountEvidence || []).map(e => [e.value.toFixed(2), e]));
+  // OCR-only numeric repairs are not trusted unless the repaired value exists
+  // in the statement's actual Credit column.
+  for (const [key, e] of [...evidence.entries()]) {
+    if (e.repaired && !statementCredits.has(key)) evidence.delete(key);
+  }
+  const rawCurrency = rawText.match(/(?:₦|NGN|\bN\b)\s*[0-9][0-9,\.\s]{3,24}/gi) || [];
+  rawCurrency.forEach(fragment => {
+    const digits = fragment.replace(/\D/g, '');
+    if (digits.length < 4 || digits.length > 7) return;
+    const direct = parseNumericAmountCandidate(fragment);
+    if (direct !== null && statementCredits.has(direct.toFixed(2))) return;
+
+    // Conservative OCR repair: only remove ONE leading digit when the result
+    // is an exact statement credit and the original is not.
+    if (digits.length >= 5) {
+      const repairedValue = Number(digits.slice(1));
+      if (Number.isFinite(repairedValue) && statementCredits.has(repairedValue.toFixed(2))) {
+        evidence.set(repairedValue.toFixed(2), {
+          value: repairedValue,
+          strength: 55,
+          raw: fragment,
+          reason: 'statement-confirmed-ocr-repair',
+          repaired: true
+        });
+      }
+    }
+  });
+
+  // If an exact statement-confirmed repair exists, discard the unconfirmed
+  // one-leading-digit value that caused it. This is what prevents a receipt
+  // like OCR='₦418,500' from being displayed/matched as 418,500 when the
+  // statement actually contains ₦18,500.
+  for (const e of [...evidence.values()]) {
+    if (!e.repaired) {
+      const key = Number(e.value).toFixed(2);
+      const directIsStatementValue = statementCredits.has(key);
+      const repairedExists = [...evidence.values()].some(r => r.repaired && r.value !== e.value);
+      if (!directIsStatementValue && repairedExists && e.reason === 'currency-labelled') {
+        evidence.delete(key);
+      }
+    }
+  }
+
+  q.amountEvidence = [...evidence.values()];
+  q.amounts = q.amountEvidence.map(e => e.value);
   return {id:imageId,orderIds:[order.$id],order,rawText,normalizedText:q.normalizedText,tokens:q.tokens,amounts:q.amounts,amountEvidence:q.amountEvidence,dates:q.dates,times:q.times,ocrError:false};
 }
 
