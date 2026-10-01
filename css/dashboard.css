@@ -311,14 +311,19 @@ body {
   align-items: center;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
-  overflow: hidden;
-  white-space: nowrap;
+  min-width: 0;
+  flex-wrap: wrap;
+  overflow: visible;
+  white-space: normal;
 }
 
 .summary-item {
   font-size: 13px;
   color: var(--text-secondary);
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .order-date {
@@ -632,4 +637,11 @@ body {
   .system-status {
     font-size: 14px;
   }
+}
+
+
+@media (max-width: 600px) {
+  .order-summary-line { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .order-date { margin-left: 0; }
+  .card-header h3 { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 }
