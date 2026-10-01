@@ -128,7 +128,7 @@ function isValidWhatsAppNumber(value) {
   return /^234\d{10}$/.test(digits);
 }
 
-function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId) {
+function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, orderId = "") {
   const phone = normalizeWhatsAppNumber(whatsappNumber);
   if (!whatsappOrderRedirectEnabled || !isValidWhatsAppNumber(phone)) return null;
 
@@ -147,6 +147,10 @@ function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId) {
     });
   });
 
+  // Deliberately do NOT put the payment-image URL in the WhatsApp message.
+  // The customer already selected/uploaded the payment screenshot. WhatsApp
+  // should receive a short, human-readable handoff message and the customer
+  // attaches that same recent screenshot manually before pressing Send.
   const message = [
     "Hello, I just placed an order on X-Redro.",
     "",
@@ -154,10 +158,10 @@ function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId) {
     ...productLines,
     "",
     `Total: ₦${Number(totalAmount || 0).toLocaleString("en-NG")}`,
+    orderId ? `Order ID: ${orderId}` : "",
     "",
-    "Payment proof:",
-    paymentImageUrl(paymentFileId)
-  ].join("\n");
+    "I will attach the payment screenshot I just uploaded."
+  ].filter(Boolean).join("\n");
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
@@ -261,18 +265,12 @@ async function submitOrder() {
     console.log("ORDER CREATED:", res);
 
     const waUrl = (whatsappOrderRedirectEnabled && paymentFileId)
-      ? buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId)
+      ? buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, res.$id)
       : null;
 
     if (waUrl) {
       pendingWhatsAppUrl = waUrl;
       renderSuccessState(true);
-      // Use a user-visible navigation rather than silently calling a
-      // custom app scheme. The fallback button remains available if the
-      // browser/WhatsApp app blocks automatic navigation.
-      setTimeout(() => {
-        try { window.location.href = waUrl; } catch (_) {}
-      }, 350);
     } else {
       pendingWhatsAppUrl = "";
       renderSuccessState(false);
@@ -405,7 +403,8 @@ function renderSuccessState(whatsappReady = false) {
 
         ${whatsappReady ? `
           <div class="whatsapp-handoff-box">
-            <p>Your order details and payment proof are ready to send to the seller.</p>
+            <p><strong>Send your payment proof to the seller</strong></p>
+            <p class="whatsapp-handoff-help">Your order details are already prepared. When WhatsApp opens, attach the same payment screenshot you just uploaded, then tap Send.</p>
             <a class="whatsapp-handoff-btn" href="${pendingWhatsAppUrl}" target="_blank" rel="noopener">Continue to WhatsApp</a>
           </div>
         ` : ""}

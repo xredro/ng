@@ -307,7 +307,7 @@ function renderOrders(orders) {
     card.className = "order-card";
 
     const title = getCardTitle(order);
-    const summary = getProductSummary(order.formData, 2);
+    const summary = getProductSummary(order.formData);
     const amount = normalizeAmount(order.totalAmount);
 
     card.innerHTML = `

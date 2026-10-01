@@ -62,14 +62,19 @@ async function login() {
     return;  
   }  
 
-  try {  
-    // If session exists, remove it  
-    try {  
-      await account.deleteSessions();  
-    } catch (e) {}  
+  try {
+    // A session already exists: this login page should never trap an
+    // authenticated user. The dedicated login-page bootstrap below handles
+    // this before the form is used; this guard also covers manual login calls.
+    try {
+      await account.get();
+      window.location.replace("dashboard.html");
+      return;
+    } catch (_) {}
 
-    // create new session  
-    await account.createEmailSession(email, password);  
+    // Create the new session. Do not delete all sessions first; that made
+    // an already-authenticated browser unnecessarily destructive.
+    await account.createEmailSession(email, password);
 
     const user = await account.get();  
 
@@ -267,6 +272,46 @@ document.addEventListener("DOMContentLoaded", () => {
   // Start initial cooldown automatically
   startVerifyCountdown(resendBtn, countdownEl);
 });
+
+/* =========================
+LOGIN PAGE SESSION / AUTOFILL BOOTSTRAP
+========================= */
+async function initLoginPage() {
+  const emailEl = document.getElementById("loginEmail");
+  const passwordEl = document.getElementById("loginPassword");
+  const loginBtn = document.querySelector('.primary-btn[onclick="login()"]');
+  if (!emailEl || !passwordEl) return;
+
+  // Never show the login form to a browser that already has an Appwrite session.
+  try {
+    await account.get();
+    window.location.replace("dashboard.html");
+    return;
+  } catch (_) {
+    // No active session: stay on login page.
+  }
+
+  // Browser password managers / Android credential prompts can fill the fields
+  // without firing normal input/change events. Poll briefly so "Use this account"
+  // completes the actual Appwrite login instead of stopping after autofill.
+  let attempts = 0;
+  const maxAttempts = 40;
+  const tryAutofillLogin = async () => {
+    attempts++;
+    if (document.visibilityState === "hidden") return;
+    const email = String(emailEl.value || "").trim();
+    const password = String(passwordEl.value || "").trim();
+    if (email && password) {
+      if (loginBtn) loginBtn.disabled = true;
+      await login();
+      return;
+    }
+    if (attempts < maxAttempts) setTimeout(tryAutofillLogin, 250);
+  };
+  setTimeout(tryAutofillLogin, 250);
+}
+
+document.addEventListener("DOMContentLoaded", initLoginPage);
 
 /* =========================
 UNUSED / EXPERIMENTAL / FUTURE CODE

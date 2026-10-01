@@ -493,55 +493,45 @@ function findHeaderLabelsInItem(item) {
   }));
 }
 
+const VERIFY_COMPOSITE_HEADERS = [
+  "value date", "posting date", "transaction date", "transaction datetime",
+  "transaction time", "customer name", "credit amount", "amount credited",
+  "amount received", "transaction details", "transaction description",
+  "reference code", "trace code", "account name", "account number"
+];
+
+function isKnownHeaderText(text) {
+  const normalized = normalizeHeaderWord(text);
+  return VERIFY_HEADER_PATTERNS.some(p => normalizeHeaderWord(p) === normalized);
+}
+
 function groupHeaderCells(headerRow) {
-  const items = [...headerRow.items]
-    .filter(it => String(it.text || "").trim())
-    .sort((a, b) => a.x - b.x);
+  const items=[...headerRow.items].filter(it=>String(it.text||"").trim()).sort((a,b)=>a.x-b.x);
+  const cells=[];
+  for(let i=0;i<items.length;i++){
+    const single=String(items[i].text||"").replace(/\s+/g," ").trim();
+    const singleNorm=normalizeHeaderWord(single);
 
-  const cells = [];
-  const patterns = [...VERIFY_HEADER_PATTERNS].sort((a,b) => b.length - a.length);
-
-  // PDF.js may split one visible header into several text fragments, e.g.
-  // ["Reference", "/", "Code"]. Merge only when the combined visible text
-  // is a known header. This prevents fragments such as "n" or "0" from
-  // becoming fake columns.
-  for (let i = 0; i < items.length; i++) {
-    let best = null;
-    let bestEnd = i;
-    for (let end = i; end < Math.min(items.length, i + 4); end++) {
-      const candidate = items.slice(i, end + 1).map(x => String(x.text || '').trim()).join(' ').replace(/\s+/g, ' ').trim();
-      const norm = normalizeHeaderWord(candidate);
-      const matched = patterns.find(p => normalizeHeaderWord(p) === norm);
-      if (matched) {
-        best = matched;
-        bestEnd = end;
-      }
+    // Do not merge two legitimate adjacent headers such as Date + Time or
+    // Name + Description merely because their combined spelling resembles a
+    // known label. Composite headers are merged only from an explicit allowlist.
+    let composite=null, compositeEnd=i;
+    for(let end=i+1;end<Math.min(items.length,i+4);end++){
+      const candidate=items.slice(i,end+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim().toLowerCase();
+      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) { composite=candidate; compositeEnd=end; }
     }
-    if (best) {
-      const first = items[i], last = items[bestEnd];
-      cells.push({
-        x: Number(first.x) || 0,
-        end: (Number(last.x)||0) + (Number(last.width)||0),
-        center: ((Number(first.x)||0) + ((Number(last.x)||0)+(Number(last.width)||0))) / 2,
-        text: items.slice(i,bestEnd+1).map(x => String(x.text||'').trim()).join(' ').replace(/\s+/g,' ').trim()
-      });
-      i = bestEnd;
+
+    if(composite){
+      const first=items[i],last=items[compositeEnd];
+      cells.push({x:Number(first.x)||0,end:(Number(last.x)||0)+(Number(last.width)||0),center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,text:items.slice(i,compositeEnd+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim()});
+      i=compositeEnd;
       continue;
     }
 
-    const single = String(items[i].text || '').replace(/\s+/g,' ').trim();
-    if (patterns.some(p => normalizeHeaderWord(p) === normalizeHeaderWord(single))) {
-      cells.push({
-        x: Number(items[i].x)||0,
-        end: (Number(items[i].x)||0)+(Number(items[i].width)||0),
-        center: (Number(items[i].x)||0)+(Number(items[i].width)||0)/2,
-        text: single
-      });
+    if(isKnownHeaderText(single)){
+      cells.push({x:Number(items[i].x)||0,end:(Number(items[i].x)||0)+(Number(items[i].width)||0),center:(Number(items[i].x)||0)+(Number(items[i].width)||0)/2,text:single});
     }
-    // Unknown fragments are deliberately ignored. They are not promoted to
-    // phantom columns.
   }
-
   return cells;
 }
 
@@ -582,75 +572,54 @@ function detectHeaderRow(rows) {
 }
 
 function buildColumnBoundaries(headerRow) {
-  const cells = groupHeaderCells(headerRow)
-    .map(cell => ({
-      x: Number(cell.x) || 0,
-      end: (Number(cell.x) || 0) + (Number(cell.width) || 0),
-      center: Number(cell.center),
-      header: cell.text
-    }))
-    .filter(c => Number.isFinite(c.center))
-    .sort((a, b) => a.center - b.center);
-
-  if (!cells.length) return [];
-
-  // Do NOT use the left edge of the header as a data-column boundary.
-  // Bank-statement PDFs commonly center header labels inside a wider column,
-  // while transaction text starts considerably to the left of that label.
-  // Using the header left edge therefore shifts every data cell one column
-  // to the left (Date absorbs Time, Time absorbs Name, etc.).
-  //
-  // Instead, boundaries are the midpoints between adjacent header CENTERS.
-  // The first/last boundaries extend outward around the first/last centers.
-  const boundaries = cells.map((cell, i) => {
-    const previous = cells[i - 1];
-    const next = cells[i + 1];
-    const left = previous
-      ? (previous.center + cell.center) / 2
-      : cell.center - Math.max(24, (cell.center - cell.x) + 24);
-    const right = next
-      ? (cell.center + next.center) / 2
-      : cell.center + Math.max(24, (cell.end - cell.center) + 24);
-
-    return {
-      x: left,
-      end: right,
-      center: cell.center,
-      header: cell.header
-    };
+  const cells = groupHeaderCells(headerRow).map(cell => ({
+    x:Number(cell.x)||0,
+    end:Number.isFinite(Number(cell.end)) ? Number(cell.end) : (Number(cell.x)||0)+Math.max(0,Number(cell.width)||0),
+    center:Number(cell.center),
+    header:String(cell.text||"").trim()
+  })).filter(c=>Number.isFinite(c.center)).sort((a,b)=>a.x-b.x);
+  if(!cells.length)return [];
+  // Use header LEFT edges as the column anchors. Header labels are usually
+  // centered inside their cells, while transaction text starts much farther
+  // left. Midpoints between header left edges therefore give a better initial
+  // data band than midpoints between header centers.
+  return cells.map((c,i)=>{
+    const prev=cells[i-1],next=cells[i+1];
+    const left=prev?(prev.x+c.x)/2:c.x-Math.max(24,c.x-((c.end+c.x)/2)+20);
+    const right=next?(c.x+next.x)/2:c.end+Math.max(24,c.end-c.x+20);
+    return {x:left,end:right,center:c.center,header:c.header,headerX:c.x,headerEnd:c.end};
   });
-
-  return boundaries;
 }
-
-function assignToColumn(x, width, boundaries) {
+function columnAtX(x,boundaries) {
   if (!boundaries.length) return -1;
-  const center = (Number(x) || 0) + Math.max(0, Number(width) || 0) / 2;
-
-  for (let i = 0; i < boundaries.length; i++) {
-    if (center >= boundaries[i].x && center < boundaries[i].end) return i;
-  }
-
-  // For text that slightly crosses an inferred boundary, choose the nearest
-  // column center rather than forcing it into the previous column.
-  let best = 0;
-  let distance = Infinity;
-  boundaries.forEach((b, i) => {
-    const d = Math.abs(center - b.center);
-    if (d < distance) { distance = d; best = i; }
-  });
+  for (let i=0;i<boundaries.length;i++) if (x>=boundaries[i].x && x<boundaries[i].end) return i;
+  let best=0,d=Infinity;
+  boundaries.forEach((b,i)=>{const n=Math.abs(x-b.center);if(n<d){d=n;best=i;}});
   return best;
 }
-
-function splitItemAcrossColumns(item, boundaries) {
-  const text = String(item.text || '').trim();
-  if (!text || !boundaries.length) return [];
-
-  // Never slice a PDF.js text item character-by-character. Assign the
-  // COMPLETE fragment to the physical column containing its center. This
-  // preserves names, references, amounts and long descriptions intact.
-  const col = assignToColumn(item.x, item.width, boundaries);
-  return col >= 0 ? [{ col, text }] : [];
+function assignToColumn(x,width,boundaries) {
+  if (!boundaries.length) return -1;
+  return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
+}
+function estimateTextFragmentPositions(item) {
+  const text=String(item.text||""), x=Number(item.x)||0, width=Math.max(0,Number(item.width)||0);
+  if(!text||width<=0)return [];
+  const charWidth=width/text.length, parts=[], re=/\S+/g; let m;
+  while((m=re.exec(text))){const left=x+m.index*charWidth,right=x+(m.index+m[0].length)*charWidth;parts.push({text:m[0],center:(left+right)/2});}
+  return parts;
+}
+function splitItemAcrossColumns(item,boundaries) {
+  const text=String(item.text||"").replace(/\s+/g," ").trim();
+  if(!text||!boundaries.length)return [];
+  const x=Number(item.x)||0,width=Math.max(0,Number(item.width)||0),end=x+width;
+  const center=x+width/2;
+  const first=columnAtX(x+Math.min(0.5,width/2),boundaries),last=columnAtX(Math.max(x,end-Math.min(0.5,width/2)),boundaries);
+  const crossed=boundaries.filter(b=>b.x>x+0.5&&b.x<end-0.5).length;
+  if(crossed<=1||first===last||width<=0)return [{col:columnAtX(center,boundaries),text}];
+  const groups=new Map();
+  estimateTextFragmentPositions({...item,text}).forEach(part=>{const col=columnAtX(part.center,boundaries);if(col<0)return;if(!groups.has(col))groups.set(col,[]);groups.get(col).push(part.text);});
+  if(!groups.size)return [{col:columnAtX(center,boundaries),text}];
+  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([col,words])=>({col,text:words.join(" ")}));
 }
 
 function rowLooksLikeRepeatedHeader(cells, headers) {
@@ -684,39 +653,51 @@ function rowLooksLikeTransaction(cells, headers) {
 }
 
 
-function cleanExtractedCell(value, header = "") {
-  let text = String(value ?? "")
-    .normalize("NFKC")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
-    .replace(/[\u00A0\u2007\u202F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const h = normalizeHeaderLabel(header);
-
-  // PDF fonts sometimes expose the naira glyph as a detached "n"/"0".
-  // Remove only an isolated leading artifact when the remainder is clearly
-  // a monetary/reference value; do not globally strip legitimate letters.
-  if (h === "credit" || h === "debit" || h === "balance") {
-    text = text.replace(/^(?:n|ngn|₦|□|■|0\s*)(?=\d)/i, "");
-  }
-  if (h === "reference") {
-    text = text.replace(/^(?:□|■|n)(?=\d{5,})/i, "");
-  }
-
-  // Remove common extraction-only square glyphs left behind by unsupported
-  // currency fonts, but keep real alphanumeric cell content intact.
-  text = text.replace(/^[□■]+(?=\d)/, "");
-
-  return text.trim();
+function stripExtractionArtifacts(text){
+  return String(text||"").normalize("NFKC").replace(/[\u0000-\u001F]/g,"").replace(/[\u00A0\u2007\u202F]/g," ").replace(/[□■�]/g," ").replace(/\s+/g," ").trim();
 }
+function cleanExtractedCell(value,header=""){
+  let text=stripExtractionArtifacts(value), h=normalizeHeaderLabel(header);
+  if(h==="credit"||h==="debit"||h==="balance") text=text.replace(/^[-–—]+\s*/,"").replace(/^(?:[nNoO0]|[0-9])\s+(?=(?:₦|NGN|N)\b)/i,"").replace(/^(?:[nNoO0])(?=\s*\d)/i,"").trim();
+  if(h==="reference") text=text.replace(/^[|IlOoNn]+\s*(?=\d{5,})/i,"").trim();
+  return text;
+}
+function cleanRowCells(cells,headers){return cells.map((v,i)=>cleanExtractedCell(v,headers[i]||""));}
+function amountCandidatesFromText(raw){
+  const source=stripExtractionArtifacts(raw); if(!source||!/\d/.test(source))return [];
+  const found=new Map();
+  const add=(txt,strength)=>{
+    let c=String(txt||"").replace(/[₦$€£]|\b(?:NGN|USD|EUR|GBP)\b/gi,"").replace(/^[^\d]+|[^\d.,\s]+$/g,"").trim();
+    if(!c||/^[-(]/.test(c))return;
+    c=c.replace(/(?<=\d)\s+(?=\d{3}(?:\D|$))/g,",").replace(/(\d)\s+(\d{2})$/g,"$1.$2");
+    if(/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(c))c=c.replace(/\./g,"").replace(",",".");else c=c.replace(/,/g,"");
+    const n=Number.parseFloat(c);if(!Number.isFinite(n)||n<=0)return;
+    const v=Math.round(n*100)/100,k=v.toFixed(2),old=found.get(k);if(!old||strength>old.strength)found.set(k,{value:v,strength,raw:txt});
+  };
+  let m,re=/(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*([0-9][0-9,.\s]{0,24})/gi;
+  while((m=re.exec(source))){const t=m[1],d=t.match(/^\s*\d{1,3}(?:(?:,|\.)\d{3})*(?:[.,]\d{1,2})?(?!\d)(?!\s+\d)/);if(d)add(d[0],100);const sp=t.match(/^\s*\d{1,3}\s+\d{3}(?:\s+\d{3})?(?:[.,]\d{1,2})?/);if(sp)add(sp[0],98);}
+  (source.match(/\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?\b/g)||[]).forEach(v=>add(v,75));
+  (source.match(/(?<![\d,\.])\d+(?:\.\d{1,2})(?![\d,])/g)||[]).forEach(v=>add(v,45));
+  if(/^\s*(?:[₦N]|NGN)?\s*\d{3,9}(?:\.\d{1,2})?\s*$/i.test(source))add(source,35);
+  const values=[...found.values()];
+  const filtered=values.filter(item=>{
+    if(item.strength>=75)return true;
+    const digits=String(Math.round(item.value*100)/100).replace(/\.00$/,'');
+    return !values.some(other=>other!==item && other.strength>=item.strength+20 && String(Math.trunc(other.value)).endsWith(digits));
+  });
+  return filtered.sort((a,b)=>b.strength-a.strength||b.value-a.value);
+}
+function extractAmount(raw){const c=amountCandidatesFromText(raw);return c.length?c[0].value:null;}
+function extractAllAmounts(text){return amountCandidatesFromText(text).map(x=>x.value);}
 
-function cleanRowCells(cells, headers) {
-  return cells.map((value, i) => cleanExtractedCell(value, headers[i] || ""));
+function mergeContinuationRows(rows,boundaries,headers){
+  if(!rows.length||!boundaries.length)return rows;const out=[];
+  const hasDateOrAmount=items=>{const t=items.map(x=>x.text||"").join(" ");return !!extractDate(t)||extractAmount(t)!==null;};
+  for(const row of rows){if(!out.length){out.push(row);continue;}const prev=out[out.length-1],text=row.items.map(x=>String(x.text||"").trim()).filter(Boolean).join(" ");const gap=Math.abs(Number(prev.y)-Number(row.y)),fx=Number(row.items[0]?.x)||0;const textCol=boundaries.some((b,i)=>{const h=normalizeHeaderLabel(headers[i]||"");return(h==="name"||h==="description")&&fx>=b.x-12&&fx<=b.end+12;});if(text&&gap<=18&&!hasDateOrAmount(row.items)&&textCol&&hasDateOrAmount(prev.items)){prev.items.push(...row.items);prev.items.sort((a,b)=>a.x-b.x);}else out.push(row);}return out;
 }
 
 function buildTableFromPage(pageItems, schemaHint = null) {
-  const rows = groupIntoRows(pageItems);
+  let rows = groupIntoRows(pageItems);
 
   let headerIdx = -1;
   let boundaries = [];
@@ -742,6 +723,8 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     // expose a real header, that position is not considered a column.
     if (headers.length !== boundaries.length) return null;
   }
+
+  rows = mergeContinuationRows(rows, boundaries, headers);
 
   const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0;
   const tableRows = [];
@@ -1155,91 +1138,30 @@ async function startImageProcessing() {
   await runStatementFirstVerification();
 }
 
-async function ocrPaymentImage(order, worker) {
-  const imageId = String(order.paymentProof);
-  const url = paymentImageUrl(imageId);
-
-  let rawText = "";
-  let firstResult = null;
-
-  if (worker) {
-    // PSM 6 is a good default for the structured receipt/screen images.
-    try {
-      await worker.setParameters({ tessedit_pageseg_mode: "6" });
-    } catch (_) {}
-    firstResult = await worker.recognize(url);
-    rawText = firstResult?.data?.text || "";
-  } else {
-    firstResult = await Tesseract.recognize(url, "eng", {
-      tessedit_pageseg_mode: "6"
-    });
-    rawText = firstResult?.data?.text || "";
-  }
-
-  let searchable = buildSearchableImageRecord(rawText);
-
-  // A common receipt-OCR failure is losing a digit/group separator from a
-  // currency value, e.g. reading "₦18,500.00" as "₦18.00". Do not guess the
-  // missing digits. Instead, run a second segmentation pass and merge its OCR
-  // evidence with the first pass when the first amount looks suspicious.
-  const suspiciousCurrency = /(?:₦|NGN|N)\s*\d{1,3}\.\d{1,2}(?!\d)/i.test(rawText) &&
-    searchable.amounts.some(a => a > 0 && a < 100);
-
-  if (suspiciousCurrency) {
-    let secondText = "";
-    try {
-      if (worker) {
-        await worker.setParameters({ tessedit_pageseg_mode: "11" });
-        const second = await worker.recognize(url);
-        secondText = second?.data?.text || "";
-        await worker.setParameters({ tessedit_pageseg_mode: "6" });
-      } else {
-        const second = await Tesseract.recognize(url, "eng", {
-          tessedit_pageseg_mode: "11"
-        });
-        secondText = second?.data?.text || "";
-      }
-    } catch (err) {
-      console.warn("Secondary OCR pass failed:", err);
-    }
-
-    if (secondText) {
-      const secondary = buildSearchableImageRecord(secondText);
-      rawText = `${rawText}\n${secondText}`;
-      searchable = buildSearchableImageRecord(rawText);
-    }
-  }
-
-  return {
-    id: imageId,
-    orderIds: [order.$id],
-    order,
-    rawText,
-    normalizedText: searchable.normalizedText,
-    tokens: searchable.tokens,
-    amounts: searchable.amounts,
-    dates: searchable.dates,
-    times: searchable.times,
-    ocrError: false
-  };
+async function ocrPaymentImage(order,worker){
+  const imageId=String(order.paymentProof),url=paymentImageUrl(imageId),texts=[];
+  const recognize=async(source,psm)=>{if(worker){try{await worker.setParameters({tessedit_pageseg_mode:String(psm)});}catch(_){}const r=await worker.recognize(source);return r?.data?.text||"";}const r=await Tesseract.recognize(source,"eng",{tessedit_pageseg_mode:String(psm)});return r?.data?.text||"";};
+  texts.push(await recognize(url,6)); let q=buildSearchableImageRecord(texts.join("\n"));
+  const weak=q.amounts.length===0||q.dates.length===0||q.amounts.some(a=>a>0&&a<100);
+  if(weak)try{texts.push(await recognize(url,11));}catch(e){console.warn("Sparse OCR pass failed",e);}
+  q=buildSearchableImageRecord(texts.join("\n"));
+  if(q.amounts.length===0||q.dates.length===0)try{texts.push(await recognize(url,12));}catch(e){console.warn("Block OCR pass failed",e);}
+  const rawText=texts.filter(Boolean).join("\n--- OCR PASS ---\n"); q=buildSearchableImageRecord(rawText);
+  const repaired=new Map((q.amountEvidence||[]).map(e=>[e.value.toFixed(2),e]));
+  for(const e of q.amountEvidence||[]){const rawAmount=String(e.raw||"");const digits=rawAmount.replace(/\D/g,"");if(e.strength>=90&&/(?:₦|NGN|\bN\b)/i.test(rawAmount)&&digits.length>=5&&digits.length<=7){const v=Number(digits.slice(1));if(Number.isFinite(v)&&v>=100&&!repaired.has(v.toFixed(2)))repaired.set(v.toFixed(2),{value:v,strength:Math.max(1,e.strength-45),raw:e.raw,repaired:true});}}
+  // If OCR preserved the currency marker separately from the numeric token,
+  // derive the same conservative one-leading-digit repair from raw OCR, but
+  // only when the repaired value actually exists in the statement.
+  const currencyRaw=rawText.match(/(?:₦|NGN|\bN\b)\s*[0-9][0-9,\.\s]{4,24}/gi)||[];
+  currencyRaw.forEach(fragment=>{const digits=fragment.replace(/\D/g,"");if(digits.length>=5&&digits.length<=7){const original=Number(digits);const repairedValue=Number(digits.slice(1));const statementValues=new Set((verifyState.validStatementRows||[]).filter(r=>r.credit>0).map(r=>Number(r.credit).toFixed(2)));if(statementValues.has(repairedValue.toFixed(2))&&!statementValues.has(original.toFixed(2)))repaired.set(repairedValue.toFixed(2),{value:repairedValue,strength:40,raw:fragment,repaired:true});}});
+  q.amountEvidence=[...repaired.values()];
+  q.amounts=q.amountEvidence.filter(e=>!e.repaired).map(e=>e.value);
+  return {id:imageId,orderIds:[order.$id],order,rawText,normalizedText:q.normalizedText,tokens:q.tokens,amounts:q.amounts,amountEvidence:q.amountEvidence,dates:q.dates,times:q.times,ocrError:false};
 }
 
-function mergeDuplicateImageRecords(images) {
-  const map = new Map();
-
-  images.forEach(img => {
-    const existing = map.get(img.id);
-    if (!existing) {
-      map.set(img.id, img);
-      return;
-    }
-
-    existing.orderIds = [...new Set([
-      ...(existing.orderIds || []),
-      ...(img.orderIds || [])
-    ])];
-  });
-
+function mergeDuplicateImageRecords(images){
+  const map=new Map();
+  images.forEach(img=>{const existing=map.get(img.id);if(!existing){map.set(img.id,img);return;}existing.orderIds=[...new Set([...(existing.orderIds||[]),...(img.orderIds||[])])];existing.amounts=[...new Set([...(existing.amounts||[]),...(img.amounts||[])])];existing.amountEvidence=[...(existing.amountEvidence||[]),...(img.amountEvidence||[])];existing.dates=[...new Set([...(existing.dates||[]),...(img.dates||[])])];existing.times=[...new Set([...(existing.times||[]),...(img.times||[])])];});
   return [...map.values()];
 }
 
@@ -1345,80 +1267,6 @@ function extractAllTimes(text) {
   return [...found];
 }
 
-function extractAmount(raw) {
-  if (raw === null || raw === undefined) return null;
-
-  let text = String(raw).trim();
-  if (!/\d/.test(text)) return null;
-
-  text = text
-    .replace(/₦|NGN|N|USD|\$|EUR|€|GBP|£/gi, "")
-    .replace(/\bamount\b\s*:?\s*/gi, "")
-    .trim();
-
-  // Parentheses are treated as negative values. They are never valid Credit.
-  const negative = /^\(.*\)$/.test(text) || /^-/.test(text);
-  if (negative) return null;
-
-  const europeanStyle = /^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(text);
-
-  if (europeanStyle) {
-    text = text.replace(/\./g, "").replace(",", ".");
-  } else {
-    text = text.replace(/,/g, "");
-  }
-
-  const num = Number.parseFloat(text);
-  if (!Number.isFinite(num)) return null;
-
-  return Math.round(num * 100) / 100;
-}
-
-function extractAllAmounts(text) {
-  const found = new Set();
-  const source = String(text || "").normalize("NFKC");
-
-  // Keep currency-labelled amounts as the strongest OCR evidence. OCR can
-  // separate grouped digits (e.g. "N 18 500.00") or detach a comma, so we
-  // also inspect a short window after each currency marker and reconstruct
-  // contiguous numeric groups without inventing digits.
-  const currencyRe = /(?:₦|NGN|N|USD|\$|EUR|€|GBP|£)\s*([^\n]{1,36})/gi;
-  let m;
-  while ((m = currencyRe.exec(source))) {
-    const tail = m[1];
-
-    // Normal, grouped or decimal amount immediately after currency marker.
-    const direct = tail.match(/^\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:[.,][0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)/);
-    if (direct) {
-      const amount = extractAmount(direct[1]);
-      if (amount !== null && amount > 0) found.add(amount.toFixed(2));
-    }
-
-    // OCR sometimes turns "18,500.00" into "18 500.00" or "18 500 00".
-    // Reconstruct only when the numeric pieces are adjacent in the currency
-    // window; this does not guess missing digits.
-    const grouped = tail.match(/^\s*(\d{1,3})[\s,](\d{3})(?:[.,](\d{1,2}))?/);
-    if (grouped) {
-      const amountText = `${grouped[1]},${grouped[2]}${grouped[3] ? `.${grouped[3]}` : ""}`;
-      const amount = extractAmount(amountText);
-      if (amount !== null && amount > 0) found.add(amount.toFixed(2));
-    }
-  }
-
-  // Also collect unlabelled grouped/decimal amounts. These are weaker OCR
-  // evidence but useful for receipts where the currency symbol was missed.
-  const matches = source.match(
-    /\b\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?\b|\b\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?\b|\b\d+(?:\.\d{1,2})\b/g
-  ) || [];
-
-  matches.forEach(matched => {
-    const amount = extractAmount(matched);
-    if (amount !== null && amount > 0) found.add(amount.toFixed(2));
-  });
-
-  return [...found].map(Number);
-}
-
 function normalizeSearchText(s) {
   return String(s || "")
     .normalize("NFKC")
@@ -1454,13 +1302,8 @@ function buildSearchableImageRecord(rawText) {
   const normalizedText = normalizeSearchText(rawText);
   const tokens = tokenizeSearchText(rawText);
 
-  return {
-    normalizedText,
-    tokens,
-    amounts: extractAllAmounts(rawText),
-    dates: extractAllDates(rawText),
-    times: extractAllTimes(rawText)
-  };
+  const amountEvidence=amountCandidatesFromText(rawText);
+  return {normalizedText,tokens,amounts:amountEvidence.map(x=>x.value),amountEvidence,dates:extractAllDates(rawText),times:extractAllTimes(rawText)};
 }
 
 /* =========================================================
@@ -1480,8 +1323,8 @@ async function buildImageIndexes() {
   const tokenIndex = new Map();
 
   verifyState.ocrImages.forEach((image, index) => {
-    image.amounts.forEach(amount =>
-      addIndexValue(amountIndex, Number(amount).toFixed(2), image.id)
+    (image.amountEvidence || image.amounts.map(v => ({value:v}))).forEach(e =>
+      addIndexValue(amountIndex, Number(e.value).toFixed(2), image.id)
     );
 
     image.dates.forEach(date =>
@@ -1528,7 +1371,8 @@ function intersectIds(a, b) {
 }
 
 function imageHasAmount(image, amount) {
-  return image.amounts.some(v => Math.abs(Number(v) - Number(amount)) < 0.01);
+  const target=Number(amount);if(!Number.isFinite(target))return false;
+  return (image.amountEvidence||image.amounts.map(v=>({value:v}))).some(e=>Math.abs(Number(e.value)-target)<0.01);
 }
 
 function imageHasDate(image, date) {
@@ -1544,7 +1388,7 @@ function textFieldMatchesImage(value, image) {
 
   if (image.normalizedText.includes(normalizedField)) return true;
 
-  const tokens = meaningfulTokens(field);
+  const tokens = meaningfulTokens(field).filter(t => !/^\d+$/.test(t));
   if (!tokens.length) return false;
 
   const imageTokens = new Set((image.tokens || []).map(t => t.toLowerCase()));
@@ -1777,8 +1621,10 @@ async function runStatementFirstVerification() {
     const candidateRows = [];
     const seenRowIds = new Set();
 
-    for (const amount of image.amounts || []) {
-      const rows = rowsByAmount.get(Number(amount).toFixed(2)) || [];
+    const amountEvidence = image.amountEvidence || (image.amounts || []).map(value => ({ value }));
+    for (const evidence of amountEvidence) {
+      const amount = Number(evidence.value);
+      const rows = rowsByAmount.get(amount.toFixed(2)) || [];
       rows.forEach(row => {
         if (!usedRowIds.has(row.id) && !seenRowIds.has(row.id)) {
           seenRowIds.add(row.id);
@@ -2084,7 +1930,7 @@ function renderVerifyResultCard(result) {
       ${result.matchedImage ? `
         <div class="verify-matched-image">
           <img src="${escapeHtml(paymentImageUrl(result.matchedImage.id))}" alt="Matched payment proof" loading="lazy">
-          <div><strong>Payment image checked</strong><small>${escapeHtml(result.matchedImage.dates?.[0] || "Date not detected")} · ${result.matchedImage.amounts?.[0] != null ? `₦${Number(result.matchedImage.amounts[0]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Amount not detected"}</small></div>
+          <div><strong>Payment image checked</strong><small>${escapeHtml(result.row?.date || result.matchedImage.dates?.[0] || "Date not detected")} · ${result.row?.credit != null ? `₦${Number(result.row.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : (result.matchedImage.amounts?.[0] != null ? `₦${Number(result.matchedImage.amounts[0]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Amount not detected")}</small></div>
         </div>
         <div class="verify-check ok">&#10003; Required fields found in the same payment image</div>
       ` : ""}

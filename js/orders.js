@@ -537,13 +537,10 @@ function renderOrders(orders) {
 
     const summary = getProductSummary(order.formData);
 
-    // Collect values shown in collapsed area
-    const collapsedValues = new Set();
-    parseFormData(order.formData).forEach(f => {
-      if (f.type === "product" && Array.isArray(f.value)) {
-        f.value.forEach(p => collapsedValues.add(`${p.name} x${p.qty}`));
-      }
-    });
+    // Keep a full product representation in the expanded card. The collapsed
+    // summary is intentionally short, but it must never be the only place
+    // where long product/customer content exists.
+    const parsedOrderFields = parseFormData(order.formData);
 
     //normalize amount
     const amounts = normalizeAmount(order.totalAmount);
@@ -556,7 +553,7 @@ function renderOrders(orders) {
       </div>
       
       <div class="order-summary-line">
-        <span class="summary-item">${summary || "No products"}</span>
+        <span class="summary-item">${escapeHtml(summary || "No products")}</span>
         <span class="order-date">${new Date(order.$createdAt).toDateString()}</span>
       </div>
 
@@ -569,20 +566,30 @@ function renderOrders(orders) {
       </div>
 
       <div class="expanded hidden">
-        ${parseFormData(order.formData)
+        ${parsedOrderFields
           .map(f => {
-            let val;
             if (f.type === "product" && Array.isArray(f.value)) {
-              val = f.value.map(p => `${p.name} x${p.qty}`)
-                          .filter(v => !collapsedValues.has(v))
-                          .join(", ");
-            } else {
-              val = f.value;
+              return `
+                <div class="order-field order-field-wide">
+                  <strong>${escapeHtml(f.label || "Products")}:</strong>
+                  <div class="order-products-detail">
+                    ${f.value.map(p => {
+                      const desc = String(p.description || "").trim();
+                      const price = Number(p.price || 0);
+                      return `<div class="order-product-detail">
+                        <div><strong>${escapeHtml(p.name || "Product")}</strong> × ${Number(p.qty || 0).toLocaleString()}</div>
+                        ${desc ? `<div class="order-product-description">${escapeHtml(desc)}</div>` : ""}
+                        ${price ? `<div class="order-product-price">₦${price.toLocaleString("en-NG")} each</div>` : ""}
+                      </div>`;
+                    }).join("")}
+                  </div>
+                </div>`;
             }
+            const val = String(f.value ?? "").trim();
             if (!val) return "";
             return `
               <div class="order-field">
-                <strong>${f.label}:</strong> ${val}
+                <strong>${escapeHtml(f.label || "Field")}:</strong> ${escapeHtml(val)}
               </div>
             `;
           })
