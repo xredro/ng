@@ -652,36 +652,110 @@ function buildColumnBoundaries(headerRow) {
 
   if (!cells.length) return [];
 
-  // Column zones are created from the CENTER of the real header cells.
-  // Boundaries are halfway between neighboring centers. This prevents a
-  // left-shifted data fragment from being swallowed by the preceding column.
+  /*
+   * Header-anchored column model.
+   *
+   * The header text itself is the most reliable structural landmark in a
+   * selectable PDF. Keep its real bounding box (headerLeft/headerRight), then
+   * create a wider data corridor around it. The corridor is bounded by the
+   * midpoint between neighboring header centres, so right-aligned numbers and
+   * wider data cells can still belong to the correct header.
+   *
+   * This gives us two levels of evidence:
+   *   1. headerCore  = the actual physical header box
+   *   2. column zone = the usable area for data underneath that header
+   */
   return cells.map((c, i) => {
     const prev = cells[i-1];
     const next = cells[i+1];
-    const left = prev ? (prev.center + c.center) / 2 : Math.min(c.x, c.center - Math.max(24, c.end-c.x));
-    const right = next ? (c.center + next.center) / 2 : Math.max(c.end, c.center + Math.max(24, c.end-c.x));
+
+    const leftCorridor = prev
+      ? (prev.center + c.center) / 2
+      : Math.min(c.x, c.center - Math.max(24, c.end-c.x));
+    const rightCorridor = next
+      ? (c.center + next.center) / 2
+      : Math.max(c.end, c.center + Math.max(24, c.end-c.x));
+
     return {
-      x: left,
-      end: right,
+      x: leftCorridor,
+      end: rightCorridor,
       center: c.center,
       header: c.header,
       headerX: c.x,
-      headerEnd: c.end
+      headerEnd: c.end,
+      headerWidth: Math.max(0, c.end - c.x),
+      headerCenterX: c.center,
+      // Kept separately so matching can distinguish actual header geometry
+      // from the wider data corridor.
+      headerCore: {
+        x: c.x,
+        end: c.end,
+        center: c.center,
+        width: Math.max(0, c.end - c.x)
+      }
     };
   });
 }
 
+function xRangesOverlap(aLeft, aRight, bLeft, bRight) {
+  return Math.max(aLeft, bLeft) < Math.min(aRight, bRight);
+}
+
+function columnDirectlyUnderHeader(x, width, boundary) {
+  const left = Number(x) || 0;
+  const right = left + Math.max(0, Number(width) || 0);
+  const center = (left + right) / 2;
+  const coreLeft = Number(boundary.headerX) || 0;
+  const coreRight = Number(boundary.headerEnd) || coreLeft;
+
+  // A fragment whose centre is inside the real header box is a direct hit.
+  if (center >= coreLeft && center <= coreRight) return true;
+
+  // This also catches right/left-aligned values whose box overlaps the
+  // physical header box even though their centre sits just outside it.
+  return xRangesOverlap(left, right, coreLeft, coreRight);
+}
+
 function columnAtX(x,boundaries) {
   if (!boundaries.length) return -1;
-  for (let i=0;i<boundaries.length;i++) if (x>=boundaries[i].x && x<boundaries[i].end) return i;
+
+  // The header's physical X span is the strongest anchor. This matters for
+  // compact headers such as "Credit" where the text itself is narrower than
+  // the data column.
+  for (let i=0;i<boundaries.length;i++) {
+    const b = boundaries[i];
+    const left = Number(b.headerX);
+    const right = Number(b.headerEnd);
+    if (Number.isFinite(left) && Number.isFinite(right) && x >= left && x <= right) {
+      return i;
+    }
+  }
+
+  // Otherwise use the data corridor created from neighbouring header centres.
+  for (let i=0;i<boundaries.length;i++) {
+    if (x>=boundaries[i].x && x<boundaries[i].end) return i;
+  }
+
   let best=0,d=Infinity;
-  boundaries.forEach((b,i)=>{const n=Math.abs(x-b.center);if(n<d){d=n;best=i;}});
+  boundaries.forEach((b,i)=>{
+    const n=Math.abs(x-b.center);
+    if(n<d){d=n;best=i;}
+  });
   return best;
 }
+
 function assignToColumn(x,width,boundaries) {
   if (!boundaries.length) return -1;
+
+  // First try the actual header-sized horizontal footprint. This is the
+  // "directly underneath the header" rule requested for the spatial table.
+  for (let i=0;i<boundaries.length;i++) {
+    if (columnDirectlyUnderHeader(x, width, boundaries[i])) return i;
+  }
+
   return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
 }
+
 function estimateTextFragmentPositions(item) {
   const text = String(item.text || '').replace(/\s+/g, ' ').trim();
   const x = Number(item.x) || 0;
@@ -706,6 +780,24 @@ function splitItemAcrossColumns(item, boundaries) {
 
   const words = estimateTextFragmentPositions(item);
   if (!words.length) return [];
+
+  // A normal single-column PDF item can often be assigned directly from its
+  // own rectangle. Do this before token splitting, but only when the item is
+  // not materially crossing a neighbouring corridor.
+  const itemLeft = Number(item.x) || 0;
+  const itemRight = itemLeft + Math.max(0, Number(item.width) || 0);
+  const directCandidates = boundaries
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => xRangesOverlap(itemLeft, itemRight, Number(b.x), Number(b.end)));
+
+  if (directCandidates.length === 1) {
+    const direct = directCandidates[0];
+    const directCol = direct.i;
+    const coreHit = columnDirectlyUnderHeader(itemLeft, Number(item.width)||0, direct.b);
+    if (coreHit || itemRight - itemLeft <= Math.max(80, direct.b.headerWidth * 3)) {
+      return [{ col: directCol, text }];
+    }
+  }
 
   const groups = new Map();
   words.forEach(word => {
