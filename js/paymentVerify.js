@@ -756,67 +756,170 @@ function assignToColumn(x,width,boundaries) {
   return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
 }
 
-function estimateTextFragmentPositions(item) {
+function estimateTextFragmentPositions(item, boundaries = []) {
   const text = String(item.text || '').replace(/\s+/g, ' ').trim();
   const x = Number(item.x) || 0;
   const width = Math.max(0, Number(item.width) || 0);
   if (!text) return [];
 
-  const words = [];
+  /*
+   * PDF.js can legally return one TextItem for several visually separate
+   * cells.  TextItem.width is the width of the WHOLE item, so blindly using
+   * one character-per-pixel spacing causes the internal columns to collapse.
+   *
+   * We still need an approximate position for each token, but we deliberately
+   * keep the original whitespace. Large whitespace gaps are useful evidence
+   * of a cell boundary and are therefore represented as gaps rather than
+   * silently treating every character as equally spaced.
+   */
+  const raw = String(item.text || '').replace(/\r?\n/g, ' ');
+  const tokens = [];
   const re = /\S+/g;
   let m;
-  const charWidth = width > 0 && text.length ? width / text.length : 0;
-  while ((m = re.exec(text))) {
-    const left = x + m.index * charWidth;
-    const right = x + (m.index + m[0].length) * charWidth;
-    words.push({ text: m[0], x: left, right, center: (left + right) / 2 });
+  while ((m = re.exec(raw))) {
+    tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
   }
-  return words;
+  if (!tokens.length) return [];
+
+  // Character-width estimate is only a starting coordinate. The assignment
+  // stage below can move a token to the only plausible column when the
+  // approximate coordinate conflicts with the table schema.
+  const charWidth = width > 0 && raw.length ? width / raw.length : 0;
+  return tokens.map(t => {
+    const left = x + t.start * charWidth;
+    const right = x + t.end * charWidth;
+    return {
+      text: t.text,
+      x: left,
+      right,
+      center: (left + right) / 2,
+      start: t.start,
+      end: t.end
+    };
+  });
+}
+
+function tokenColumnCompatibility(token, boundary, index, boundaries) {
+  const text = String(token || '').trim();
+  const lower = text.toLowerCase();
+  const header = normalizeHeaderLabel(boundary?.header || '');
+  const dateLike = looksLikeDate(text);
+  const timeLike = /^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?$/i.test(text);
+  const amountLike = /^(?:₦|NGN|N|\$|€|£)?\s*\d[\d,.]*$/.test(text);
+  const channelLike = /^(mobile|ussd|web|pos|atm|internet|app|branch)$/i.test(text);
+
+  let score = 0;
+  if (header === 'date' || header === 'datetime') score += dateLike ? 12 : 0;
+  if (header === 'time') score += timeLike ? 12 : 0;
+  if (header === 'debit' || header === 'credit' || header === 'balance') score += amountLike ? 10 : 0;
+  if (header === 'channel') score += channelLike ? 12 : 0;
+  if (header === 'reference') score += /^\d{8,}$/.test(text.replace(/\D/g,'')) ? 12 : 0;
+  if (header === 'description' || header === 'name') score += (!dateLike && !timeLike && !amountLike && !channelLike) ? 2 : 0;
+
+  // Numeric tokens are especially ambiguous between Debit and Credit. Their
+  // left-to-right order is therefore handled by the monotonic solver rather
+  // than by this semantic score alone.
+  return score;
 }
 
 function splitItemAcrossColumns(item, boundaries) {
   const text = String(item.text || '').replace(/\s+/g, ' ').trim();
   if (!text || !boundaries.length) return [];
 
-  const words = estimateTextFragmentPositions(item);
+  const words = estimateTextFragmentPositions(item, boundaries);
   if (!words.length) return [];
 
-  // A normal single-column PDF item can often be assigned directly from its
-  // own rectangle. Do this before token splitting, but only when the item is
-  // not materially crossing a neighbouring corridor.
   const itemLeft = Number(item.x) || 0;
   const itemRight = itemLeft + Math.max(0, Number(item.width) || 0);
-  const directCandidates = boundaries
+  const overlapColumns = boundaries
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => xRangesOverlap(itemLeft, itemRight, Number(b.x), Number(b.end)));
 
-  if (directCandidates.length === 1) {
-    const direct = directCandidates[0];
-    const directCol = direct.i;
-    const coreHit = columnDirectlyUnderHeader(itemLeft, Number(item.width)||0, direct.b);
-    if (coreHit || itemRight - itemLeft <= Math.max(80, direct.b.headerWidth * 3)) {
-      return [{ col: directCol, text }];
+  // A genuinely single-column item stays intact. The old implementation used
+  // this test too early and therefore swallowed multi-column TextItems.
+  if (overlapColumns.length === 1) {
+    const only = overlapColumns[0];
+    const coreHit = columnDirectlyUnderHeader(itemLeft, Number(item.width)||0, only.b);
+    if (coreHit && itemRight - itemLeft <= Math.max(80, only.b.headerWidth * 4)) {
+      return [{ col: only.i, text }];
     }
   }
 
+  /*
+   * Multi-column TextItems need a different treatment. PDF.js gives us one
+   * bounding box for the whole string, so reconstruct the visual row by
+   * assigning tokens left-to-right while NEVER allowing a token to move back
+   * into an earlier column.
+   *
+   * First pass: use token X against the header-derived corridor.
+   * Second pass: repair obvious semantic violations (date/time/amount/channel/
+   * reference) and keep the sequence monotonic.
+   */
+  const initial = words.map(word => {
+    let best = 0;
+    let bestScore = Infinity;
+    boundaries.forEach((b, i) => {
+      const cx = Number(b.center) || 0;
+      const d = Math.abs(word.center - cx);
+      const semantic = tokenColumnCompatibility(word.text, b, i, boundaries);
+      const score = d - semantic * 8;
+      if (score < bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    });
+    return best;
+  });
+
+  // Dynamic-programming assignment. Columns may stay the same or advance,
+  // but never go backwards. This prevents a compressed TextItem from placing
+  // "Credit" before "Debit" merely because two estimated token centers are
+  // close together.
+  const n = words.length;
+  const k = boundaries.length;
+  const dp = Array.from({length:n}, () => Array(k).fill(Infinity));
+  const prev = Array.from({length:n}, () => Array(k).fill(-1));
+
+  for (let c=0;c<k;c++) {
+    const b=boundaries[c];
+    const d=Math.abs(words[0].center-(Number(b.center)||0));
+    const sem=tokenColumnCompatibility(words[0].text,b,c,boundaries);
+    dp[0][c]=d-sem*8+(c<initial[0] ? 30 : 0);
+  }
+  for (let wi=1;wi<n;wi++) {
+    for (let c=0;c<k;c++) {
+      const b=boundaries[c];
+      const d=Math.abs(words[wi].center-(Number(b.center)||0));
+      const sem=tokenColumnCompatibility(words[wi].text,b,c,boundaries);
+      const tokenCost=d-sem*8+(c<initial[wi] ? 25 : 0);
+      let best=Infinity, bestPrev=-1;
+      for (let pc=0;pc<=c;pc++) {
+        const cost=dp[wi-1][pc]+tokenCost;
+        if(cost<best){best=cost;bestPrev=pc;}
+      }
+      dp[wi][c]=best;
+      prev[wi][c]=bestPrev;
+    }
+  }
+
+  let last=0;
+  for(let c=1;c<k;c++) if(dp[n-1][c]<dp[n-1][last]) last=c;
+  const assignment=new Array(n).fill(0);
+  assignment[n-1]=last;
+  for(let i=n-1;i>0;i--) assignment[i]=prev[i][assignment[i]];
+
+  // Empty intermediate columns are legitimate, especially when Debit is
+  // blank. Do not force a token into them just to make every column populated.
   const groups = new Map();
-  words.forEach(word => {
-    const col = columnAtX(word.center, boundaries);
-    if (col < 0) return;
-    if (!groups.has(col)) groups.set(col, []);
+  words.forEach((word,i)=>{
+    const col=assignment[i];
+    if(!groups.has(col)) groups.set(col,[]);
     groups.get(col).push(word.text);
   });
 
-  // If PDF.js gave us a normal single-column item, this is simply one group.
-  // If it gave us a visually merged item, word positions split it back into
-  // the appropriate columns without ever slicing the actual characters.
-  if (!groups.size) {
-    return [{ col: columnAtX((Number(item.x)||0)+(Number(item.width)||0)/2, boundaries), text }];
-  }
-
   return [...groups.entries()]
     .sort((a,b)=>a[0]-b[0])
-    .map(([col, wordsInColumn]) => ({ col, text: wordsInColumn.join(' ') }));
+    .map(([col, parts])=>({col,text:parts.join(' ')}));
 }
 
 function rowLooksLikeRepeatedHeader(cells, headers) {
