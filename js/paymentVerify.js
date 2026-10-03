@@ -306,7 +306,7 @@ async function loadStatementPdf(buffer, password) {
     );
 
     const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
+    const content = await page.getTextContent({ disableCombineTextItems: true });
     const viewport = page.getViewport({ scale: 1 });
 
     // Keep the PDF's real 2-D coordinate system. We do not need to display
@@ -827,16 +827,39 @@ function expandSpatialTokens(item) {
   const raw = String(item?.text || '').replace(/\r?\n/g, ' ');
   if (!raw.trim()) return [];
 
-  // Prefer the native PDF.js item as a single positioned object. When one
-  // TextItem contains several words, derive approximate token positions from
-  // its actual width. These positions are explicitly marked estimated; native
-  // item coordinates remain the authoritative geometry whenever available.
   const x = Number(item.x) || 0;
   const width = Math.max(0, Number(item.width) || 0);
+
+  // PDF.js is requested with disableCombineTextItems=true. In normal cases
+  // that means this item is already a physically positioned text fragment
+  // (usually a word or a short contiguous piece). Preserve its real bounding
+  // box exactly; do NOT manufacture an artificial position for every
+  // character/word unless the item itself still contains whitespace.
+  if (!/\s/.test(raw.trim())) {
+    return [{
+      id: String(item.id || 'item'),
+      text: raw.trim(),
+      x,
+      right: Number.isFinite(Number(item.right)) ? Number(item.right) : x + width,
+      center: Number.isFinite(Number(item.centerX)) ? Number(item.centerX) : x + width / 2,
+      y: Number(item.y) || 0,
+      centerY: Number.isFinite(Number(item.centerY)) ? Number(item.centerY) : Number(item.y) || 0,
+      width,
+      sourceItemId: item.id,
+      positionConfidence: 'native-item'
+    }];
+  }
+
+  // Some PDFs still emit a short multi-word fragment even with combination
+  // disabled (for example a date such as "21 Aug 2026"). Estimate positions
+  // only inside that single physical fragment. This is explicitly lower
+  // confidence and can never replace a real repeated X lane.
   const matches = [];
   const re = /\S+/g;
   let m;
-  while ((m = re.exec(raw))) matches.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  while ((m = re.exec(raw))) {
+    matches.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  }
   if (!matches.length) return [];
 
   const charWidth = width > 0 && raw.length ? width / raw.length : 0;
@@ -847,10 +870,10 @@ function expandSpatialTokens(item) {
     right: x + t.end * charWidth,
     center: x + ((t.start + t.end) / 2) * charWidth,
     y: Number(item.y) || 0,
-    centerY: Number(item.centerY) || Number(item.y) || 0,
+    centerY: Number.isFinite(Number(item.centerY)) ? Number(item.centerY) : Number(item.y) || 0,
     width: Math.max(0, (t.end - t.start) * charWidth),
     sourceItemId: item.id,
-    positionConfidence: matches.length === 1 ? 'native-item' : 'estimated-token'
+    positionConfidence: 'estimated-token'
   }));
 }
 
