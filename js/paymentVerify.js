@@ -997,132 +997,149 @@ function clusterEvidence(values, tolerance = 5) {
 function buildGlobalXLanes(rows, boundaries, headers) {
   if (!rows?.length || !boundaries?.length) return boundaries || [];
 
-  // Structural lane learning does not need every transaction in a huge
-  // statement. Use a representative sample, while reconstruction still
-  // processes every row. This keeps detection responsive on long PDFs.
+  /*
+   * COLUMN-BAND MODEL
+   * -----------------
+   * Y already gave us the physical transaction rows.  We now use X to find
+   * the vertical spaces BETWEEN columns.
+   *
+   * A repeated word-start is NOT a column boundary.  For example:
+   *   DAVID x255 | OBI x277 | TRANSFER x320
+   *   and
+   *   SANDRA x254 | OBI x277 | TRANSFER x320
+   *
+   * x277 is simply another word inside Name.  The useful structural evidence
+   * is the large/repeated GAP between OBI and TRANSFER.  Therefore a boundary
+   * is placed in that gap, not on the next word's X coordinate.
+   *
+   * Header centres provide the initial column order.  Repeated row gaps may
+   * refine those boundaries, but only when they agree with the header geometry
+   * and are supported by multiple independent rows.
+   */
   const sampleRows = rows.length > 240
     ? rows.filter((_, i) => i < 120 || i % Math.ceil(rows.length / 120) === 0).slice(0, 240)
     : rows;
 
-  const rowData = sampleRows.map(row => ({
-    row,
-    tokens: row.items.flatMap(expandSpatialTokens)
-      .filter(t => String(t.text || '').trim())
-      .sort((a,b)=>a.x-b.x || a.right-b.right)
-  })).filter(r=>r.tokens.length);
+  const rowTokens = sampleRows.map(row => row.items.flatMap(expandSpatialTokens)
+    .filter(t => String(t.text || '').trim())
+    .sort((a,b) => a.x - b.x || a.right - b.right))
+    .filter(tokens => tokens.length);
 
-  const allTokens=rowData.flatMap(r=>r.tokens);
-  const rowEvidence=rowData.map(r=>collectRowBoundaryEvidence(r.row));
-  const expectedBoundaries=Math.max(0,boundaries.length-1);
-  const headerCenters=boundaries.map(b=>Number(b.headerCenterX ?? b.center));
+  const rowCount = Math.max(1, rowTokens.length);
+  const headerCenters = boundaries.map(b => Number(b.headerCenterX ?? b.center));
+  const anchors = headerCenters.map(Number);
 
-  /*
-   * VERTICAL ALIGNMENT / GAP MAP
-   * ----------------------------
-   * This is the key reconstruction model.
-   *
-   * We do NOT turn every repeated token X into a column.  A second word in a
-   * cell naturally has its own X (DAVID-x255, OBI-x277) and must remain in the
-   * same cell.
-   *
-   * Instead, each row contributes evidence where there is a meaningful
-   * horizontal gap between adjacent words.  The X position of the word after
-   * that gap is a potential START OF THE NEXT COLUMN. Repeated starts such as
-   *
-   *   DAVID   x255   OBI x277
-   *   SANDRA  x254   OBI x277
-   *
-   * are therefore interpreted as word alignment evidence, while the gap
-   * structure tells us whether that alignment is actually a cell boundary.
-   */
-  const nextStartClusters=clusterEvidence(
-    rowEvidence.flatMap(ev=>ev.map(e=>e.nextStartX)), 5
-  );
-  const midpointClusters=clusterEvidence(
-    rowEvidence.flatMap(ev=>ev.map(e=>e.boundaryX)), 6
-  );
+  // For every adjacent word pair, record the actual open-space midpoint.
+  // This is the coordinate that separates the two words without pretending
+  // that either word's own X position is a column boundary.
+  const gapEvidence = [];
+  rowTokens.forEach((tokens, rowIndex) => {
+    const widths = tokens.map(t => Math.max(1, t.width)).sort((a,b) => a-b);
+    const medianWidth = widths.length ? widths[Math.floor(widths.length / 2)] : 10;
+    const minGap = Math.max(7, medianWidth * 0.65);
 
-  // Candidate starts are scored by how many different rows support them.
-  const candidateStarts=nextStartClusters.map(c=>{
-    const supportingRows=new Set();
-    rowEvidence.forEach((ev,rowIndex)=>{
-      if(ev.some(e=>Math.abs(e.nextStartX-c.center)<=5)) supportingRows.add(rowIndex);
-    });
-    return {
-      x:c.center,
-      rowSupport:supportingRows.size,
-      frequency:c.weight,
-      score:supportingRows.size*3+c.weight
-    };
-  }).sort((a,b)=>b.score-a.score || a.x-b.x);
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const a = tokens[i], b = tokens[i + 1];
+      const gap = Math.max(0, b.x - a.right);
+      if (gap < minGap) continue;
 
-  const rowCount=Math.max(1,rowData.length);
-  const selected=[];
-  let previousX=-Infinity;
+      gapEvidence.push({
+        rowIndex,
+        leftX: a.right,
+        rightX: b.x,
+        midpoint: (a.right + b.x) / 2,
+        gap,
+        nextStart: b.x
+      });
+    }
+  });
 
-  for(let col=1; col<boundaries.length; col++) {
-    const headerX=headerCenters[col];
-    const prevHeaderX=headerCenters[col-1];
-    const broadLeft=(Number(prevHeaderX)+Number(headerX))/2 - 70;
-    const broadRight= col+1<boundaries.length
-      ? (Number(headerX)+Number(headerCenters[col+1]))/2 + 70
-      : Infinity;
+  function median(values) {
+    const a = values.filter(Number.isFinite).sort((x,y) => x-y);
+    if (!a.length) return NaN;
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+  }
 
-    const candidates=candidateStarts.filter(c=>
-      c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight
+  // For each expected boundary (between header i and i+1), search the header
+  // midpoint neighbourhood for recurring physical gaps. The boundary itself
+  // is the gap midpoint, so words on either side stay in their proper cell.
+  for (let i = 0; i < anchors.length - 1; i++) {
+    const headerBoundary = (headerCenters[i] + headerCenters[i + 1]) / 2;
+    const headerDistance = Math.abs(headerCenters[i + 1] - headerCenters[i]);
+    const searchRadius = Math.max(35, Math.min(90, headerDistance * 0.42));
+
+    const candidates = gapEvidence.filter(e =>
+      Math.abs(e.midpoint - headerBoundary) <= searchRadius &&
+      e.gap >= Math.max(7, Math.min(18, headerDistance * 0.08))
     );
 
-    let pick=candidates[0] || null;
-
-    // If no strong gap-start exists, use the midpoint gap evidence nearest the
-    // header only as a low-confidence fallback. This prevents invented lanes.
-    if(!pick) {
-      const mids=midpointClusters
-        .map(c=>({x:c.center,rowSupport:0,frequency:c.weight,score:c.weight}))
-        .filter(c=>c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight)
-        .sort((a,b)=>Math.abs(a.x-headerX)-Math.abs(b.x-headerX));
-      if(mids.length) pick=mids[0];
+    // Cluster gap midpoints. A cluster gets support only once per row, so a
+    // row containing many words cannot artificially dominate the decision.
+    const clusters = [];
+    candidates.sort((a,b) => a.midpoint - b.midpoint);
+    for (const e of candidates) {
+      let c = clusters.find(c => Math.abs(c.center - e.midpoint) <= 7);
+      if (!c) {
+        c = { center: e.midpoint, rows: new Set(), gaps: [], nextStarts: [] };
+        clusters.push(c);
+      }
+      c.rows.add(e.rowIndex);
+      c.gaps.push(e.gap);
+      c.nextStarts.push(e.nextStart);
+      c.center = median([c.center, e.midpoint]);
     }
 
-    if(!pick) pick={x:headerX,rowSupport:0,frequency:0,score:0,fallback:true};
-    selected.push(pick);
-    previousX=pick.x;
+    clusters.forEach(c => {
+      c.rowSupport = c.rows.size;
+      c.supportRatio = c.rowSupport / rowCount;
+      c.medianGap = median(c.gaps);
+      c.score = c.rowSupport * 5 + Math.min(20, c.medianGap || 0);
+    });
+
+    clusters.sort((a,b) =>
+      b.score - a.score ||
+      Math.abs(a.center - headerBoundary) - Math.abs(b.center - headerBoundary)
+    );
+
+    const best = clusters.find(c =>
+      c.rowSupport >= Math.min(3, rowCount) &&
+      (c.supportRatio >= 0.18 || c.rowSupport >= 6)
+    );
+
+    if (best && Number.isFinite(best.center)) {
+      anchors[i + 1] = best.center;
+    } else {
+      // Keep the header-derived boundary when row evidence is weak. This is
+      // deliberately safer than inventing a boundary from one row.
+      anchors[i + 1] = headerBoundary;
+    }
   }
 
-  // First column begins at the left edge of the table. Subsequent columns use
-  // the repeated next-word start. This creates bands, not nearest-word lanes.
-  const anchors=[
-    Number.isFinite(Number(boundaries[0].headerX)) ? Number(boundaries[0].headerX) : (allTokens[0]?.x || 0),
-    ...selected.map(s=>Number(s.x))
-  ];
-
-  for(let i=1;i<anchors.length;i++) {
-    if(!(anchors[i]>anchors[i-1])) anchors[i]=anchors[i-1]+1;
+  // Ensure strictly increasing boundaries. If a PDF's header boxes overlap,
+  // preserve the order while creating the smallest possible separation.
+  for (let i = 1; i < anchors.length; i++) {
+    if (!(anchors[i] > anchors[i - 1] + 1)) anchors[i] = anchors[i - 1] + 1;
   }
 
-  return boundaries.map((b,i)=>{
-    const next=anchors[i+1];
-    const selectedEvidence=i===0 ? {rowSupport:rowCount,frequency:rowCount,score:rowCount*3} : selected[i-1];
-    const kind=headerColumnKind(headers[i] || b.header);
-
-    // Numeric columns are additionally validated by repeated right edges. A
-    // right edge never creates a new text column by itself.
-    const numericTokens=allTokens.filter(t=>kind==='numeric' && Number.isFinite(t.right));
-    const rightClusters=clusterEvidence(numericTokens.map(t=>t.right),4);
+  return boundaries.map((b, i) => {
+    const next = anchors[i + 1];
+    const left = anchors[i];
+    const right = Number.isFinite(next) ? next : Infinity;
+    const kind = headerColumnKind(headers[i] || b.header);
 
     return {
       ...b,
-      index:i,
+      index: i,
       kind,
-      anchorX:anchors[i],
-      laneLeft:anchors[i],
-      laneRight:Number.isFinite(next) ? next : Infinity,
-      repeatedLeft:selectedEvidence.frequency || 0,
-      rowSupport:selectedEvidence.rowSupport || 0,
-      laneConfidence:Math.min(1,(selectedEvidence.rowSupport || 0)/rowCount),
-      rightClusters:rightClusters.slice(0,5),
-      alignmentModel:'vertical-gap-alignment',
-      fallback:!!selectedEvidence.fallback
+      anchorX: left,
+      laneLeft: left,
+      laneRight: right,
+      rowSupport: rowCount,
+      laneConfidence: 1,
+      alignmentModel: 'header-anchored-gap-bands',
+      // Retain the actual header geometry for diagnostics/preview.
+      headerBoundarySource: i === 0 || i === anchors.length - 1 ? 'header' : 'header-or-repeated-gap'
     };
   });
 }
