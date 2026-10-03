@@ -236,9 +236,10 @@ async function handleStatementUpload(input) {
       return;
     }
 
-    console.error("Statement PDF error:", err);
+    console.error("Statement PDF processing error:", err);
+    const message = err?.message ? String(err.message) : "Unknown PDF processing error";
     showVerifyError(
-      "Could not read this PDF. Please check that it is a valid statement PDF and try again."
+      `Could not process this PDF. ${message}`
     );
   }
 }
@@ -921,6 +922,16 @@ function collectRowBoundaryEvidence(row, minGap = null) {
     });
   }
   return evidence;
+}
+
+function medianNumber(values) {
+  const nums = (Array.isArray(values) ? values : [])
+    .map(Number)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  if (!nums.length) return 0;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 }
 
 function clusterEvidence(values, tolerance = 5) {
