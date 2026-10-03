@@ -823,248 +823,271 @@ function tokenColumnCompatibility(token, boundary, index, boundaries) {
   return score;
 }
 
-function expandSpatialTokens(item) {
+function measureTokenLayout(item) {
   const raw = String(item?.text || '').replace(/\r?\n/g, ' ');
+  const x = Number(item?.x) || 0;
+  const width = Math.max(0, Number(item?.width) || 0);
   if (!raw.trim()) return [];
 
-  // Prefer the native PDF.js item as a single positioned object. When one
-  // TextItem contains several words, derive approximate token positions from
-  // its actual width. These positions are explicitly marked estimated; native
-  // item coordinates remain the authoritative geometry whenever available.
-  const x = Number(item.x) || 0;
-  const width = Math.max(0, Number(item.width) || 0);
   const matches = [];
   const re = /\S+/g;
   let m;
-  while ((m = re.exec(raw))) matches.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  while ((m = re.exec(raw))) {
+    matches.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  }
   if (!matches.length) return [];
 
-  const charWidth = width > 0 && raw.length ? width / raw.length : 0;
-  return matches.map((t, i) => ({
-    id: `${item.id || 'item'}-w${i}`,
-    text: t.text,
-    x: x + t.start * charWidth,
-    right: x + t.end * charWidth,
-    center: x + ((t.start + t.end) / 2) * charWidth,
-    y: Number(item.y) || 0,
-    centerY: Number(item.centerY) || Number(item.y) || 0,
-    width: Math.max(0, (t.end - t.start) * charWidth),
-    sourceItemId: item.id,
-    positionConfidence: matches.length === 1 ? 'native-item' : 'estimated-token'
-  }));
+  /*
+   * PDF.js normally gives us one TextItem rectangle, not glyph-by-glyph X
+   * coordinates.  A proportional-character estimate is therefore only a
+   * fallback.  We improve it with browser font measurement when available,
+   * then scale the measured run to the PDF.js item width.
+   */
+  let charWidths = null;
+  try {
+    if (typeof document !== 'undefined') {
+      const canvas = measureTokenLayout._canvas || (measureTokenLayout._canvas = document.createElement('canvas'));
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const fontSize = Math.max(8, Number(item?.height) || 10);
+        ctx.font = `${fontSize}px sans-serif`;
+        charWidths = Array.from(raw).map(ch => ctx.measureText(ch).width);
+        const measured = charWidths.reduce((a,b)=>a+b,0);
+        if (!(measured > 0)) charWidths = null;
+        else {
+          const scale = width > 0 ? width / measured : 1;
+          charWidths = charWidths.map(v => v * scale);
+        }
+      }
+    }
+  } catch (_) { charWidths = null; }
+
+  const prefix = [0];
+  if (charWidths) {
+    for (const w of charWidths) prefix.push(prefix[prefix.length-1] + w);
+  }
+  const fallbackChar = width > 0 && raw.length ? width / raw.length : 0;
+
+  return matches.map((t, i) => {
+    const left = x + (charWidths ? prefix[t.start] : t.start * fallbackChar);
+    const right = x + (charWidths ? prefix[t.end] : t.end * fallbackChar);
+    return {
+      id: `${item.id || 'item'}-w${i}`,
+      text: t.text,
+      x: left,
+      right,
+      center: (left + right) / 2,
+      y: Number(item.y) || 0,
+      centerY: Number(item.centerY) || Number(item.y) || 0,
+      width: Math.max(0, right-left),
+      sourceItemId: item.id,
+      positionConfidence: matches.length === 1 ? 'native-item' : (charWidths ? 'estimated-font' : 'estimated-token')
+    };
+  });
 }
 
-function medianNumber(values) {
-  const nums = values.filter(Number.isFinite).sort((a, b) => a - b);
-  if (!nums.length) return null;
-  const mid = Math.floor(nums.length / 2);
-  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+function expandSpatialTokens(item) {
+  return measureTokenLayout(item);
 }
 
-function clusterSpatialValues(values, tolerance = 4) {
-  const nums = values.filter(Number.isFinite).sort((a, b) => a - b);
-  if (!nums.length) return [];
-  const clusters = [];
-  for (const value of nums) {
-    const last = clusters[clusters.length - 1];
-    if (!last || Math.abs(value - last.center) > tolerance) {
-      clusters.push({ values: [value], center: value });
+function collectRowBoundaryEvidence(row, minGap = null) {
+  const tokens = row.items.flatMap(expandSpatialTokens)
+    .filter(t => String(t.text || '').trim())
+    .sort((a,b) => a.x-b.x || a.right-b.right);
+  if (tokens.length < 2) return [];
+
+  const widths = tokens.map(t => Math.max(1, t.width)).sort((a,b)=>a-b);
+  const medianWidth = widths[Math.floor(widths.length/2)] || 10;
+  const gapThreshold = Number.isFinite(minGap) ? minGap : Math.max(8, medianWidth * 0.9);
+  const evidence = [];
+
+  for (let i=0;i<tokens.length-1;i++) {
+    const a=tokens[i], b=tokens[i+1];
+    const gap=Math.max(0, b.x-a.right);
+    if (gap < gapThreshold) continue;
+
+    // A candidate boundary is the open space before the next aligned word.
+    // Keep both the next-word start and the midpoint: repeated next-word X
+    // positions are the strongest signal, while midpoint is useful when
+    // text widths vary substantially.
+    evidence.push({
+      leftToken:a,
+      rightToken:b,
+      gap,
+      boundaryX:(a.right+b.x)/2,
+      nextStartX:b.x,
+      prevEndX:a.right,
+      confidence:Math.min(1, gap / Math.max(gapThreshold, 1))
+    });
+  }
+  return evidence;
+}
+
+function clusterEvidence(values, tolerance = 5) {
+  const sorted=values.filter(v=>Number.isFinite(v)).sort((a,b)=>a-b);
+  const clusters=[];
+  for(const value of sorted){
+    const last=clusters[clusters.length-1];
+    if(!last || Math.abs(value-last.center)>tolerance){
+      clusters.push({center:value, values:[value], weight:1});
     } else {
       last.values.push(value);
-      last.center = medianNumber(last.values);
+      last.center=medianNumber(last.values);
+      last.weight++;
     }
   }
-  return clusters.sort((a, b) => b.values.length - a.values.length || a.center - b.center);
-}
-
-function headerColumnKind(header) {
-  const h = normalizeHeaderLabel(header);
-  if (h === 'credit' || h === 'debit' || h === 'balance') return 'numeric';
-  if (h === 'reference') return 'reference';
-  if (h === 'date' || h === 'datetime' || h === 'time') return 'date-time';
-  return 'text';
+  return clusters;
 }
 
 function buildGlobalXLanes(rows, boundaries, headers) {
   if (!rows?.length || !boundaries?.length) return boundaries || [];
 
-  const tokensByRow = rows.map(row => row.items.flatMap(expandSpatialTokens)
-    .sort((a, b) => a.x - b.x || b.centerY - a.centerY));
-  const allTokens = tokensByRow.flat();
+  const rowData = rows.map(row => ({
+    row,
+    tokens: row.items.flatMap(expandSpatialTokens)
+      .filter(t => String(t.text || '').trim())
+      .sort((a,b)=>a.x-b.x || a.right-b.right)
+  })).filter(r=>r.tokens.length);
+
+  const allTokens=rowData.flatMap(r=>r.tokens);
+  const rowEvidence=rowData.map(r=>collectRowBoundaryEvidence(r.row));
+  const expectedBoundaries=Math.max(0,boundaries.length-1);
+  const headerCenters=boundaries.map(b=>Number(b.headerCenterX ?? b.center));
 
   /*
-   * GLOBAL X-START GRID
-   * --------------------
-   * Do not treat every repeated word-start as a column. A two-word name such
-   * as "DAVID OBI" naturally creates repeated starts at both 176 and 203.
-   * The column anchor is the repeated start that occurs most consistently at
-   * the beginning of that physical column. Ties intentionally go LEFTMOST.
+   * VERTICAL ALIGNMENT / GAP MAP
+   * ----------------------------
+   * This is the key reconstruction model.
    *
-   * Once anchors are known, columns are not nearest-neighbour boxes. They are
-   * ordered horizontal bands:
+   * We do NOT turn every repeated token X into a column.  A second word in a
+   * cell naturally has its own X (DAVID-x255, OBI-x277) and must remain in the
+   * same cell.
    *
-   *   anchor[0] <= token.x < anchor[1]  -> column 0
-   *   anchor[1] <= token.x < anchor[2]  -> column 1
-   *   ...
+   * Instead, each row contributes evidence where there is a meaningful
+   * horizontal gap between adjacent words.  The X position of the word after
+   * that gap is a potential START OF THE NEXT COLUMN. Repeated starts such as
    *
-   * This is the important distinction that fixes DAVID|OBI and date/time
-   * collapsing: words inside a cell are allowed to have their own X values.
+   *   DAVID   x255   OBI x277
+   *   SANDRA  x254   OBI x277
+   *
+   * are therefore interpreted as word alignment evidence, while the gap
+   * structure tells us whether that alignment is actually a cell boundary.
    */
-  const clusters = clusterSpatialValues(allTokens.map(t => t.x), 3.25)
-    .map(c => ({ ...c, count: c.values.length }));
+  const nextStartClusters=clusterEvidence(
+    rowEvidence.flatMap(ev=>ev.map(e=>e.nextStartX)), 5
+  );
+  const midpointClusters=clusterEvidence(
+    rowEvidence.flatMap(ev=>ev.map(e=>e.boundaryX)), 6
+  );
 
-  const rowCount = Math.max(1, rows.length);
-  const strongThreshold = Math.max(2, Math.ceil(rowCount * 0.30));
-  const strongClusters = clusters
-    .filter(c => c.count >= strongThreshold)
-    .sort((a, b) => a.center - b.center);
+  // Candidate starts are scored by how many different rows support them.
+  const candidateStarts=nextStartClusters.map(c=>{
+    const supportingRows=new Set();
+    rowEvidence.forEach((ev,rowIndex)=>{
+      if(ev.some(e=>Math.abs(e.nextStartX-c.center)<=5)) supportingRows.add(rowIndex);
+    });
+    return {
+      x:c.center,
+      rowSupport:supportingRows.size,
+      frequency:c.weight,
+      score:supportingRows.size*3+c.weight
+    };
+  }).sort((a,b)=>b.score-a.score || a.x-b.x);
 
-  const headerStarts = boundaries.map(b => Number(b.headerX ?? b.x));
-  const chosen = [];
-  let lastCenter = -Infinity;
+  const rowCount=Math.max(1,rowData.length);
+  const selected=[];
+  let previousX=-Infinity;
 
-  for (let col = 0; col < boundaries.length; col++) {
-    const headerX = Number.isFinite(headerStarts[col]) ? headerStarts[col] : Number(boundaries[col].center);
-    const previousHeaderX = col > 0 ? headerStarts[col - 1] : null;
-    const nextHeaderX = col + 1 < boundaries.length ? headerStarts[col + 1] : null;
+  for(let col=1; col<boundaries.length; col++) {
+    const headerX=headerCenters[col];
+    const prevHeaderX=headerCenters[col-1];
+    const broadLeft=(Number(prevHeaderX)+Number(headerX))/2 - 70;
+    const broadRight= col+1<boundaries.length
+      ? (Number(headerX)+Number(headerCenters[col+1]))/2 + 70
+      : Infinity;
 
-    // Header positions provide only a broad search corridor. They do NOT
-    // decide the actual data column position.
-    const regionLeft = col === 0
-      ? -Infinity
-      : (Number(previousHeaderX) + Number(headerX)) / 2 - 18;
-    const regionRight = col === boundaries.length - 1
-      ? Infinity
-      : (Number(headerX) + Number(nextHeaderX)) / 2 + 18;
-
-    const candidates = strongClusters.filter(c =>
-      c.center > lastCenter + 5 &&
-      c.center >= regionLeft &&
-      c.center <= regionRight
+    const candidates=candidateStarts.filter(c=>
+      c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight
     );
 
-    if (!candidates.length) {
-      chosen.push({
-        center: headerX,
-        count: 0,
-        values: [],
-        fallback: true
-      });
-      lastCenter = headerX;
-      continue;
+    let pick=candidates[0] || null;
+
+    // If no strong gap-start exists, use the midpoint gap evidence nearest the
+    // header only as a low-confidence fallback. This prevents invented lanes.
+    if(!pick) {
+      const mids=midpointClusters
+        .map(c=>({x:c.center,rowSupport:0,frequency:c.weight,score:c.weight}))
+        .filter(c=>c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight)
+        .sort((a,b)=>Math.abs(a.x-headerX)-Math.abs(b.x-headerX));
+      if(mids.length) pick=mids[0];
     }
 
-    // FREQUENCY FIRST, POSITION SECOND.
-    // A column's first word repeats once per row. Continuation words usually
-    // do not. If two starts repeat equally (e.g. DAVID and OBI), the leftmost
-    // one is the actual cell start.
-    const pick = [...candidates].sort((a, b) =>
-      b.count - a.count || a.center - b.center
-    )[0];
-
-    chosen.push(pick);
-    lastCenter = pick.center;
+    if(!pick) pick={x:headerX,rowSupport:0,frequency:0,score:0,fallback:true};
+    selected.push(pick);
+    previousX=pick.x;
   }
 
-  // Enforce strict left-to-right ordering. A missing lane uses its header
-  // position only as a low-confidence fallback; it never creates a phantom
-  // column name.
-  for (let i = 1; i < chosen.length; i++) {
-    if (!(chosen[i].center > chosen[i - 1].center)) {
-      chosen[i].center = chosen[i - 1].center + 1;
-      chosen[i].count = 0;
-      chosen[i].fallback = true;
-    }
+  // First column begins at the left edge of the table. Subsequent columns use
+  // the repeated next-word start. This creates bands, not nearest-word lanes.
+  const anchors=[
+    Number.isFinite(Number(boundaries[0].headerX)) ? Number(boundaries[0].headerX) : (allTokens[0]?.x || 0),
+    ...selected.map(s=>Number(s.x))
+  ];
+
+  for(let i=1;i<anchors.length;i++) {
+    if(!(anchors[i]>anchors[i-1])) anchors[i]=anchors[i-1]+1;
   }
 
-  const lanes = boundaries.map((b, i) => {
-    const selected = chosen[i];
-    const kind = headerColumnKind(headers[i] || b.header);
-    const anchorX = Number(selected.center);
+  return boundaries.map((b,i)=>{
+    const next=anchors[i+1];
+    const selectedEvidence=i===0 ? {rowSupport:rowCount,frequency:rowCount,score:rowCount*3} : selected[i-1];
+    const kind=headerColumnKind(headers[i] || b.header);
 
-    // Right-edge repetition is supporting evidence for right-aligned numeric
-    // columns. It is deliberately NOT used to split ordinary text cells.
-    const localTokens = allTokens.filter(t => Math.abs(t.x - anchorX) <= 4.5);
-    const rightClusters = clusterSpatialValues(localTokens.map(t => t.right), 3.5);
-    const repeatedLeft = Number(selected.count) || localTokens.length;
-    const repeatedRight = rightClusters[0]?.values.length || 0;
+    // Numeric columns are additionally validated by repeated right edges. A
+    // right edge never creates a new text column by itself.
+    const numericTokens=allTokens.filter(t=>kind==='numeric' && Number.isFinite(t.right));
+    const rightClusters=clusterEvidence(numericTokens.map(t=>t.right),4);
 
     return {
       ...b,
-      index: i,
+      index:i,
       kind,
-      anchorX,
-      anchorRightX: rightClusters[0]?.center ?? Number(b.headerEnd ?? b.end),
-      repeatedLeft,
-      repeatedRight,
-      leftClusters: [selected],
-      rightClusters: rightClusters.slice(0, 4),
-      laneConfidence: Math.min(1, Math.max(repeatedLeft, repeatedRight) / rowCount),
-      fallback: !!selected.fallback
+      anchorX:anchors[i],
+      laneLeft:anchors[i],
+      laneRight:Number.isFinite(next) ? next : Infinity,
+      repeatedLeft:selectedEvidence.frequency || 0,
+      rowSupport:selectedEvidence.rowSupport || 0,
+      laneConfidence:Math.min(1,(selectedEvidence.rowSupport || 0)/rowCount),
+      rightClusters:rightClusters.slice(0,5),
+      alignmentModel:'vertical-gap-alignment',
+      fallback:!!selectedEvidence.fallback
     };
   });
-
-  // Horizontal bands are derived from the actual transaction anchors.
-  // Header width is not used to make the bands.
-  lanes.forEach((lane, i) => {
-    const prev = lanes[i - 1];
-    const next = lanes[i + 1];
-    lane.laneLeft = prev
-      ? Number(prev.anchorX)
-      : Number.isFinite(Number(b.x)) ? Number(b.x) : Number(lane.anchorX);
-    lane.laneRight = next
-      ? Number(next.anchorX)
-      : Number.POSITIVE_INFINITY;
-  });
-
-  return lanes;
 }
 
 function assignRowTokensToXLanes(row, lanes, headers) {
-  const tokens = row.items.flatMap(expandSpatialTokens);
-  if (!tokens.length || !lanes.length) return [];
+  const tokens=row.items.flatMap(expandSpatialTokens)
+    .filter(t=>String(t.text||'').trim())
+    .sort((a,b)=>a.x-b.x || a.right-b.right);
+  if(!tokens.length || !lanes.length) return [];
 
-  const groups = new Map();
-  const visualLines = groupTokensIntoVisualLines(tokens);
-
-  for (const lineTokens of visualLines) {
-    /*
-     * Assign by horizontal BAND, not nearest anchor.
-     *
-     * Example:
-     *   Name anchor = 176
-     *   Description anchor = 271
-     *   "DAVID" x=176, "OBI" x=203
-     *
-     * Both satisfy 176 <= x < 271, therefore both belong to Name.
-     *
-     * This also naturally preserves multi-word dates, descriptions and
-     * channels. A token only enters the next column when its X reaches the
-     * next physical column's repeated start.
-     */
-    for (const token of lineTokens) {
-      let col = 0;
-      for (let i = lanes.length - 1; i >= 0; i--) {
-        if (Number(token.x) >= Number(lanes[i].anchorX) - 2.5) {
-          col = i;
-          break;
-        }
-      }
-
-      if (!groups.has(col)) groups.set(col, []);
-      groups.get(col).push(token.text);
+  const groups=new Map();
+  for(const token of tokens){
+    let col=0;
+    // Band assignment: a word remains in its current cell until its X reaches
+    // the next structural start discovered from repeated vertical alignment.
+    for(let i=lanes.length-1;i>=0;i--){
+      if(Number(token.x)>=Number(lanes[i].laneLeft)-2.5){ col=i; break; }
     }
+    if(!groups.has(col)) groups.set(col,[]);
+    groups.get(col).push(token.text);
   }
 
-  return [...groups.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([col, parts]) => ({
-      col,
-      text: parts.join(' '),
-      positionConfidence: lanes[col].laneConfidence >= 0.55
-        ? 'coordinate-lane'
-        : 'mixed-coordinate'
-    }));
+  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([col,parts])=>({
+    col,
+    text:parts.join(' '),
+    positionConfidence:lanes[col].laneConfidence>=0.55?'coordinate-alignment':'mixed-coordinate'
+  }));
 }
 
 
