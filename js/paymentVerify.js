@@ -575,33 +575,80 @@ function isKnownHeaderText(text) {
 }
 
 function groupHeaderCells(headerRow) {
-  const items=[...headerRow.items].filter(it=>String(it.text||"").trim()).sort((a,b)=>a.x-b.x);
+  const items=[...headerRow.items]
+    .filter(it=>String(it.text||'').trim())
+    .sort((a,b)=>a.x-b.x);
   const cells=[];
-  for(let i=0;i<items.length;i++){
-    const single=String(items[i].text||"").replace(/\s+/g," ").trim();
-    const singleNorm=normalizeHeaderWord(single);
 
-    // Do not merge two legitimate adjacent headers such as Date + Time or
-    // Name + Description merely because their combined spelling resembles a
-    // known label. Composite headers are merged only from an explicit allowlist.
-    let composite=null, compositeEnd=i;
-    for(let end=i+1;end<Math.min(items.length,i+4);end++){
-      const candidate=items.slice(i,end+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim().toLowerCase();
-      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) { composite=candidate; compositeEnd=end; }
-    }
-
-    if(composite){
-      const first=items[i],last=items[compositeEnd];
-      cells.push({x:Number(first.x)||0,end:(Number(last.x)||0)+(Number(last.width)||0),center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,text:items.slice(i,compositeEnd+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim()});
-      i=compositeEnd;
-      continue;
-    }
-
-    if(isKnownHeaderText(single)){
-      cells.push({x:Number(items[i].x)||0,end:(Number(items[i].x)||0)+(Number(items[i].width)||0),center:(Number(items[i].x)||0)+(Number(items[i].width)||0)/2,text:single});
+  // A PDF may expose an entire header line as ONE TextItem, e.g.
+  // "Value Date Description Debit Credit Channel". In that case the item
+  // rectangle is the whole line, but findHeaderLabelsInItem() can recover
+  // approximate positions for the individual header labels. This is only
+  // used to discover the schema; transaction reconstruction happens later.
+  for (const item of items) {
+    const embedded = findHeaderLabelsInItem(item);
+    if (embedded.length >= 2) {
+      for (const m of embedded) {
+        const text = String(m.text || '').replace(/\s+/g,' ').trim();
+        if (!text) continue;
+        cells.push({
+          x: m.x,
+          end: m.end,
+          center: m.center,
+          text
+        });
+      }
+    } else {
+      const single=String(item.text||'').replace(/\s+/g,' ').trim();
+      if (isKnownHeaderText(single)) {
+        const x=Number(item.x)||0;
+        const end=x+(Number(item.width)||0);
+        cells.push({x,end,center:(x+end)/2,text:single});
+      }
     }
   }
-  return cells;
+
+  // Also handle a header that arrives as several adjacent TextItems, including
+  // explicitly allowed composite labels such as "Value Date".
+  const directItems=items;
+  for(let i=0;i<directItems.length;i++){
+    const single=String(directItems[i].text||'').replace(/\s+/g,' ').trim();
+    let composite=null, compositeEnd=i;
+    for(let end=i+1;end<Math.min(directItems.length,i+4);end++){
+      const candidate=directItems.slice(i,end+1)
+        .map(x=>String(x.text||'').trim()).join(' ')
+        .replace(/\s+/g,' ').trim().toLowerCase();
+      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) {
+        composite=candidate;
+        compositeEnd=end;
+      }
+    }
+    if(composite){
+      const first=directItems[i],last=directItems[compositeEnd];
+      cells.push({
+        x:Number(first.x)||0,
+        end:(Number(last.x)||0)+(Number(last.width)||0),
+        center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,
+        text:directItems.slice(i,compositeEnd+1).map(x=>String(x.text||'').trim()).join(' ').replace(/\s+/g,' ').trim()
+      });
+      i=compositeEnd;
+    }
+  }
+
+  // Remove duplicates created when a PDF supplies both embedded and separate
+  // header fragments. Prefer the wider/explicit header label when positions
+  // are nearly identical.
+  cells.sort((a,b)=>a.x-b.x || a.end-b.end);
+  const dedup=[];
+  for(const cell of cells){
+    const existing=dedup.find(c=>
+      Math.abs(c.x-cell.x)<=3 &&
+      Math.abs(c.end-cell.end)<=6 &&
+      normalizeHeaderWord(c.text)===normalizeHeaderWord(cell.text)
+    );
+    if(!existing) dedup.push(cell);
+  }
+  return dedup.sort((a,b)=>a.x-b.x);
 }
 
 function detectHeaderRow(rows) {
@@ -1284,14 +1331,17 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     if (headerIdx === -1) return null;
 
     const headerCells = groupHeaderCells(rows[headerIdx]);
-    if (headerCells.length < 3) return null;
+    if (headerCells.length < 2) return null;
 
     headers = headerCells.map(c => c.text);
     boundaries = buildColumnBoundaries(rows[headerIdx]);
 
-    // Never manufacture blank "Column N" names here. If the PDF did not
-    // expose a real header, that position is not considered a column.
-    if (headers.length !== boundaries.length) return null;
+    // Header discovery is deliberately permissive. A selectable PDF with a
+    // recognizable header is allowed through even if the first reconstruction
+    // pass cannot yet classify every data row. The seller can inspect the
+    // preview and select the authoritative Date / Name-Description / Credit
+    // columns before transaction filtering occurs.
+    if (!headers.length || !boundaries.length) return null;
   }
 
   rows = mergeContinuationRows(rows, boundaries, headers);
@@ -1362,7 +1412,7 @@ async function detectStatementTables() {
       table = null;
     }
 
-    if (table && table.rows.length) {
+    if (table && table.headers?.length && table.boundaries?.length) {
       if (!canonicalSchema) {
         canonicalSchema = {
           headers: [...table.headers],
@@ -1398,7 +1448,7 @@ async function detectStatementTables() {
 
   if (!tables.length) {
     showVerifyError(
-      "Couldn't detect a transaction table in this statement. The PDF needs selectable text with a recognizable table header."
+      "Couldn't detect a recognizable transaction header in this statement. The PDF text could not be mapped to a table header."
     );
     return;
   }
