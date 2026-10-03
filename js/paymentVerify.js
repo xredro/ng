@@ -575,80 +575,33 @@ function isKnownHeaderText(text) {
 }
 
 function groupHeaderCells(headerRow) {
-  const items=[...headerRow.items]
-    .filter(it=>String(it.text||'').trim())
-    .sort((a,b)=>a.x-b.x);
+  const items=[...headerRow.items].filter(it=>String(it.text||"").trim()).sort((a,b)=>a.x-b.x);
   const cells=[];
+  for(let i=0;i<items.length;i++){
+    const single=String(items[i].text||"").replace(/\s+/g," ").trim();
+    const singleNorm=normalizeHeaderWord(single);
 
-  // A PDF may expose an entire header line as ONE TextItem, e.g.
-  // "Value Date Description Debit Credit Channel". In that case the item
-  // rectangle is the whole line, but findHeaderLabelsInItem() can recover
-  // approximate positions for the individual header labels. This is only
-  // used to discover the schema; transaction reconstruction happens later.
-  for (const item of items) {
-    const embedded = findHeaderLabelsInItem(item);
-    if (embedded.length >= 2) {
-      for (const m of embedded) {
-        const text = String(m.text || '').replace(/\s+/g,' ').trim();
-        if (!text) continue;
-        cells.push({
-          x: m.x,
-          end: m.end,
-          center: m.center,
-          text
-        });
-      }
-    } else {
-      const single=String(item.text||'').replace(/\s+/g,' ').trim();
-      if (isKnownHeaderText(single)) {
-        const x=Number(item.x)||0;
-        const end=x+(Number(item.width)||0);
-        cells.push({x,end,center:(x+end)/2,text:single});
-      }
-    }
-  }
-
-  // Also handle a header that arrives as several adjacent TextItems, including
-  // explicitly allowed composite labels such as "Value Date".
-  const directItems=items;
-  for(let i=0;i<directItems.length;i++){
-    const single=String(directItems[i].text||'').replace(/\s+/g,' ').trim();
+    // Do not merge two legitimate adjacent headers such as Date + Time or
+    // Name + Description merely because their combined spelling resembles a
+    // known label. Composite headers are merged only from an explicit allowlist.
     let composite=null, compositeEnd=i;
-    for(let end=i+1;end<Math.min(directItems.length,i+4);end++){
-      const candidate=directItems.slice(i,end+1)
-        .map(x=>String(x.text||'').trim()).join(' ')
-        .replace(/\s+/g,' ').trim().toLowerCase();
-      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) {
-        composite=candidate;
-        compositeEnd=end;
-      }
+    for(let end=i+1;end<Math.min(items.length,i+4);end++){
+      const candidate=items.slice(i,end+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim().toLowerCase();
+      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) { composite=candidate; compositeEnd=end; }
     }
-    if(composite){
-      const first=directItems[i],last=directItems[compositeEnd];
-      cells.push({
-        x:Number(first.x)||0,
-        end:(Number(last.x)||0)+(Number(last.width)||0),
-        center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,
-        text:directItems.slice(i,compositeEnd+1).map(x=>String(x.text||'').trim()).join(' ').replace(/\s+/g,' ').trim()
-      });
-      i=compositeEnd;
-    }
-  }
 
-  // Remove duplicates created when a PDF supplies both embedded and separate
-  // header fragments. Prefer the wider/explicit header label when positions
-  // are nearly identical.
-  cells.sort((a,b)=>a.x-b.x || a.end-b.end);
-  const dedup=[];
-  for(const cell of cells){
-    const existing=dedup.find(c=>
-      Math.abs(c.x-cell.x)<=3 &&
-      Math.abs(c.end-cell.end)<=6 &&
-      normalizeHeaderWord(c.text)===normalizeHeaderWord(cell.text)
-    );
-    if(!existing) dedup.push(cell);
+    if(composite){
+      const first=items[i],last=items[compositeEnd];
+      cells.push({x:Number(first.x)||0,end:(Number(last.x)||0)+(Number(last.width)||0),center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,text:items.slice(i,compositeEnd+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim()});
+      i=compositeEnd;
+      continue;
+    }
+
+    if(isKnownHeaderText(single)){
+      cells.push({x:Number(items[i].x)||0,end:(Number(items[i].x)||0)+(Number(items[i].width)||0),center:(Number(items[i].x)||0)+(Number(items[i].width)||0)/2,text:single});
+    }
   }
-  return dedup.sort((a,b)=>a.x-b.x);
+  return cells;
 }
 
 function detectHeaderRow(rows) {
@@ -1406,6 +1359,8 @@ function buildTableFromPage(pageItems, schemaHint = null) {
 }
 
 async function detectStatementTables() {
+  // v17: retain the v13 permissive table-discovery gate. Newer coordinate
+  // reconstruction is applied only after raw/header extraction succeeds.
   renderVerifyProgress("table", "Detecting the transactions table…");
 
   const tables = [];
@@ -1416,20 +1371,12 @@ async function detectStatementTables() {
     // The first real transaction table establishes the exact column schema.
     // Continuation pages reuse it instead of inventing new columns from
     // arbitrary PDF.js text fragments.
-    let table = null;
-    try {
-      table = buildTableFromPage(
-        verifyState.statementText[i],
-        canonicalSchema
-      );
-    } catch (pageError) {
-      // One unusual page must not freeze/abort the entire statement. Keep
-      // scanning later pages and report the skipped page in progress.
-      console.warn(`Statement table reconstruction skipped page ${i + 1}:`, pageError);
-      table = null;
-    }
+    const table = buildTableFromPage(
+      verifyState.statementText[i],
+      canonicalSchema
+    );
 
-    if (table && table.headers?.length && table.boundaries?.length) {
+    if (table && table.rows.length) {
       if (!canonicalSchema) {
         canonicalSchema = {
           headers: [...table.headers],
@@ -1454,18 +1401,13 @@ async function detectStatementTables() {
       i + 1,
       verifyState.statementText.length
     );
-
-    // Let the browser paint the progress UI between expensive PDF pages.
-    // Without yielding, mobile browsers can look frozen even while JS is
-    // still working.
-    await new Promise(resolve => setTimeout(resolve, 0));
   }
 
   verifyState.statementTables = tables;
 
   if (!tables.length) {
     showVerifyError(
-      "Couldn't detect a recognizable transaction header in this statement. The PDF text could not be mapped to a table header."
+      "Couldn't detect a transaction table in this statement. The PDF needs selectable text with a recognizable table header."
     );
     return;
   }
