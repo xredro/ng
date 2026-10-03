@@ -950,6 +950,24 @@ function clusterEvidence(values, tolerance = 5) {
   return clusters;
 }
 
+function headerColumnKind(header) {
+  const h = String(header || '').trim().toLowerCase();
+  if (!h) return 'text';
+
+  // Numeric/accounting columns are treated specially because their values are
+  // commonly right-aligned.  This affects validation only; it never creates a
+  // new column by itself.
+  if (/\b(credit|debit|amount|balance|value|withdrawal|deposit|charge|fee|price|total)\b/.test(h)) {
+    return 'numeric';
+  }
+  if (/\b(date|value date|posting date|transaction date)\b/.test(h)) return 'date';
+  if (/\b(time|transaction time|posting time)\b/.test(h)) return 'time';
+  if (/\b(reference|ref|transaction id|transaction no|rrn|session id|trace)\b/.test(h)) return 'reference';
+  if (/\b(channel|type|method|mode)\b/.test(h)) return 'channel';
+  if (/\b(name|description|narration|details|particulars|remark|remarks)\b/.test(h)) return 'text';
+  return 'text';
+}
+
 function buildGlobalXLanes(rows, boundaries, headers) {
   if (!rows?.length || !boundaries?.length) return boundaries || [];
 
