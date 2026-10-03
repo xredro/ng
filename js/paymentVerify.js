@@ -887,7 +887,15 @@ function measureTokenLayout(item) {
 }
 
 function expandSpatialTokens(item) {
-  return measureTokenLayout(item);
+  if (!item) return [];
+  if (Array.isArray(item.__spatialTokens)) return item.__spatialTokens;
+  const tokens = measureTokenLayout(item);
+  // Cache once per native PDF.js text item. This is critical for large
+  // statements because alignment detection and reconstruction both reuse
+  // the same tokens.
+  try { Object.defineProperty(item, "__spatialTokens", { value: tokens, enumerable: false }); }
+  catch (_) { item.__spatialTokens = tokens; }
+  return tokens;
 }
 
 function collectRowBoundaryEvidence(row, minGap = null) {
@@ -942,7 +950,14 @@ function clusterEvidence(values, tolerance = 5) {
 function buildGlobalXLanes(rows, boundaries, headers) {
   if (!rows?.length || !boundaries?.length) return boundaries || [];
 
-  const rowData = rows.map(row => ({
+  // Structural lane learning does not need every transaction in a huge
+  // statement. Use a representative sample, while reconstruction still
+  // processes every row. This keeps detection responsive on long PDFs.
+  const sampleRows = rows.length > 240
+    ? rows.filter((_, i) => i < 120 || i % Math.ceil(rows.length / 120) === 0).slice(0, 240)
+    : rows;
+
+  const rowData = sampleRows.map(row => ({
     row,
     tokens: row.items.flatMap(expandSpatialTokens)
       .filter(t => String(t.text || '').trim())
@@ -1334,10 +1349,18 @@ async function detectStatementTables() {
     // The first real transaction table establishes the exact column schema.
     // Continuation pages reuse it instead of inventing new columns from
     // arbitrary PDF.js text fragments.
-    const table = buildTableFromPage(
-      verifyState.statementText[i],
-      canonicalSchema
-    );
+    let table = null;
+    try {
+      table = buildTableFromPage(
+        verifyState.statementText[i],
+        canonicalSchema
+      );
+    } catch (pageError) {
+      // One unusual page must not freeze/abort the entire statement. Keep
+      // scanning later pages and report the skipped page in progress.
+      console.warn(`Statement table reconstruction skipped page ${i + 1}:`, pageError);
+      table = null;
+    }
 
     if (table && table.rows.length) {
       if (!canonicalSchema) {
@@ -1364,6 +1387,11 @@ async function detectStatementTables() {
       i + 1,
       verifyState.statementText.length
     );
+
+    // Let the browser paint the progress UI between expensive PDF pages.
+    // Without yielding, mobile browsers can look frozen even while JS is
+    // still working.
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
 
   verifyState.statementTables = tables;
