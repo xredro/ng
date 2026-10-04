@@ -1061,51 +1061,78 @@ function buildGlobalXLanes(rows, boundaries, headers) {
 }
 
 function assignRowTokensToXLanes(row, lanes, headers) {
-  const tokens = row?.items?.flatMap(expandSpatialTokens)
-    .filter(t => String(t.text || '').trim())
-    .sort((a,b) => a.x - b.x || a.right - b.right) || [];
-  if (!tokens.length || !lanes.length) return [];
+  /*
+   * ROOT CAUSE OF THE "CONTENT CUT OFF INTO WRONG COLUMN" BUG — AND THE FIX
+   *
+   * The old code called expandSpatialTokens() which split each PDF.js text
+   * item into individual word-level tokens and ESTIMATED each word's X
+   * position using canvas font measurement or a proportional fallback.
+   * Estimates are inherently imprecise — especially for proportional fonts and
+   * long narrations.  By the last word of "TRANSFER FROM OLUMIDE ADEYEMI VIA
+   * GT BANK" the estimated offset can be several points past the lane
+   * boundary, so "GT" and "BANK" ended up in the Credit column.
+   *
+   * Fix: assign at the TEXT-ITEM level, not the individual-word level.
+   *
+   * PDF.js item.x and item.width come directly from the PDF's glyph advance
+   * widths — they are EXACT.  Using the item's own bounding box eliminates
+   * all estimation error.  An entire text item is assigned as a unit to
+   * whichever lane its LEFT EDGE and CENTER belong to, keeping multi-word
+   * descriptions intact and in the correct column.
+   *
+   * Assignment priority (applied in order):
+   *   1. Left edge inside lane  — wins for left-aligned text (descriptions)
+   *   2. Center inside lane     — handles short/centred items
+   *   3. Maximum bounding-box overlap — wins for right-aligned amounts whose
+   *      left edge straddles a boundary but whose bulk is in the right lane
+   *   4. Nearest lane           — last resort, prevents data loss
+   */
+  if (!row?.items?.length || !lanes.length) return [];
+
+  const items = row.items
+    .map(it => {
+      const x = Number(it.x) || 0;
+      const w = Math.max(0, Number(it.width) || 0);
+      const r = Number.isFinite(Number(it.right)) ? Number(it.right) : x + w;
+      const cx = Number.isFinite(Number(it.centerX)) ? Number(it.centerX) : x + w / 2;
+      return { text: String(it.text || '').trim(), x, width: w, right: r, center: cx };
+    })
+    .filter(it => it.text)
+    .sort((a, b) => a.x - b.x);
+
+  if (!items.length) return [];
 
   const groups = Array.from({ length: lanes.length }, () => []);
 
-  for (const token of tokens) {
-    const center = Number.isFinite(Number(token.center))
-      ? Number(token.center)
-      : (Number(token.x) || 0) + (Number(token.width) || 0) / 2;
+  for (const item of items) {
+    const { x, right, center } = item;
+    let col = -1;
 
-    // Primary rule: token centre belongs to the header-defined structural
-    // band. This preserves every real column and keeps words such as
-    // "DAVID" + "OBI" together when both are inside Name's band.
-    let col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
+    // 1. Left edge inside a lane (left-aligned text: descriptions, narrations)
+    if (col < 0) col = lanes.findIndex(l => x >= l.laneLeft && x < l.laneRight);
 
-    // A token can sit just outside a band because its PDF.js text box is
-    // right/left aligned. Use overlap as a second, deterministic rule.
+    // 2. Center inside a lane (centred items, short items in column margin)
+    if (col < 0) col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
+
+    // 3. Maximum bounding-box overlap (right-aligned amounts)
     if (col < 0) {
-      let best = -1;
       let bestOverlap = 0;
-      const left = Number(token.x) || center;
-      const right = Number(token.right) || center;
+      let bestCol = -1;
       lanes.forEach((lane, i) => {
-        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(left, lane.laneLeft));
-        if (overlap > bestOverlap) {
-          bestOverlap = overlap;
-          best = i;
-        }
+        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(x, lane.laneLeft));
+        if (overlap > bestOverlap) { bestOverlap = overlap; bestCol = i; }
       });
-      col = best >= 0 ? best : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
+      col = bestCol >= 0 ? bestCol : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
     }
 
-    groups[col].push(token.text);
+    groups[col].push(item.text);
   }
 
-  // IMPORTANT: do not drop empty columns. The caller creates the full header
-  // length array; returning only populated groups here is fine as long as all
-  // populated groups retain their original column index.
   return groups
     .map((parts, col) => ({
       col,
       text: parts.join(' ').trim(),
-      positionConfidence: lanes[col].laneConfidence >= 0.55
+      positionConfidence: lanes[col]?.laneConfidence >= 0.55
         ? 'coordinate-alignment'
         : 'header-alignment'
     }))
@@ -1244,10 +1271,61 @@ function extractAmount(raw) {
   return c.length ? c[0].value : null;
 }
 
-function mergeContinuationRows(rows,boundaries,headers){
-  if(!rows.length||!boundaries.length)return rows;const out=[];
-  const hasDateOrAmount=items=>{const t=items.map(x=>x.text||"").join(" ");return !!extractDate(t)||extractAmount(t)!==null;};
-  for(const row of rows){if(!out.length){out.push(row);continue;}const prev=out[out.length-1],text=row.items.map(x=>String(x.text||"").trim()).filter(Boolean).join(" ");const gap=Math.abs(Number(prev.centerY)-Number(row.centerY)),fx=Number(row.items[0]?.x)||0;const textCol=boundaries.some((b,i)=>{const h=normalizeHeaderLabel(headers[i]||"");return(h==="name"||h==="description")&&fx>=b.x-12&&fx<=b.end+12;});if(text&&gap<=18&&!hasDateOrAmount(row.items)&&textCol&&hasDateOrAmount(prev.items)){prev.items.push(...row.items);prev.items.sort((a,b)=>a.x-b.x);}else out.push(row);}return out;
+function mergeContinuationRows(rows, boundaries, headers) {
+  /*
+   * Fix: the old implementation checked
+   *   normalizeHeaderLabel(h) === "name" || "description"
+   * to detect text-heavy columns where a continuation line could appear.
+   * With the open groupHeaderCells that accepts ANY header text, Nigerian
+   * bank headers like "Narration", "Remarks", "Details", "Particulars",
+   * "Transaction Details" never matched those two strings, so their wrapped
+   * second/third lines were never merged — long descriptions appeared as
+   * separate rows with only the first fragment in the right cell.
+   *
+   * Fix: identify text-heavy columns by EXCLUDING known non-text types
+   * (date, numeric, reference) rather than requiring an exact name match.
+   */
+  if (!rows.length || !boundaries.length) return rows;
+  const out = [];
+
+  const hasDateOrAmount = items => {
+    const t = items.map(x => String(x.text || '')).join(' ');
+    return !!extractDate(t) || extractAmount(t) !== null;
+  };
+
+  const isTextHeavyCol = header => {
+    const norm = normalizeHeaderLabel(header || '');
+    const raw  = String(header || '').toLowerCase();
+    if (!header) return false;
+    if (norm === 'date' || norm === 'datetime' || norm === 'time') return false;
+    if (norm === 'credit' || norm === 'debit' || norm === 'balance' || norm === 'amount') return false;
+    if (VERIFY_CREDIT_HEADER_SYNONYMS.includes(norm)) return false;
+    if (/\bdate\b|\btime\b|\bbalance\b|\bcredit\b|\bdebit\b|\bamount\b/.test(raw)) return false;
+    if (/\blodge|\bwithdraw|\binflow|\boutflow|\bdeposit/.test(raw)) return false;
+    if (/^s\/?n$|^seq$|^serial/.test(raw)) return false;
+    return true;
+  };
+
+  for (const row of rows) {
+    if (!out.length) { out.push(row); continue; }
+
+    const prev = out[out.length - 1];
+    const text = row.items.map(x => String(x.text || '').trim()).filter(Boolean).join(' ');
+    const gap  = Math.abs(Number(prev.centerY) - Number(row.centerY));
+    const fx   = Number(row.items[0]?.x) || 0;
+
+    const startsInTextCol = boundaries.some((b, i) =>
+      isTextHeavyCol(headers[i]) && fx >= b.x - 14 && fx <= b.end + 14
+    );
+
+    if (text && gap <= 18 && !hasDateOrAmount(row.items) && startsInTextCol && hasDateOrAmount(prev.items)) {
+      prev.items.push(...row.items);
+      prev.items.sort((a, b) => a.x - b.x);
+    } else {
+      out.push(row);
+    }
+  }
+  return out;
 }
 
 function headersSemanticallyCompatible(a, b) {
