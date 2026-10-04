@@ -578,62 +578,112 @@ function isKnownHeaderText(text) {
 }
 
 function groupHeaderCells(headerRow) {
-  const items=[...headerRow.items].filter(it=>String(it.text||"").trim()).sort((a,b)=>a.x-b.x);
-  const cells=[];
-  for(let i=0;i<items.length;i++){
-    const single=String(items[i].text||"").replace(/\s+/g," ").trim();
-    const singleNorm=normalizeHeaderWord(single);
+  // FIXED: old implementation used an allowlist (isKnownHeaderText /
+  // VERIFY_COMPOSITE_HEADERS) and silently dropped columns whose header
+  // text wasn't on the list — causing real columns to disappear, their
+  // data to bleed into adjacent recognised columns ("unnecessary stuff"),
+  // and the column-picker indices to mismatch the table-row arrays
+  // ("Column 2 / Column 3" phantom entries).
+  //
+  // New approach: purely spatial. Every text fragment in the header row
+  // is kept; physically-close fragments (one multi-word header) are joined.
+  // Nothing is discarded on pattern grounds.
 
-    // Do not merge two legitimate adjacent headers such as Date + Time or
-    // Name + Description merely because their combined spelling resembles a
-    // known label. Composite headers are merged only from an explicit allowlist.
-    let composite=null, compositeEnd=i;
-    for(let end=i+1;end<Math.min(items.length,i+4);end++){
-      const candidate=items.slice(i,end+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim().toLowerCase();
-      if(VERIFY_COMPOSITE_HEADERS.includes(candidate)) { composite=candidate; compositeEnd=end; }
-    }
+  const items = [...(headerRow?.items || [])]
+    .filter(it => String(it.text || "").trim())
+    .sort((a, b) => (Number(a.x) || 0) - (Number(b.x) || 0));
 
-    if(composite){
-      const first=items[i],last=items[compositeEnd];
-      cells.push({x:Number(first.x)||0,end:(Number(last.x)||0)+(Number(last.width)||0),center:((Number(first.x)||0)+((Number(last.x)||0)+(Number(last.width)||0)))/2,text:items.slice(i,compositeEnd+1).map(x=>String(x.text||"").trim()).join(" ").replace(/\s+/g," ").trim()});
-      i=compositeEnd;
-      continue;
-    }
+  if (!items.length) return [];
 
-    if(isKnownHeaderText(single)){
-      cells.push({x:Number(items[i].x)||0,end:(Number(items[i].x)||0)+(Number(items[i].width)||0),center:(Number(items[i].x)||0)+(Number(items[i].width)||0)/2,text:single});
+  // Calibrate the gap threshold from the median character width so the
+  // function works across narrow compact tables and wide ones alike.
+  const charWidths = items.map(it => {
+    const w = Math.max(0, Number(it.width) || 0);
+    const len = String(it.text || "").trim().length;
+    return len ? w / len : 0;
+  }).filter(w => w > 0).sort((a, b) => a - b);
+  const medianCW = charWidths.length
+    ? charWidths[Math.floor(charWidths.length / 2)]
+    : 6;
+  // Words within the same header cell are typically ≤ 1.5 chars apart.
+  // A gap wider than ~2 chars separates distinct header cells.
+  const gapThreshold = Math.max(8, medianCW * 2.2);
+
+  const clusters = [];
+  let cluster = {
+    items: [items[0]],
+    x: Number(items[0].x) || 0,
+    end: (Number(items[0].x) || 0) + (Number(items[0].width) || 0)
+  };
+
+  for (let i = 1; i < items.length; i++) {
+    const it = items[i];
+    const itemX = Number(it.x) || 0;
+    const gap = itemX - cluster.end;
+
+    if (gap <= gapThreshold) {
+      cluster.items.push(it);
+      cluster.end = Math.max(cluster.end, itemX + (Number(it.width) || 0));
+    } else {
+      clusters.push(cluster);
+      cluster = { items: [it], x: itemX, end: itemX + (Number(it.width) || 0) };
     }
   }
-  return cells;
+  clusters.push(cluster);
+
+  return clusters
+    .map(cl => {
+      const text = cl.items
+        .map(it => String(it.text || "").trim())
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return { x: cl.x, end: cl.end, center: (cl.x + cl.end) / 2, text };
+    })
+    // Only discard genuinely empty cells or pure-punctuation artefacts —
+    // never drop a cell because its text is not on an allowlist.
+    .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
 function detectHeaderRow(rows) {
+  // FIXED: old implementation required exact normalizeHeaderLabel() matches
+  // (e.g. n === "credit") so it missed any column whose header text wasn't
+  // mapped by that function — e.g. "Lodgements (CR)", "WITHDRAWALS",
+  // "AMOUNT", "S/N".  Raising the threshold to 7 made it even stricter.
+  //
+  // New approach: plain substring / word-boundary regex on the raw header
+  // text.  This recognises the real variety of Nigerian bank statement
+  // headers without requiring an exhaustive mapping dictionary.
+
   let bestIndex = -1;
   let bestScore = 0;
 
   rows.forEach((row, index) => {
     const cells = groupHeaderCells(row);
-    if (cells.length < 3) return;
+    if (cells.length < 2) return;
 
-    const normalized = cells.map(c => normalizeHeaderLabel(c.text));
-    const hasDate = normalized.some(n =>
-      n === "date" || n === "datetime" || n === "time"
+    const texts = cells.map(c => String(c.text || "").toLowerCase());
+
+    const hasDate = texts.some(t =>
+      /date|value\s*date|posting\s*date|tran(?:saction)?\s*date|time|timestamp/.test(t)
     );
-    const hasCredit = normalized.some(n =>
-      n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)
+
+    const hasAmount = texts.some(t =>
+      /credit|lodge(?:ment)?s?|inflow|deposit|received?|amount|debit|withdraw(?:al)?s?|outflow|balance/.test(t)
     );
-    const hasDescription = normalized.some(n =>
-      n === "description" || n === "name" || n === "reference" ||
-      n === "debit" || n === "balance" || n === "channel"
+
+    const hasDescription = texts.some(t =>
+      /description|narration|details?|particular|name|remarks?|reference|ref|transaction/.test(t)
     );
 
     let score = 0;
-    if (hasDate) score += 3;
-    if (hasCredit) score += 4;
+    if (hasDate)        score += 3;
+    if (hasAmount)      score += 4;
     if (hasDescription) score += 2;
+    if (cells.length >= 3) score += 1;
+    if (cells.length >= 5) score += 1;
 
-    // A genuine transaction header should contain at least Date/Time and
-    // Credit, plus another transaction-related field.
+    // At minimum we need a date column AND an amount column.
     if (score >= 7 && score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -1388,11 +1438,21 @@ function renderStatementColumnPicker() {
   const body = document.getElementById("verifyBody");
   const table = verifyState.statementTables[0];
 
-  const headers = table.headers.filter(Boolean);
+  // FIXED: filter(Boolean) was creating a mismatch between the displayed
+  // option index (position in the filtered array) and the actual column
+  // index inside table.rows (position in the full array).  When the seller
+  // selected e.g. "Credit" at filtered-index 2, confirmStatementColumns()
+  // stored creditCol=2 but the data lived at original-index 3, so every
+  // subsequent cell lookup read the wrong column.
+  //
+  // We now use the UNFILTERED headers array and show every column.
+  // Empty-text entries (rare with the new groupHeaderCells) get a clear
+  // "(column N)" placeholder so the seller can still identify them.
+  const headers = table.headers;
 
   const selectOptions = (id, preferredFn) => headers.map((h, i) =>
     `<option value="${i}" ${preferredFn(h, i) ? "selected" : ""}>
-      ${escapeHtml(h)}
+      ${escapeHtml(h || `(column ${i + 1})`)}
     </option>`
   ).join("");
 
