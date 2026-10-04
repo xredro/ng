@@ -452,7 +452,9 @@ function normalizeHeaderLabel(s) {
     .replace(/^amountdebited$/, "debit")
     .replace(/^balance$/, "balance")
     .replace(/^runningbalance$/, "balance")
-    .replace(/^channel$/, "channel");
+    .replace(/^channel$/, "channel")
+    .replace(/^novalue$/, "novalue")
+    .replace(/^novaluecolumn$/, "novalue");
 }
 
 function looksLikeDate(s) {
@@ -951,172 +953,141 @@ function clusterEvidence(values, tolerance = 5) {
 }
 
 function headerColumnKind(header) {
-  const h = String(header || '').trim().toLowerCase();
-  if (!h) return 'text';
-
-  // Numeric/accounting columns are treated specially because their values are
-  // commonly right-aligned.  This affects validation only; it never creates a
-  // new column by itself.
-  if (/\b(credit|debit|amount|balance|value|withdrawal|deposit|charge|fee|price|total)\b/.test(h)) {
-    return 'numeric';
-  }
-  if (/\b(date|value date|posting date|transaction date)\b/.test(h)) return 'date';
-  if (/\b(time|transaction time|posting time)\b/.test(h)) return 'time';
-  if (/\b(reference|ref|transaction id|transaction no|rrn|session id|trace)\b/.test(h)) return 'reference';
-  if (/\b(channel|type|method|mode)\b/.test(h)) return 'channel';
-  if (/\b(name|description|narration|details|particulars|remark|remarks)\b/.test(h)) return 'text';
-  return 'text';
+  const n = normalizeHeaderLabel(header);
+  if (n === "date" || n === "datetime") return "date";
+  if (n === "time") return "time";
+  if (n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)) return "numeric";
+  if (n === "debit" || n === "balance") return "numeric";
+  if (n === "reference") return "reference";
+  if (n === "channel") return "channel";
+  return "text";
 }
 
 function buildGlobalXLanes(rows, boundaries, headers) {
-  if (!rows?.length || !boundaries?.length) return boundaries || [];
+  if (!boundaries?.length) return [];
 
-  const rowData = rows.map(row => ({
+  /*
+   * IMPORTANT: the header is the structural source of truth.
+   *
+   * Earlier versions tried to move each column boundary toward repeated word
+   * starts found in transaction rows. That is unsafe: a name such as
+   * "DAVID OBI" naturally has two different X positions, and a long
+   * description can contain many apparent "column starts". The result was
+   * columns disappearing or whole cells shifting one column to the right.
+   *
+   * PDF.js gives us the real X/Y positions of the text items. We therefore
+   * keep the header centres fixed and use the midpoint between neighbouring
+   * header centres as the structural boundary. Repeated row alignment is
+   * retained as diagnostic evidence only; it can never delete or move a
+   * header-defined column.
+   */
+  const rowData = (rows || []).map(row => ({
     row,
     tokens: row.items.flatMap(expandSpatialTokens)
       .filter(t => String(t.text || '').trim())
-      .sort((a,b)=>a.x-b.x || a.right-b.right)
-  })).filter(r=>r.tokens.length);
+      .sort((a,b) => a.x - b.x || a.right - b.right)
+  })).filter(r => r.tokens.length);
 
-  const allTokens=rowData.flatMap(r=>r.tokens);
-  const rowEvidence=rowData.map(r=>collectRowBoundaryEvidence(r.row));
-  const expectedBoundaries=Math.max(0,boundaries.length-1);
-  const headerCenters=boundaries.map(b=>Number(b.headerCenterX ?? b.center));
+  const rowCount = Math.max(1, rowData.length);
+  const centers = boundaries.map((b, i) => {
+    const c = Number(b.headerCenterX ?? b.center);
+    return Number.isFinite(c) ? c : Number(b.headerX) || 0;
+  });
 
-  /*
-   * VERTICAL ALIGNMENT / GAP MAP
-   * ----------------------------
-   * This is the key reconstruction model.
-   *
-   * We do NOT turn every repeated token X into a column.  A second word in a
-   * cell naturally has its own X (DAVID-x255, OBI-x277) and must remain in the
-   * same cell.
-   *
-   * Instead, each row contributes evidence where there is a meaningful
-   * horizontal gap between adjacent words.  The X position of the word after
-   * that gap is a potential START OF THE NEXT COLUMN. Repeated starts such as
-   *
-   *   DAVID   x255   OBI x277
-   *   SANDRA  x254   OBI x277
-   *
-   * are therefore interpreted as word alignment evidence, while the gap
-   * structure tells us whether that alignment is actually a cell boundary.
-   */
-  const nextStartClusters=clusterEvidence(
-    rowEvidence.flatMap(ev=>ev.map(e=>e.nextStartX)), 5
-  );
-  const midpointClusters=clusterEvidence(
-    rowEvidence.flatMap(ev=>ev.map(e=>e.boundaryX)), 6
-  );
+  // Monotonic repair only protects against malformed header coordinates. It
+  // never invents an extra column.
+  for (let i = 1; i < centers.length; i++) {
+    if (!(centers[i] > centers[i - 1])) centers[i] = centers[i - 1] + 1;
+  }
 
-  // Candidate starts are scored by how many different rows support them.
-  const candidateStarts=nextStartClusters.map(c=>{
-    const supportingRows=new Set();
-    rowEvidence.forEach((ev,rowIndex)=>{
-      if(ev.some(e=>Math.abs(e.nextStartX-c.center)<=5)) supportingRows.add(rowIndex);
-    });
-    return {
-      x:c.center,
-      rowSupport:supportingRows.size,
-      frequency:c.weight,
-      score:supportingRows.size*3+c.weight
-    };
-  }).sort((a,b)=>b.score-a.score || a.x-b.x);
+  return boundaries.map((b, i) => {
+    const left = i === 0
+      ? (Number.isFinite(Number(b.headerX)) ? Number(b.headerX) : centers[i] - 40)
+      : (centers[i - 1] + centers[i]) / 2;
+    const right = i === boundaries.length - 1
+      ? Math.max(Number(b.headerEnd) || centers[i] + 40, centers[i] + 40)
+      : (centers[i] + centers[i + 1]) / 2;
 
-  const rowCount=Math.max(1,rowData.length);
-  const selected=[];
-  let previousX=-Infinity;
+    const kind = headerColumnKind(headers?.[i] || b.header || '');
+    const allTokens = rowData.flatMap(r => r.tokens);
+    const numericTokens = allTokens.filter(t => kind === 'numeric' && Number.isFinite(t.right));
+    const rightClusters = clusterEvidence(numericTokens.map(t => t.right), 4);
 
-  for(let col=1; col<boundaries.length; col++) {
-    const headerX=headerCenters[col];
-    const prevHeaderX=headerCenters[col-1];
-    const broadLeft=(Number(prevHeaderX)+Number(headerX))/2 - 70;
-    const broadRight= col+1<boundaries.length
-      ? (Number(headerX)+Number(headerCenters[col+1]))/2 + 70
-      : Infinity;
-
-    const candidates=candidateStarts.filter(c=>
-      c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight
-    );
-
-    let pick=candidates[0] || null;
-
-    // If no strong gap-start exists, use the midpoint gap evidence nearest the
-    // header only as a low-confidence fallback. This prevents invented lanes.
-    if(!pick) {
-      const mids=midpointClusters
-        .map(c=>({x:c.center,rowSupport:0,frequency:c.weight,score:c.weight}))
-        .filter(c=>c.x>previousX+8 && c.x>=broadLeft && c.x<=broadRight)
-        .sort((a,b)=>Math.abs(a.x-headerX)-Math.abs(b.x-headerX));
-      if(mids.length) pick=mids[0];
+    // Count rows whose tokens have meaningful content inside this structural
+    // band. This is confidence metadata only, never a reason to remove a
+    // column or row.
+    let rowSupport = 0;
+    for (const r of rowData) {
+      if (r.tokens.some(t => t.center >= left && t.center < right)) rowSupport++;
     }
-
-    if(!pick) pick={x:headerX,rowSupport:0,frequency:0,score:0,fallback:true};
-    selected.push(pick);
-    previousX=pick.x;
-  }
-
-  // First column begins at the left edge of the table. Subsequent columns use
-  // the repeated next-word start. This creates bands, not nearest-word lanes.
-  const anchors=[
-    Number.isFinite(Number(boundaries[0].headerX)) ? Number(boundaries[0].headerX) : (allTokens[0]?.x || 0),
-    ...selected.map(s=>Number(s.x))
-  ];
-
-  for(let i=1;i<anchors.length;i++) {
-    if(!(anchors[i]>anchors[i-1])) anchors[i]=anchors[i-1]+1;
-  }
-
-  return boundaries.map((b,i)=>{
-    const next=anchors[i+1];
-    const selectedEvidence=i===0 ? {rowSupport:rowCount,frequency:rowCount,score:rowCount*3} : selected[i-1];
-    const kind=headerColumnKind(headers[i] || b.header);
-
-    // Numeric columns are additionally validated by repeated right edges. A
-    // right edge never creates a new text column by itself.
-    const numericTokens=allTokens.filter(t=>kind==='numeric' && Number.isFinite(t.right));
-    const rightClusters=clusterEvidence(numericTokens.map(t=>t.right),4);
 
     return {
       ...b,
-      index:i,
+      index: i,
       kind,
-      anchorX:anchors[i],
-      laneLeft:anchors[i],
-      laneRight:Number.isFinite(next) ? next : Infinity,
-      repeatedLeft:selectedEvidence.frequency || 0,
-      rowSupport:selectedEvidence.rowSupport || 0,
-      laneConfidence:Math.min(1,(selectedEvidence.rowSupport || 0)/rowCount),
-      rightClusters:rightClusters.slice(0,5),
-      alignmentModel:'vertical-gap-alignment',
-      fallback:!!selectedEvidence.fallback
+      anchorX: centers[i],
+      laneLeft: left,
+      laneRight: right,
+      repeatedLeft: rowSupport,
+      rowSupport,
+      laneConfidence: rowSupport / rowCount,
+      rightClusters: rightClusters.slice(0, 5),
+      alignmentModel: 'header-center-midpoint',
+      fallback: false
     };
   });
 }
 
 function assignRowTokensToXLanes(row, lanes, headers) {
-  const tokens=row.items.flatMap(expandSpatialTokens)
-    .filter(t=>String(t.text||'').trim())
-    .sort((a,b)=>a.x-b.x || a.right-b.right);
-  if(!tokens.length || !lanes.length) return [];
+  const tokens = row?.items?.flatMap(expandSpatialTokens)
+    .filter(t => String(t.text || '').trim())
+    .sort((a,b) => a.x - b.x || a.right - b.right) || [];
+  if (!tokens.length || !lanes.length) return [];
 
-  const groups=new Map();
-  for(const token of tokens){
-    let col=0;
-    // Band assignment: a word remains in its current cell until its X reaches
-    // the next structural start discovered from repeated vertical alignment.
-    for(let i=lanes.length-1;i>=0;i--){
-      if(Number(token.x)>=Number(lanes[i].laneLeft)-2.5){ col=i; break; }
+  const groups = Array.from({ length: lanes.length }, () => []);
+
+  for (const token of tokens) {
+    const center = Number.isFinite(Number(token.center))
+      ? Number(token.center)
+      : (Number(token.x) || 0) + (Number(token.width) || 0) / 2;
+
+    // Primary rule: token centre belongs to the header-defined structural
+    // band. This preserves every real column and keeps words such as
+    // "DAVID" + "OBI" together when both are inside Name's band.
+    let col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
+
+    // A token can sit just outside a band because its PDF.js text box is
+    // right/left aligned. Use overlap as a second, deterministic rule.
+    if (col < 0) {
+      let best = -1;
+      let bestOverlap = 0;
+      const left = Number(token.x) || center;
+      const right = Number(token.right) || center;
+      lanes.forEach((lane, i) => {
+        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(left, lane.laneLeft));
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          best = i;
+        }
+      });
+      col = best >= 0 ? best : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
     }
-    if(!groups.has(col)) groups.set(col,[]);
-    groups.get(col).push(token.text);
+
+    groups[col].push(token.text);
   }
 
-  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([col,parts])=>({
-    col,
-    text:parts.join(' '),
-    positionConfidence:lanes[col].laneConfidence>=0.55?'coordinate-alignment':'mixed-coordinate'
-  }));
+  // IMPORTANT: do not drop empty columns. The caller creates the full header
+  // length array; returning only populated groups here is fine as long as all
+  // populated groups retain their original column index.
+  return groups
+    .map((parts, col) => ({
+      col,
+      text: parts.join(' ').trim(),
+      positionConfidence: lanes[col].laneConfidence >= 0.55
+        ? 'coordinate-alignment'
+        : 'header-alignment'
+    }))
+    .filter(part => part.text);
 }
 
 
@@ -1336,10 +1307,12 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     if (!cleaned.some(Boolean)) continue;
     if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
 
-    // Reject page furniture/footers instead of turning it into a fake
-    // transaction row. A row must look like a transaction before it enters
-    // the verification dataset.
-    if (!rowLooksLikeTransaction(cleaned, headers)) continue;
+    // Preserve the complete physical row. Do not discard it merely because
+    // date/credit recognition failed at extraction time: the seller will
+    // explicitly choose Date / Name-Description / Credit later, and a shifted
+    // or partially formatted row must not silently disappear from the preview.
+    // Very small one-cell page furniture is still ignored.
+    if (cleaned.filter(Boolean).length < 2) continue;
 
     tableRows.push(cleaned);
   }
