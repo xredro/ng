@@ -26,11 +26,6 @@ const VERIFY_CREDIT_HEADER_SYNONYMS = [
   "received", "amountreceived", "paidin", "lodgement"
 ];
 
-const VERIFY_HEADER_KEYWORDS = [
-  "date", "description", "narration", "details", "remarks",
-  "credit", "debit", "balance", "amount", "cr", "dr",
-  "value date", "transaction", "reference", "ref"
-];
 
 const VERIFY_GENERIC_TOKENS = new Set([
   "the", "and", "for", "from", "to", "of", "by", "with",
@@ -237,10 +232,7 @@ async function handleStatementUpload(input) {
     }
 
     console.error("Statement PDF processing error:", err);
-    const message = err?.message ? String(err.message) : "Unknown PDF processing error";
-    showVerifyError(
-      `Could not process this PDF. ${message}`
-    );
+    showVerifyError(verifyPdfErrorMessage(err, "Could not process this PDF."));
   }
 }
 
@@ -283,58 +275,257 @@ async function submitVerifyPassword() {
   } catch (err) {
     console.error("PDF password error:", err);
     input.disabled = false;
-    errEl.textContent = "That password couldn't unlock this PDF. Try again.";
+    const info = getPdfReaderError(err);
+    errEl.textContent = info.type === "incorrect-password"
+      ? "That password is incorrect. Try again."
+      : verifyPdfErrorMessage(err, "The PDF could not be unlocked. Try again.");
     errEl.classList.remove("hidden");
   }
+}
+
+function getPdfReaderError(err) {
+  const name = String(err?.name || "");
+  const code = Number(err?.code);
+  const message = String(err?.message || "");
+
+  if (name === "PasswordException" || code === 1 || code === 2) {
+    return { type: code === 2 ? "incorrect-password" : "password-required", message };
+  }
+  if (name === "InvalidPDFException") {
+    return { type: "invalid-pdf", message };
+  }
+  if (name === "MissingPDFException") {
+    return { type: "missing-pdf", message };
+  }
+  if (name === "UnexpectedResponseException") {
+    return { type: "network", message };
+  }
+  if (name === "UnknownErrorException") {
+    return { type: "pdf-error", message };
+  }
+  if (/worker|fake worker|setting up worker|loading worker/i.test(message)) {
+    return { type: "worker", message };
+  }
+  return { type: "unknown", message };
+}
+
+function verifyPdfErrorMessage(err, fallback = "Could not read this PDF.") {
+  const info = getPdfReaderError(err);
+  switch (info.type) {
+    case "invalid-pdf":
+      return "This file is not a valid PDF or the PDF is damaged.";
+    case "missing-pdf":
+      return "The PDF file could not be read. Please choose the file again.";
+    case "network":
+      return "The PDF reader could not load required PDF data. Check your connection and try again.";
+    case "worker":
+      return "The PDF reader worker could not start. The reader will try again without the worker.";
+    case "pdf-error":
+      return info.message ? `PDF.js could not extract this PDF: ${info.message}` : fallback;
+    default:
+      return info.message ? `${fallback} ${info.message}` : fallback;
+  }
+}
+
+function normalizePdfTextItem(item, pageNumber, itemIndex) {
+  const transform = Array.isArray(item?.transform) ? item.transform : [];
+  const x = Number.isFinite(Number(transform[4])) ? Number(transform[4]) : 0;
+  const y = Number.isFinite(Number(transform[5])) ? Number(transform[5]) : 0;
+  const width = Number.isFinite(Number(item?.width)) ? Math.max(0, Number(item.width)) : 0;
+  const height = Number.isFinite(Number(item?.height)) ? Math.max(0, Number(item.height)) : 0;
+  const text = String(item?.str ?? "").replace(/\u0000/g, "");
+
+  return {
+    id: `p${pageNumber}-t${itemIndex}`,
+    text,
+    x,
+    y,
+    width,
+    height,
+    right: x + width,
+    top: y + height,
+    centerX: x + width / 2,
+    centerY: y + height / 2,
+    transform: transform.map(v => Number.isFinite(Number(v)) ? Number(v) : 0),
+    hasEOL: !!item?.hasEOL,
+    dir: String(item?.dir || ""),
+    fontName: String(item?.fontName || "")
+  };
+}
+
+async function extractPdfPageText(page, pageNumber) {
+  let content;
+  let firstError = null;
+
+  // First pass: normal PDF.js extraction. disableCombineTextItems is kept
+  // false here because many real bank PDFs expose useful multi-word items.
+  try {
+    content = await page.getTextContent({
+      normalizeWhitespace: false,
+      disableCombineTextItems: false,
+      includeMarkedContent: false
+    });
+  } catch (err) {
+    firstError = err;
+  }
+
+  // Second pass: ask PDF.js for less-combined text items. This often recovers
+  // selectable text from PDFs whose font/text streams are unusually fragmented.
+  if (!content) {
+    try {
+      content = await page.getTextContent({
+        normalizeWhitespace: false,
+        disableCombineTextItems: true,
+        includeMarkedContent: false
+      });
+    } catch (err) {
+      throw firstError || err;
+    }
+  }
+
+  const items = Array.isArray(content?.items)
+    ? content.items
+        .map((item, index) => normalizePdfTextItem(item, pageNumber, index))
+        .filter(item => item.text.trim() || item.width > 0 || item.height > 0)
+    : [];
+
+  return {
+    items,
+    rawItemCount: Array.isArray(content?.items) ? content.items.length : 0
+  };
+}
+
+function assertPdfReaderAvailable() {
+  if (typeof window === "undefined" || typeof window.pdfjsLib === "undefined") {
+    throw new Error("PDF.js is not loaded. Check that pdf.min.js is loaded before paymentVerify.js.");
+  }
+  if (typeof window.pdfjsLib.getDocument !== "function") {
+    throw new Error("The loaded PDF.js library is incomplete or incompatible.");
+  }
+}
+
+async function openPdfDocument(buffer, password, useWorker = true) {
+  assertPdfReaderAvailable();
+
+  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 5) {
+    throw new Error("The selected file is empty or is not a readable PDF.");
+  }
+
+  // A quick signature check gives a much clearer error than PDF.js's generic
+  // UnknownError for files renamed to .pdf.
+  const signature = new TextDecoder("latin1").decode(new Uint8Array(buffer.slice(0, 5)));
+  if (signature !== "%PDF-") {
+    throw new Error("The selected file does not contain a valid PDF header.");
+  }
+
+  const options = {
+    data: buffer.slice(0),
+    password: password || undefined,
+    useWorker
+  };
+
+  const loadingTask = window.pdfjsLib.getDocument(options);
+  return await loadingTask.promise;
 }
 
 async function loadStatementPdf(buffer, password) {
   renderVerifyProgress("statement", "Reading statement PDF…");
 
-  const loadingTask = pdfjsLib.getDocument({
-    data: buffer.slice(0),
-    password: password || undefined
-  });
+  let pdf;
+  try {
+    pdf = await openPdfDocument(buffer, password, true);
+  } catch (err) {
+    const info = getPdfReaderError(err);
+    // If the worker cannot start (blocked CDN, CSP, browser issue), PDF.js
+    // can still extract text on the main thread. This is a reader fallback;
+    // reconstruction remains completely unchanged.
+    if (info.type === "worker") {
+      try {
+        pdf = await openPdfDocument(buffer, password, false);
+      } catch (fallbackErr) {
+        throw fallbackErr;
+      }
+    } else {
+      throw err;
+    }
+  }
 
-  const pdf = await loadingTask.promise;
+  if (!pdf || !Number.isFinite(pdf.numPages) || pdf.numPages < 1) {
+    throw new Error("The PDF contains no readable pages.");
+  }
+
   const pages = [];
+  let pagesWithText = 0;
+  let failedPages = [];
+  let totalItems = 0;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     updateVerifyProgress(
       `Reading statement page ${i} of ${pdf.numPages}…`,
       i - 1,
-      pdf.numPages
+      pdf.numPages,
+      failedPages.length ? `${failedPages.length} page(s) could not be extracted yet.` : ""
     );
 
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const viewport = page.getViewport({ scale: 1 });
+    let page;
+    try {
+      page = await pdf.getPage(i);
+    } catch (err) {
+      failedPages.push(i);
+      pages.push({ width: 0, height: 0, items: [], pageNumber: i, extractionError: verifyPdfErrorMessage(err, "Could not open this page.") });
+      continue;
+    }
 
-    // Keep the PDF's real 2-D coordinate system. We do not need to display
-    // this canvas; it is a spatial working surface used to reconstruct the
-    // table before any normalization or matching happens.
-    pages.push({
-      width: viewport.width,
-      height: viewport.height,
-      items: content.items.map((it, itemIndex) => {
-        const x = Number(it.transform?.[4]) || 0;
-        const y = Number(it.transform?.[5]) || 0;
-        const width = Math.max(0, Number(it.width) || 0);
-        const height = Math.max(0, Number(it.height) || 0);
-        return {
-          id: `p${i}-t${itemIndex}`,
-          text: String(it.str || ''),
-          x, y, width, height,
-          right: x + width,
-          top: y + height,
-          centerX: x + width / 2,
-          centerY: y + height / 2
-        };
-      })
-    });
+    let viewport;
+    try {
+      viewport = page.getViewport({ scale: 1 });
+    } catch (_) {
+      viewport = { width: 0, height: 0 };
+    }
+
+    try {
+      const extracted = await extractPdfPageText(page, i);
+      totalItems += extracted.items.length;
+      if (extracted.items.some(item => item.text.trim())) pagesWithText++;
+
+      pages.push({
+        pageNumber: i,
+        width: Number(viewport.width) || 0,
+        height: Number(viewport.height) || 0,
+        items: extracted.items,
+        rawItemCount: extracted.rawItemCount
+      });
+    } catch (err) {
+      failedPages.push(i);
+      pages.push({
+        pageNumber: i,
+        width: Number(viewport.width) || 0,
+        height: Number(viewport.height) || 0,
+        items: [],
+        extractionError: verifyPdfErrorMessage(err, "Could not extract text from this page.")
+      });
+    }
   }
 
+  updateVerifyProgress(
+    "Finished reading PDF text.",
+    pdf.numPages,
+    pdf.numPages,
+    `${pagesWithText}/${pdf.numPages} page(s) contain selectable text • ${totalItems.toLocaleString()} text item(s)`
+  );
+
   verifyState.statementText = pages;
+
+  if (!pagesWithText) {
+    throw new Error(
+      failedPages.length === pdf.numPages
+        ? "PDF.js could not extract text from any page. The PDF may be damaged, encrypted with unsupported restrictions, or image/scanned-only."
+        : "No selectable text was found in this PDF. A scanned/image-only statement needs OCR before it can be reconstructed."
+    );
+  }
+
+  // Do not silently fail merely because one page is malformed. Valid pages
+  // are still passed to the existing table reconstruction layer.
   await detectStatementTables();
 }
 
@@ -402,14 +593,6 @@ function build2DPageModel(page) {
   return canvas;
 }
 
-function groupIntoRows(itemsOrPage, yTolerance) {
-  // Compatibility wrapper: the rest of the verifier can continue to work
-  // with rows, while extraction itself is now based on a 2-D page model.
-  if (itemsOrPage && !Array.isArray(itemsOrPage) && Array.isArray(itemsOrPage.items)) {
-    return build2DPageModel(itemsOrPage).rows;
-  }
-  return build2DPageModel({ items: Array.isArray(itemsOrPage) ? itemsOrPage : [] }).rows;
-}
 
 function normalizeHeaderWord(s) {
   return (s || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -462,9 +645,6 @@ function looksLikeDate(s) {
   return VERIFY_DATE_REGEXES.some(r => r.test(String(s)));
 }
 
-function looksLikeNumber(s) {
-  return /^[₦$€£]?\s?[\d.,]+$/.test((s || "").trim()) && /\d/.test(s);
-}
 
 /*
  * PDF.js exposes text as individual positioned fragments. A header such as
@@ -518,68 +698,11 @@ function escapeRegExp(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function findHeaderLabelsInItem(item) {
-  const text = String(item.text || "").replace(/\s+/g, " ").trim();
-  const lower = text.toLowerCase();
-  if (!text) return [];
 
-  const matches = [];
-  const occupied = [];
 
-  const patterns = [...VERIFY_HEADER_PATTERNS].sort(
-    (a, b) => b.length - a.length
-  );
-
-  patterns.forEach(pattern => {
-    const regex = new RegExp(escapeRegExp(pattern), "gi");
-    let match;
-
-    while ((match = regex.exec(lower))) {
-      const start = match.index;
-      const end = start + match[0].length;
-
-      const overlaps = occupied.some(r => start < r.end && end > r.start);
-      if (overlaps) continue;
-
-      occupied.push({ start, end });
-      matches.push({
-        start,
-        end,
-        text: text.slice(start, end)
-      });
-    }
-  });
-
-  matches.sort((a, b) => a.start - b.start);
-
-  const itemX = Number(item.x) || 0;
-  const itemWidth = Number(item.width) || 0;
-  const charWidth = text.length ? itemWidth / text.length : 0;
-
-  return matches.map(m => ({
-    x: itemX + (m.start * charWidth),
-    end: itemX + (m.end * charWidth),
-    center: itemX + (((m.start + m.end) / 2) * charWidth),
-    text: m.text
-  }));
-}
-
-const VERIFY_COMPOSITE_HEADERS = [
-  "value date", "posting date", "transaction date", "transaction datetime",
-  "transaction details / narration",
-  "transaction time", "customer name", "credit amount", "amount credited",
-  "amount received", "transaction details", "transaction description",
-  "reference code", "trace code", "account name", "account number"
-];
-
-function isKnownHeaderText(text) {
-  const normalized = normalizeHeaderWord(text);
-  return VERIFY_HEADER_PATTERNS.some(p => normalizeHeaderWord(p) === normalized);
-}
 
 function groupHeaderCells(headerRow) {
-  // FIXED: old implementation used an allowlist (isKnownHeaderText /
-  // VERIFY_COMPOSITE_HEADERS) and silently dropped columns whose header
+  // FIXED: old implementation used an allowlist and silently dropped columns
   // text wasn't on the list — causing real columns to disappear, their
   // data to bleed into adjacent recognised columns ("unnecessary stuff"),
   // and the column-picker indices to mismatch the table-row arrays
@@ -665,15 +788,15 @@ function detectHeaderRow(rows) {
     const texts = cells.map(c => String(c.text || "").toLowerCase());
 
     const hasDate = texts.some(t =>
-      /date|value\s*date|posting\s*date|tran(?:saction)?\s*date|time|timestamp/.test(t)
+      /\bdate\b|\bvalue\s*date\b|\bposting\s*date\b|\btran(?:saction)?\s*date\b|\btime\b|\btimestamp\b/.test(t)
     );
 
     const hasAmount = texts.some(t =>
-      /credit|lodge(?:ment)?s?|inflow|deposit|received?|amount|debit|withdraw(?:al)?s?|outflow|balance/.test(t)
+      /\bcredit\b|\blodge(?:ment)?s?\b|\binflow\b|\bdeposit\b|\breceived?\b|\bamount\b|\bdebit\b|\bwithdraw(?:al)?s?\b|\boutflow\b|\bbalance\b/.test(t)
     );
 
     const hasDescription = texts.some(t =>
-      /description|narration|details?|particular|name|remarks?|reference|ref|transaction/.test(t)
+      /\bdescription\b|\bnarration\b|\bdetails?\b|\bparticular\b|\bname\b|\bremarks?\b|\breference\b|\bref\b|\btransaction\b/.test(t)
     );
 
     let score = 0;
@@ -751,130 +874,11 @@ function buildColumnBoundaries(headerRow) {
   });
 }
 
-function xRangesOverlap(aLeft, aRight, bLeft, bRight) {
-  return Math.max(aLeft, bLeft) < Math.min(aRight, bRight);
-}
 
-function columnDirectlyUnderHeader(x, width, boundary) {
-  const left = Number(x) || 0;
-  const right = left + Math.max(0, Number(width) || 0);
-  const center = (left + right) / 2;
-  const coreLeft = Number(boundary.headerX) || 0;
-  const coreRight = Number(boundary.headerEnd) || coreLeft;
 
-  // A fragment whose centre is inside the real header box is a direct hit.
-  if (center >= coreLeft && center <= coreRight) return true;
 
-  // This also catches right/left-aligned values whose box overlaps the
-  // physical header box even though their centre sits just outside it.
-  return xRangesOverlap(left, right, coreLeft, coreRight);
-}
 
-function columnAtX(x,boundaries) {
-  if (!boundaries.length) return -1;
 
-  // The header's physical X span is the strongest anchor. This matters for
-  // compact headers such as "Credit" where the text itself is narrower than
-  // the data column.
-  for (let i=0;i<boundaries.length;i++) {
-    const b = boundaries[i];
-    const left = Number(b.headerX);
-    const right = Number(b.headerEnd);
-    if (Number.isFinite(left) && Number.isFinite(right) && x >= left && x <= right) {
-      return i;
-    }
-  }
-
-  // Otherwise use the data corridor created from neighbouring header centres.
-  for (let i=0;i<boundaries.length;i++) {
-    if (x>=boundaries[i].x && x<boundaries[i].end) return i;
-  }
-
-  let best=0,d=Infinity;
-  boundaries.forEach((b,i)=>{
-    const n=Math.abs(x-b.center);
-    if(n<d){d=n;best=i;}
-  });
-  return best;
-}
-
-function assignToColumn(x,width,boundaries) {
-  if (!boundaries.length) return -1;
-
-  // First try the actual header-sized horizontal footprint. This is the
-  // "directly underneath the header" rule requested for the spatial table.
-  for (let i=0;i<boundaries.length;i++) {
-    if (columnDirectlyUnderHeader(x, width, boundaries[i])) return i;
-  }
-
-  return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
-}
-
-function estimateTextFragmentPositions(item, boundaries = []) {
-  const text = String(item.text || '').replace(/\s+/g, ' ').trim();
-  const x = Number(item.x) || 0;
-  const width = Math.max(0, Number(item.width) || 0);
-  if (!text) return [];
-
-  /*
-   * PDF.js can legally return one TextItem for several visually separate
-   * cells.  TextItem.width is the width of the WHOLE item, so blindly using
-   * one character-per-pixel spacing causes the internal columns to collapse.
-   *
-   * We still need an approximate position for each token, but we deliberately
-   * keep the original whitespace. Large whitespace gaps are useful evidence
-   * of a cell boundary and are therefore represented as gaps rather than
-   * silently treating every character as equally spaced.
-   */
-  const raw = String(item.text || '').replace(/\r?\n/g, ' ');
-  const tokens = [];
-  const re = /\S+/g;
-  let m;
-  while ((m = re.exec(raw))) {
-    tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
-  }
-  if (!tokens.length) return [];
-
-  // Character-width estimate is only a starting coordinate. The assignment
-  // stage below can move a token to the only plausible column when the
-  // approximate coordinate conflicts with the table schema.
-  const charWidth = width > 0 && raw.length ? width / raw.length : 0;
-  return tokens.map(t => {
-    const left = x + t.start * charWidth;
-    const right = x + t.end * charWidth;
-    return {
-      text: t.text,
-      x: left,
-      right,
-      center: (left + right) / 2,
-      start: t.start,
-      end: t.end
-    };
-  });
-}
-
-function tokenColumnCompatibility(token, boundary, index, boundaries) {
-  const text = String(token || '').trim();
-  const lower = text.toLowerCase();
-  const header = normalizeHeaderLabel(boundary?.header || '');
-  const dateLike = looksLikeDate(text);
-  const timeLike = /^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?$/i.test(text);
-  const amountLike = /^(?:₦|NGN|N|\$|€|£)?\s*\d[\d,.]*$/.test(text);
-  const channelLike = /^(mobile|ussd|web|pos|atm|internet|app|branch)$/i.test(text);
-
-  let score = 0;
-  if (header === 'date' || header === 'datetime') score += dateLike ? 12 : 0;
-  if (header === 'time') score += timeLike ? 12 : 0;
-  if (header === 'debit' || header === 'credit' || header === 'balance') score += amountLike ? 10 : 0;
-  if (header === 'channel') score += channelLike ? 12 : 0;
-  if (header === 'reference') score += /^\d{8,}$/.test(text.replace(/\D/g,'')) ? 12 : 0;
-  if (header === 'description' || header === 'name') score += (!dateLike && !timeLike && !amountLike && !channelLike) ? 2 : 0;
-
-  // Numeric tokens are especially ambiguous between Debit and Credit. Their
-  // left-to-right order is therefore handled by the monotonic solver rather
-  // than by this semantic score alone.
-  return score;
-}
 
 function measureTokenLayout(item) {
   const raw = String(item?.text || '').replace(/\r?\n/g, ' ');
@@ -943,38 +947,6 @@ function expandSpatialTokens(item) {
   return measureTokenLayout(item);
 }
 
-function collectRowBoundaryEvidence(row, minGap = null) {
-  const tokens = row.items.flatMap(expandSpatialTokens)
-    .filter(t => String(t.text || '').trim())
-    .sort((a,b) => a.x-b.x || a.right-b.right);
-  if (tokens.length < 2) return [];
-
-  const widths = tokens.map(t => Math.max(1, t.width)).sort((a,b)=>a-b);
-  const medianWidth = widths[Math.floor(widths.length/2)] || 10;
-  const gapThreshold = Number.isFinite(minGap) ? minGap : Math.max(8, medianWidth * 0.9);
-  const evidence = [];
-
-  for (let i=0;i<tokens.length-1;i++) {
-    const a=tokens[i], b=tokens[i+1];
-    const gap=Math.max(0, b.x-a.right);
-    if (gap < gapThreshold) continue;
-
-    // A candidate boundary is the open space before the next aligned word.
-    // Keep both the next-word start and the midpoint: repeated next-word X
-    // positions are the strongest signal, while midpoint is useful when
-    // text widths vary substantially.
-    evidence.push({
-      leftToken:a,
-      rightToken:b,
-      gap,
-      boundaryX:(a.right+b.x)/2,
-      nextStartX:b.x,
-      prevEndX:a.right,
-      confidence:Math.min(1, gap / Math.max(gapThreshold, 1))
-    });
-  }
-  return evidence;
-}
 
 function medianNumber(values) {
   const nums = (Array.isArray(values) ? values : [])
@@ -1153,23 +1125,6 @@ function rowLooksLikeRepeatedHeader(cells, headers) {
   return matches >= Math.max(2, Math.ceil(headers.length * 0.5));
 }
 
-function rowLooksLikeTransaction(cells, headers) {
-  const dateIndexes = [];
-  const creditIndexes = [];
-
-  headers.forEach((h, i) => {
-    const n = normalizeHeaderLabel(h);
-    if (n === "date" || n === "datetime" || n === "time") dateIndexes.push(i);
-    if (n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)) creditIndexes.push(i);
-  });
-
-  const hasDate = dateIndexes.some(i => looksLikeDate(cells[i]));
-  const hasCredit = creditIndexes.some(i => extractAmount(cells[i]) !== null);
-
-  // Some bank statements have date/time split across cells. A transaction
-  // row still needs a recognizable date OR a valid credit value.
-  return hasDate || hasCredit;
-}
 
 
 function stripExtractionArtifacts(text) {
@@ -1288,14 +1243,31 @@ function extractAmount(raw) {
   const c = amountCandidatesFromText(raw);
   return c.length ? c[0].value : null;
 }
-function extractAllAmounts(text) {
-  return amountCandidatesFromText(text).map(x=>x.value);
-}
 
 function mergeContinuationRows(rows,boundaries,headers){
   if(!rows.length||!boundaries.length)return rows;const out=[];
   const hasDateOrAmount=items=>{const t=items.map(x=>x.text||"").join(" ");return !!extractDate(t)||extractAmount(t)!==null;};
   for(const row of rows){if(!out.length){out.push(row);continue;}const prev=out[out.length-1],text=row.items.map(x=>String(x.text||"").trim()).filter(Boolean).join(" ");const gap=Math.abs(Number(prev.centerY)-Number(row.centerY)),fx=Number(row.items[0]?.x)||0;const textCol=boundaries.some((b,i)=>{const h=normalizeHeaderLabel(headers[i]||"");return(h==="name"||h==="description")&&fx>=b.x-12&&fx<=b.end+12;});if(text&&gap<=18&&!hasDateOrAmount(row.items)&&textCol&&hasDateOrAmount(prev.items)){prev.items.push(...row.items);prev.items.sort((a,b)=>a.x-b.x);}else out.push(row);}return out;
+}
+
+function headersSemanticallyCompatible(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((value, index) => {
+    const left = normalizeHeaderLabel(value);
+    const right = normalizeHeaderLabel(b[index]);
+    return left === right || normalizeHeaderWord(value) === normalizeHeaderWord(b[index]);
+  });
+}
+
+function findRepeatedSchemaHeaderRow(rows, expectedHeaders) {
+  if (!Array.isArray(rows) || !Array.isArray(expectedHeaders) || !expectedHeaders.length) return -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    const cells = groupHeaderCells(rows[i]);
+    if (cells.length !== expectedHeaders.length) continue;
+    if (headersSemanticallyCompatible(cells.map(c => c.text), expectedHeaders)) return i;
+  }
+  return -1;
 }
 
 function buildTableFromPage(pageItems, schemaHint = null) {
@@ -1312,8 +1284,10 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     headers = [...schemaHint.headers];
     boundaries = schemaHint.boundaries.map(b => ({ ...b }));
 
-    // Repeated header is optional on continuation pages.
-    headerIdx = detectHeaderRow(rows);
+    // A continuation page may have no repeated header at all. Do NOT run the
+    // generic header detector here because a normal transaction row can look
+    // like a header (date + amount + description) and would then be discarded.
+    headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
   } else {
     headerIdx = detectHeaderRow(rows);
     if (headerIdx === -1) return null;
@@ -1402,11 +1376,10 @@ async function detectStatementTables() {
 
       // Only tables with the same real header structure belong to the same
       // statement transaction table. Page furniture is ignored.
-      const sameSchema =
-        table.headers.length === canonicalSchema.headers.length &&
-        table.headers.every((h, index) =>
-          normalizeHeaderWord(h) === normalizeHeaderWord(canonicalSchema.headers[index])
-        );
+      const sameSchema = headersSemanticallyCompatible(
+        table.headers,
+        canonicalSchema.headers
+      );
 
       if (sameSchema) tables.push(table);
     }
@@ -2038,10 +2011,6 @@ function getAmountCandidates(amount) {
   return set ? [...set] : [];
 }
 
-function intersectIds(a, b) {
-  const bSet = new Set(b);
-  return a.filter(id => bSet.has(id));
-}
 
 function imageHasAmount(image, amount) {
   const target=Number(amount);if(!Number.isFinite(target))return false;
@@ -2130,102 +2099,7 @@ function valueForSearch(v) {
     .trim();
 }
 
-function findSupportingEvidence(row, image) {
-  const primaryIndexes = new Set([
-    verifyState.selectedColumns.dateCol,
-    verifyState.selectedColumns.nameCol,
-    verifyState.selectedColumns.creditCol
-  ]);
 
-  const matches = [];
-
-  row.cells.forEach(cell => {
-    if (primaryIndexes.has(cell.columnIndex)) return;
-
-    if (cellMatchesImage(cell.value, image)) {
-      matches.push(cell.value);
-    }
-  });
-
-  return [...new Set(matches)];
-}
-
-function findCoreMatchesForRow(row) {
-  if (row.credit === null || row.credit <= 0) {
-    return {
-      type: "SKIPPED",
-      row,
-      candidates: [],
-      reason: "No valid positive Credit."
-    };
-  }
-
-  if (!row.date) {
-    return {
-      type: "REVIEW REQUIRED",
-      row,
-      candidates: [],
-      reason: "The selected Date column could not be normalized for this row."
-    };
-  }
-
-  if (!row.nameRaw) {
-    return {
-      type: "REVIEW REQUIRED",
-      row,
-      candidates: [],
-      reason: "The selected Name / Description cell is empty."
-    };
-  }
-
-  // Candidate narrowing starts with the mandatory Credit amount.
-  let candidateIds = getAmountCandidates(row.credit);
-
-  if (!candidateIds.length) {
-    return {
-      type: "NOT VERIFIED",
-      row,
-      candidates: [],
-      reason: "No payment image contains the statement Credit amount."
-    };
-  }
-
-  // Date must also occur in the SAME image.
-  candidateIds = candidateIds.filter(id => {
-    const image = getImageById(id);
-    return image && imageHasDate(image, row.date);
-  });
-
-  if (!candidateIds.length) {
-    return {
-      type: "NOT VERIFIED",
-      row,
-      candidates: [],
-      reason: "No payment image contains both the statement Credit amount and Date."
-    };
-  }
-
-  // Name / Description must be present in the SAME candidate image.
-  const nameMatches = candidateIds.filter(id => {
-    const image = getImageById(id);
-    return image && textFieldMatchesImage(row.nameRaw, image);
-  });
-
-  if (!nameMatches.length) {
-    return {
-      type: "NOT VERIFIED",
-      row,
-      candidates: [],
-      reason: "No single payment image contains the required Credit, Date, and Name / Description."
-    };
-  }
-
-  return {
-    type: "CORE",
-    row,
-    candidates: nameMatches
-  };
-}
 
 function renderLiveImageCheck(image, index, total, candidates, statusText = "Checking…") {
   const body = document.getElementById("verifyBody");
