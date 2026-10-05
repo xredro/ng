@@ -26,6 +26,11 @@ const VERIFY_CREDIT_HEADER_SYNONYMS = [
   "received", "amountreceived", "paidin", "lodgement"
 ];
 
+const VERIFY_HEADER_KEYWORDS = [
+  "date", "description", "narration", "details", "remarks",
+  "credit", "debit", "balance", "amount", "cr", "dr",
+  "value date", "transaction", "reference", "ref"
+];
 
 const VERIFY_GENERIC_TOKENS = new Set([
   "the", "and", "for", "from", "to", "of", "by", "with",
@@ -232,7 +237,10 @@ async function handleStatementUpload(input) {
     }
 
     console.error("Statement PDF processing error:", err);
-    showVerifyError(verifyPdfErrorMessage(err, "Could not process this PDF."));
+    const message = err?.message ? String(err.message) : "Unknown PDF processing error";
+    showVerifyError(
+      `Could not process this PDF. ${message}`
+    );
   }
 }
 
@@ -275,257 +283,58 @@ async function submitVerifyPassword() {
   } catch (err) {
     console.error("PDF password error:", err);
     input.disabled = false;
-    const info = getPdfReaderError(err);
-    errEl.textContent = info.type === "incorrect-password"
-      ? "That password is incorrect. Try again."
-      : verifyPdfErrorMessage(err, "The PDF could not be unlocked. Try again.");
+    errEl.textContent = "That password couldn't unlock this PDF. Try again.";
     errEl.classList.remove("hidden");
   }
-}
-
-function getPdfReaderError(err) {
-  const name = String(err?.name || "");
-  const code = Number(err?.code);
-  const message = String(err?.message || "");
-
-  if (name === "PasswordException" || code === 1 || code === 2) {
-    return { type: code === 2 ? "incorrect-password" : "password-required", message };
-  }
-  if (name === "InvalidPDFException") {
-    return { type: "invalid-pdf", message };
-  }
-  if (name === "MissingPDFException") {
-    return { type: "missing-pdf", message };
-  }
-  if (name === "UnexpectedResponseException") {
-    return { type: "network", message };
-  }
-  if (name === "UnknownErrorException") {
-    return { type: "pdf-error", message };
-  }
-  if (/worker|fake worker|setting up worker|loading worker/i.test(message)) {
-    return { type: "worker", message };
-  }
-  return { type: "unknown", message };
-}
-
-function verifyPdfErrorMessage(err, fallback = "Could not read this PDF.") {
-  const info = getPdfReaderError(err);
-  switch (info.type) {
-    case "invalid-pdf":
-      return "This file is not a valid PDF or the PDF is damaged.";
-    case "missing-pdf":
-      return "The PDF file could not be read. Please choose the file again.";
-    case "network":
-      return "The PDF reader could not load required PDF data. Check your connection and try again.";
-    case "worker":
-      return "The PDF reader worker could not start. The reader will try again without the worker.";
-    case "pdf-error":
-      return info.message ? `PDF.js could not extract this PDF: ${info.message}` : fallback;
-    default:
-      return info.message ? `${fallback} ${info.message}` : fallback;
-  }
-}
-
-function normalizePdfTextItem(item, pageNumber, itemIndex) {
-  const transform = Array.isArray(item?.transform) ? item.transform : [];
-  const x = Number.isFinite(Number(transform[4])) ? Number(transform[4]) : 0;
-  const y = Number.isFinite(Number(transform[5])) ? Number(transform[5]) : 0;
-  const width = Number.isFinite(Number(item?.width)) ? Math.max(0, Number(item.width)) : 0;
-  const height = Number.isFinite(Number(item?.height)) ? Math.max(0, Number(item.height)) : 0;
-  const text = String(item?.str ?? "").replace(/\u0000/g, "");
-
-  return {
-    id: `p${pageNumber}-t${itemIndex}`,
-    text,
-    x,
-    y,
-    width,
-    height,
-    right: x + width,
-    top: y + height,
-    centerX: x + width / 2,
-    centerY: y + height / 2,
-    transform: transform.map(v => Number.isFinite(Number(v)) ? Number(v) : 0),
-    hasEOL: !!item?.hasEOL,
-    dir: String(item?.dir || ""),
-    fontName: String(item?.fontName || "")
-  };
-}
-
-async function extractPdfPageText(page, pageNumber) {
-  let content;
-  let firstError = null;
-
-  // First pass: normal PDF.js extraction. disableCombineTextItems is kept
-  // false here because many real bank PDFs expose useful multi-word items.
-  try {
-    content = await page.getTextContent({
-      normalizeWhitespace: false,
-      disableCombineTextItems: false,
-      includeMarkedContent: false
-    });
-  } catch (err) {
-    firstError = err;
-  }
-
-  // Second pass: ask PDF.js for less-combined text items. This often recovers
-  // selectable text from PDFs whose font/text streams are unusually fragmented.
-  if (!content) {
-    try {
-      content = await page.getTextContent({
-        normalizeWhitespace: false,
-        disableCombineTextItems: true,
-        includeMarkedContent: false
-      });
-    } catch (err) {
-      throw firstError || err;
-    }
-  }
-
-  const items = Array.isArray(content?.items)
-    ? content.items
-        .map((item, index) => normalizePdfTextItem(item, pageNumber, index))
-        .filter(item => item.text.trim() || item.width > 0 || item.height > 0)
-    : [];
-
-  return {
-    items,
-    rawItemCount: Array.isArray(content?.items) ? content.items.length : 0
-  };
-}
-
-function assertPdfReaderAvailable() {
-  if (typeof window === "undefined" || typeof window.pdfjsLib === "undefined") {
-    throw new Error("PDF.js is not loaded. Check that pdf.min.js is loaded before paymentVerify.js.");
-  }
-  if (typeof window.pdfjsLib.getDocument !== "function") {
-    throw new Error("The loaded PDF.js library is incomplete or incompatible.");
-  }
-}
-
-async function openPdfDocument(buffer, password, useWorker = true) {
-  assertPdfReaderAvailable();
-
-  if (!(buffer instanceof ArrayBuffer) || buffer.byteLength < 5) {
-    throw new Error("The selected file is empty or is not a readable PDF.");
-  }
-
-  // A quick signature check gives a much clearer error than PDF.js's generic
-  // UnknownError for files renamed to .pdf.
-  const signature = new TextDecoder("latin1").decode(new Uint8Array(buffer.slice(0, 5)));
-  if (signature !== "%PDF-") {
-    throw new Error("The selected file does not contain a valid PDF header.");
-  }
-
-  const options = {
-    data: buffer.slice(0),
-    password: password || undefined,
-    useWorker
-  };
-
-  const loadingTask = window.pdfjsLib.getDocument(options);
-  return await loadingTask.promise;
 }
 
 async function loadStatementPdf(buffer, password) {
   renderVerifyProgress("statement", "Reading statement PDF…");
 
-  let pdf;
-  try {
-    pdf = await openPdfDocument(buffer, password, true);
-  } catch (err) {
-    const info = getPdfReaderError(err);
-    // If the worker cannot start (blocked CDN, CSP, browser issue), PDF.js
-    // can still extract text on the main thread. This is a reader fallback;
-    // reconstruction remains completely unchanged.
-    if (info.type === "worker") {
-      try {
-        pdf = await openPdfDocument(buffer, password, false);
-      } catch (fallbackErr) {
-        throw fallbackErr;
-      }
-    } else {
-      throw err;
-    }
-  }
+  const loadingTask = pdfjsLib.getDocument({
+    data: buffer.slice(0),
+    password: password || undefined
+  });
 
-  if (!pdf || !Number.isFinite(pdf.numPages) || pdf.numPages < 1) {
-    throw new Error("The PDF contains no readable pages.");
-  }
-
+  const pdf = await loadingTask.promise;
   const pages = [];
-  let pagesWithText = 0;
-  let failedPages = [];
-  let totalItems = 0;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     updateVerifyProgress(
       `Reading statement page ${i} of ${pdf.numPages}…`,
       i - 1,
-      pdf.numPages,
-      failedPages.length ? `${failedPages.length} page(s) could not be extracted yet.` : ""
+      pdf.numPages
     );
 
-    let page;
-    try {
-      page = await pdf.getPage(i);
-    } catch (err) {
-      failedPages.push(i);
-      pages.push({ width: 0, height: 0, items: [], pageNumber: i, extractionError: verifyPdfErrorMessage(err, "Could not open this page.") });
-      continue;
-    }
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const viewport = page.getViewport({ scale: 1 });
 
-    let viewport;
-    try {
-      viewport = page.getViewport({ scale: 1 });
-    } catch (_) {
-      viewport = { width: 0, height: 0 };
-    }
-
-    try {
-      const extracted = await extractPdfPageText(page, i);
-      totalItems += extracted.items.length;
-      if (extracted.items.some(item => item.text.trim())) pagesWithText++;
-
-      pages.push({
-        pageNumber: i,
-        width: Number(viewport.width) || 0,
-        height: Number(viewport.height) || 0,
-        items: extracted.items,
-        rawItemCount: extracted.rawItemCount
-      });
-    } catch (err) {
-      failedPages.push(i);
-      pages.push({
-        pageNumber: i,
-        width: Number(viewport.width) || 0,
-        height: Number(viewport.height) || 0,
-        items: [],
-        extractionError: verifyPdfErrorMessage(err, "Could not extract text from this page.")
-      });
-    }
+    // Keep the PDF's real 2-D coordinate system. We do not need to display
+    // this canvas; it is a spatial working surface used to reconstruct the
+    // table before any normalization or matching happens.
+    pages.push({
+      width: viewport.width,
+      height: viewport.height,
+      items: content.items.map((it, itemIndex) => {
+        const x = Number(it.transform?.[4]) || 0;
+        const y = Number(it.transform?.[5]) || 0;
+        const width = Math.max(0, Number(it.width) || 0);
+        const height = Math.max(0, Number(it.height) || 0);
+        return {
+          id: `p${i}-t${itemIndex}`,
+          text: String(it.str || ''),
+          x, y, width, height,
+          right: x + width,
+          top: y + height,
+          centerX: x + width / 2,
+          centerY: y + height / 2
+        };
+      })
+    });
   }
-
-  updateVerifyProgress(
-    "Finished reading PDF text.",
-    pdf.numPages,
-    pdf.numPages,
-    `${pagesWithText}/${pdf.numPages} page(s) contain selectable text • ${totalItems.toLocaleString()} text item(s)`
-  );
 
   verifyState.statementText = pages;
-
-  if (!pagesWithText) {
-    throw new Error(
-      failedPages.length === pdf.numPages
-        ? "PDF.js could not extract text from any page. The PDF may be damaged, encrypted with unsupported restrictions, or image/scanned-only."
-        : "No selectable text was found in this PDF. A scanned/image-only statement needs OCR before it can be reconstructed."
-    );
-  }
-
-  // Do not silently fail merely because one page is malformed. Valid pages
-  // are still passed to the existing table reconstruction layer.
   await detectStatementTables();
 }
 
@@ -593,6 +402,14 @@ function build2DPageModel(page) {
   return canvas;
 }
 
+function groupIntoRows(itemsOrPage, yTolerance) {
+  // Compatibility wrapper: the rest of the verifier can continue to work
+  // with rows, while extraction itself is now based on a 2-D page model.
+  if (itemsOrPage && !Array.isArray(itemsOrPage) && Array.isArray(itemsOrPage.items)) {
+    return build2DPageModel(itemsOrPage).rows;
+  }
+  return build2DPageModel({ items: Array.isArray(itemsOrPage) ? itemsOrPage : [] }).rows;
+}
 
 function normalizeHeaderWord(s) {
   return (s || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -645,6 +462,9 @@ function looksLikeDate(s) {
   return VERIFY_DATE_REGEXES.some(r => r.test(String(s)));
 }
 
+function looksLikeNumber(s) {
+  return /^[₦$€£]?\s?[\d.,]+$/.test((s || "").trim()) && /\d/.test(s);
+}
 
 /*
  * PDF.js exposes text as individual positioned fragments. A header such as
@@ -698,45 +518,76 @@ function escapeRegExp(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function findHeaderLabelsInItem(item) {
+  const text = String(item.text || "").replace(/\s+/g, " ").trim();
+  const lower = text.toLowerCase();
+  if (!text) return [];
 
+  const matches = [];
+  const occupied = [];
 
+  const patterns = [...VERIFY_HEADER_PATTERNS].sort(
+    (a, b) => b.length - a.length
+  );
+
+  patterns.forEach(pattern => {
+    const regex = new RegExp(escapeRegExp(pattern), "gi");
+    let match;
+
+    while ((match = regex.exec(lower))) {
+      const start = match.index;
+      const end = start + match[0].length;
+
+      const overlaps = occupied.some(r => start < r.end && end > r.start);
+      if (overlaps) continue;
+
+      occupied.push({ start, end });
+      matches.push({
+        start,
+        end,
+        text: text.slice(start, end)
+      });
+    }
+  });
+
+  matches.sort((a, b) => a.start - b.start);
+
+  const itemX = Number(item.x) || 0;
+  const itemWidth = Number(item.width) || 0;
+  const charWidth = text.length ? itemWidth / text.length : 0;
+
+  return matches.map(m => ({
+    x: itemX + (m.start * charWidth),
+    end: itemX + (m.end * charWidth),
+    center: itemX + (((m.start + m.end) / 2) * charWidth),
+    text: m.text
+  }));
+}
+
+const VERIFY_COMPOSITE_HEADERS = [
+  "value date", "posting date", "transaction date", "transaction datetime",
+  "transaction details / narration",
+  "transaction time", "customer name", "credit amount", "amount credited",
+  "amount received", "transaction details", "transaction description",
+  "reference code", "trace code", "account name", "account number"
+];
+
+function isKnownHeaderText(text) {
+  const normalized = normalizeHeaderWord(text);
+  return VERIFY_HEADER_PATTERNS.some(p => normalizeHeaderWord(p) === normalized);
+}
 
 function groupHeaderCells(headerRow) {
-  // THE PREVIOUS THRESHOLD BUG THAT CAUSED ALL HEADERS TO MERGE:
+  // FIXED: old implementation used an allowlist (isKnownHeaderText /
+  // VERIFY_COMPOSITE_HEADERS) and silently dropped columns whose header
+  // text wasn't on the list — causing real columns to disappear, their
+  // data to bleed into adjacent recognised columns ("unnecessary stuff"),
+  // and the column-picker indices to mismatch the table-row arrays
+  // ("Column 2 / Column 3" phantom entries).
   //
-  // The old approach used: gapThreshold = Math.max(8, medianCW * 2.2)
-  //
-  // In compact bank-statement PDFs — especially those where column headers
-  // are tightly packed (e.g. "NARRATION" ends at x=160, "DEBIT" starts at
-  // x=160, gap = 0) — this 8px minimum threshold was far too large.
-  // Every inter-column gap (0-5px) fell below 8, so ALL header items were
-  // clustered into a single cell, producing output like:
-  //   "NARRATIONDEBITCREDITBALANCEDATE DATENO"
-  // instead of seven separate column cells.
-  //
-  // The same over-merging caused data rows to be reconstructed as one big
-  // blob under that one phantom column, which is what the user saw in the
-  // preview table.
-  //
-  // ROOT CAUSE: using a FIXED minimum gap (8px) that is larger than many
-  // real inter-column gaps in Nigerian bank statement PDFs.
-  //
-  // FIX: derive the threshold from the ACTUAL GAP DISTRIBUTION in this
-  // specific header row, using a bimodal-detection strategy:
-  //
-  //   1. Compute all gaps between adjacent items.
-  //   2. If there is a CLEAR bimodal split (some gaps ≤ 2px, others ≥ 6px),
-  //      the small gaps are between words within the same header cell (e.g.
-  //      "VALUE" and "DATE") and the large gaps separate distinct columns.
-  //      → threshold = 2px (merge only the tiny-gap pairs).
-  //   3. Otherwise be maximally conservative: threshold = -0.5px.
-  //      This means ONLY physically-overlapping items (gap < 0) are merged —
-  //      which handles rare PDFs that split a single glyph across two items —
-  //      and every positive-gap item becomes its own independent column cell.
-  //
-  // Being conservative avoids the corrupting over-merge. The worst case is
-  // a two-word header ("VALUE DATE") appearing as two separate selectable
-  // options in the column picker — the user still picks the right one.
+  // New approach: purely spatial. Every text fragment in the header row
+  // is kept; physically-close fragments (one multi-word header) are joined.
+  // Nothing is discarded on pattern grounds.
 
   const items = [...(headerRow?.items || [])]
     .filter(it => String(it.text || "").trim())
@@ -744,34 +595,20 @@ function groupHeaderCells(headerRow) {
 
   if (!items.length) return [];
 
-  // --- compute per-gap values (right-edge of prev → left-edge of next) ---
-  const gaps = [];
-  for (let i = 1; i < items.length; i++) {
-    const prevRight = (Number(items[i-1].x) || 0) + (Number(items[i-1].width) || 0);
-    const curLeft  = Number(items[i].x) || 0;
-    gaps.push(curLeft - prevRight); // negative = overlap, 0 = touching, positive = space
-  }
+  // Calibrate the gap threshold from the median character width so the
+  // function works across narrow compact tables and wide ones alike.
+  const charWidths = items.map(it => {
+    const w = Math.max(0, Number(it.width) || 0);
+    const len = String(it.text || "").trim().length;
+    return len ? w / len : 0;
+  }).filter(w => w > 0).sort((a, b) => a - b);
+  const medianCW = charWidths.length
+    ? charWidths[Math.floor(charWidths.length / 2)]
+    : 6;
+  // Words within the same header cell are typically ≤ 1.5 chars apart.
+  // A gap wider than ~2 chars separates distinct header cells.
+  const gapThreshold = Math.max(8, medianCW * 2.2);
 
-  // --- determine merging threshold from gap distribution ---
-  const positiveGaps  = gaps.filter(g => g > 0).sort((a, b) => a - b);
-  const tinyGaps      = positiveGaps.filter(g => g <= 2);   // within-word space
-  const largeGaps     = positiveGaps.filter(g => g > 6);    // inter-column space
-
-  // Conservative default: only merge overlapping items (gap strictly negative)
-  let gapThreshold = -0.5;
-
-  if (tinyGaps.length > 0 && largeGaps.length > 0) {
-    // Clear bimodal: merge tiny gaps (within multi-word headers), keep large ones.
-    gapThreshold = 2;
-  }
-  // If all gaps are similarly small (compact layout): gapThreshold = -0.5
-  //   → nothing merges → each item is its own column cell  ✓
-  // If all gaps are similarly large (spaced layout):  gapThreshold = -0.5
-  //   → nothing merges → each item is its own column cell  ✓
-  // If clear bimodal (mixed):                          gapThreshold = 2
-  //   → only tiny gaps (≤2px) merge → multi-word headers join ✓
-
-  // --- cluster items ---
   const clusters = [];
   let cluster = {
     items: [items[0]],
@@ -780,9 +617,9 @@ function groupHeaderCells(headerRow) {
   };
 
   for (let i = 1; i < items.length; i++) {
-    const it    = items[i];
+    const it = items[i];
     const itemX = Number(it.x) || 0;
-    const gap   = gaps[i - 1]; // pre-computed
+    const gap = itemX - cluster.end;
 
     if (gap <= gapThreshold) {
       cluster.items.push(it);
@@ -803,6 +640,8 @@ function groupHeaderCells(headerRow) {
         .trim();
       return { x: cl.x, end: cl.end, center: (cl.x + cl.end) / 2, text };
     })
+    // Only discard genuinely empty cells or pure-punctuation artefacts —
+    // never drop a cell because its text is not on an allowlist.
     .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
@@ -844,12 +683,8 @@ function detectHeaderRow(rows) {
     if (cells.length >= 3) score += 1;
     if (cells.length >= 5) score += 1;
 
-    // At minimum we need a date column AND an amount column (score 3+4=7),
-    // or a date + description (3+2=5) with multiple cells as extra evidence.
-    // Lowered from 7 to 5 so that compact headers (each item is one cell,
-    // so cells.length may be lower after the conservative groupHeaderCells)
-    // are still detected correctly.
-    if (score >= 5 && score > bestScore) {
+    // At minimum we need a date column AND an amount column.
+    if (score >= 7 && score > bestScore) {
       bestScore = score;
       bestIndex = index;
     }
@@ -916,11 +751,130 @@ function buildColumnBoundaries(headerRow) {
   });
 }
 
+function xRangesOverlap(aLeft, aRight, bLeft, bRight) {
+  return Math.max(aLeft, bLeft) < Math.min(aRight, bRight);
+}
 
+function columnDirectlyUnderHeader(x, width, boundary) {
+  const left = Number(x) || 0;
+  const right = left + Math.max(0, Number(width) || 0);
+  const center = (left + right) / 2;
+  const coreLeft = Number(boundary.headerX) || 0;
+  const coreRight = Number(boundary.headerEnd) || coreLeft;
 
+  // A fragment whose centre is inside the real header box is a direct hit.
+  if (center >= coreLeft && center <= coreRight) return true;
 
+  // This also catches right/left-aligned values whose box overlaps the
+  // physical header box even though their centre sits just outside it.
+  return xRangesOverlap(left, right, coreLeft, coreRight);
+}
 
+function columnAtX(x,boundaries) {
+  if (!boundaries.length) return -1;
 
+  // The header's physical X span is the strongest anchor. This matters for
+  // compact headers such as "Credit" where the text itself is narrower than
+  // the data column.
+  for (let i=0;i<boundaries.length;i++) {
+    const b = boundaries[i];
+    const left = Number(b.headerX);
+    const right = Number(b.headerEnd);
+    if (Number.isFinite(left) && Number.isFinite(right) && x >= left && x <= right) {
+      return i;
+    }
+  }
+
+  // Otherwise use the data corridor created from neighbouring header centres.
+  for (let i=0;i<boundaries.length;i++) {
+    if (x>=boundaries[i].x && x<boundaries[i].end) return i;
+  }
+
+  let best=0,d=Infinity;
+  boundaries.forEach((b,i)=>{
+    const n=Math.abs(x-b.center);
+    if(n<d){d=n;best=i;}
+  });
+  return best;
+}
+
+function assignToColumn(x,width,boundaries) {
+  if (!boundaries.length) return -1;
+
+  // First try the actual header-sized horizontal footprint. This is the
+  // "directly underneath the header" rule requested for the spatial table.
+  for (let i=0;i<boundaries.length;i++) {
+    if (columnDirectlyUnderHeader(x, width, boundaries[i])) return i;
+  }
+
+  return columnAtX((Number(x)||0)+Math.max(0,Number(width)||0)/2,boundaries);
+}
+
+function estimateTextFragmentPositions(item, boundaries = []) {
+  const text = String(item.text || '').replace(/\s+/g, ' ').trim();
+  const x = Number(item.x) || 0;
+  const width = Math.max(0, Number(item.width) || 0);
+  if (!text) return [];
+
+  /*
+   * PDF.js can legally return one TextItem for several visually separate
+   * cells.  TextItem.width is the width of the WHOLE item, so blindly using
+   * one character-per-pixel spacing causes the internal columns to collapse.
+   *
+   * We still need an approximate position for each token, but we deliberately
+   * keep the original whitespace. Large whitespace gaps are useful evidence
+   * of a cell boundary and are therefore represented as gaps rather than
+   * silently treating every character as equally spaced.
+   */
+  const raw = String(item.text || '').replace(/\r?\n/g, ' ');
+  const tokens = [];
+  const re = /\S+/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    tokens.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+  }
+  if (!tokens.length) return [];
+
+  // Character-width estimate is only a starting coordinate. The assignment
+  // stage below can move a token to the only plausible column when the
+  // approximate coordinate conflicts with the table schema.
+  const charWidth = width > 0 && raw.length ? width / raw.length : 0;
+  return tokens.map(t => {
+    const left = x + t.start * charWidth;
+    const right = x + t.end * charWidth;
+    return {
+      text: t.text,
+      x: left,
+      right,
+      center: (left + right) / 2,
+      start: t.start,
+      end: t.end
+    };
+  });
+}
+
+function tokenColumnCompatibility(token, boundary, index, boundaries) {
+  const text = String(token || '').trim();
+  const lower = text.toLowerCase();
+  const header = normalizeHeaderLabel(boundary?.header || '');
+  const dateLike = looksLikeDate(text);
+  const timeLike = /^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?$/i.test(text);
+  const amountLike = /^(?:₦|NGN|N|\$|€|£)?\s*\d[\d,.]*$/.test(text);
+  const channelLike = /^(mobile|ussd|web|pos|atm|internet|app|branch)$/i.test(text);
+
+  let score = 0;
+  if (header === 'date' || header === 'datetime') score += dateLike ? 12 : 0;
+  if (header === 'time') score += timeLike ? 12 : 0;
+  if (header === 'debit' || header === 'credit' || header === 'balance') score += amountLike ? 10 : 0;
+  if (header === 'channel') score += channelLike ? 12 : 0;
+  if (header === 'reference') score += /^\d{8,}$/.test(text.replace(/\D/g,'')) ? 12 : 0;
+  if (header === 'description' || header === 'name') score += (!dateLike && !timeLike && !amountLike && !channelLike) ? 2 : 0;
+
+  // Numeric tokens are especially ambiguous between Debit and Credit. Their
+  // left-to-right order is therefore handled by the monotonic solver rather
+  // than by this semantic score alone.
+  return score;
+}
 
 function measureTokenLayout(item) {
   const raw = String(item?.text || '').replace(/\r?\n/g, ' ');
@@ -989,6 +943,38 @@ function expandSpatialTokens(item) {
   return measureTokenLayout(item);
 }
 
+function collectRowBoundaryEvidence(row, minGap = null) {
+  const tokens = row.items.flatMap(expandSpatialTokens)
+    .filter(t => String(t.text || '').trim())
+    .sort((a,b) => a.x-b.x || a.right-b.right);
+  if (tokens.length < 2) return [];
+
+  const widths = tokens.map(t => Math.max(1, t.width)).sort((a,b)=>a-b);
+  const medianWidth = widths[Math.floor(widths.length/2)] || 10;
+  const gapThreshold = Number.isFinite(minGap) ? minGap : Math.max(8, medianWidth * 0.9);
+  const evidence = [];
+
+  for (let i=0;i<tokens.length-1;i++) {
+    const a=tokens[i], b=tokens[i+1];
+    const gap=Math.max(0, b.x-a.right);
+    if (gap < gapThreshold) continue;
+
+    // A candidate boundary is the open space before the next aligned word.
+    // Keep both the next-word start and the midpoint: repeated next-word X
+    // positions are the strongest signal, while midpoint is useful when
+    // text widths vary substantially.
+    evidence.push({
+      leftToken:a,
+      rightToken:b,
+      gap,
+      boundaryX:(a.right+b.x)/2,
+      nextStartX:b.x,
+      prevEndX:a.right,
+      confidence:Math.min(1, gap / Math.max(gapThreshold, 1))
+    });
+  }
+  return evidence;
+}
 
 function medianNumber(values) {
   const nums = (Array.isArray(values) ? values : [])
@@ -1031,150 +1017,362 @@ function buildGlobalXLanes(rows, boundaries, headers) {
   if (!boundaries?.length) return [];
 
   /*
-   * IMPORTANT: the header is the structural source of truth.
+   * INTENSIVE ALIGNMENT-GRAPH RECONSTRUCTION
+   * ----------------------------------------
+   * This is a browser-side implementation of the useful ideas behind
+   * Camelot's Network parser. It intentionally keeps the existing
+   * reconstruction output contract (lanes + assignRowTokensToXLanes), so
+   * the verifier does not need to know how the lanes were discovered.
    *
-   * Earlier versions tried to move each column boundary toward repeated word
-   * starts found in transaction rows. That is unsafe: a name such as
-   * "DAVID OBI" naturally has two different X positions, and a long
-   * description can contain many apparent "column starts". The result was
-   * columns disappearing or whole cells shifting one column to the right.
+   * Pipeline:
+   *   text objects
+   *     -> Y-aligned rows
+   *     -> X / left / right / center alignment clusters
+   *     -> alignment graph
+   *     -> prune weak / isolated alignments
+   *     -> strongest seed
+   *     -> typical horizontal gaps
+   *     -> iterative table-growth evidence
+   *     -> header-aware column corridors
+   *     -> cells
    *
-   * PDF.js gives us the real X/Y positions of the text items. We therefore
-   * keep the header centres fixed and use the midpoint between neighbouring
-   * header centres as the structural boundary. Repeated row alignment is
-   * retained as diagnostic evidence only; it can never delete or move a
-   * header-defined column.
+   * The algorithm deliberately spends more CPU than the previous midpoint
+   * method. A bank statement is normally only a few hundred/thousand text
+   * objects, so several passes are acceptable and much safer than guessing
+   * from one row.
    */
-  const rowData = (rows || []).map(row => ({
+
+  const rowData = (rows || []).map((row, rowIndex) => ({
     row,
+    rowIndex,
     tokens: row.items.flatMap(expandSpatialTokens)
       .filter(t => String(t.text || '').trim())
-      .sort((a,b) => a.x - b.x || a.right - b.right)
+      .map(t => ({
+        ...t,
+        x: Number(t.x) || 0,
+        right: Number.isFinite(Number(t.right)) ? Number(t.right) : (Number(t.x)||0)+(Number(t.width)||0),
+        center: Number.isFinite(Number(t.center)) ? Number(t.center) : (Number(t.x)||0)+(Number(t.width)||0)/2,
+        y: Number(t.y) || Number(row.centerY) || 0,
+        centerY: Number(t.centerY) || Number(row.centerY) || 0
+      }))
+      .sort((a,b) => a.x-b.x || a.right-b.right)
   })).filter(r => r.tokens.length);
 
-  const rowCount = Math.max(1, rowData.length);
-  const centers = boundaries.map((b, i) => {
-    const c = Number(b.headerCenterX ?? b.center);
-    return Number.isFinite(c) ? c : Number(b.headerX) || 0;
-  });
+  if (!rowData.length) return boundaries.map((b, i) => ({
+    ...b, index:i, kind:headerColumnKind(headers?.[i]||b.header||''),
+    laneLeft:b.x, laneRight:b.end, anchorX:b.center,
+    rowSupport:0, laneConfidence:0, alignmentModel:'network-fallback'
+  }));
 
-  // Monotonic repair only protects against malformed header coordinates. It
-  // never invents an extra column.
-  for (let i = 1; i < centers.length; i++) {
-    if (!(centers[i] > centers[i - 1])) centers[i] = centers[i - 1] + 1;
+  const all = rowData.flatMap(r => r.tokens.map((t, tokenIndex) => ({...t, rowIndex:r.rowIndex, tokenIndex})));
+  const rowCount = rowData.length;
+  const robustMedian = vals => medianNumber(vals.filter(Number.isFinite));
+
+  // Scale tolerances from the document itself rather than hard-coding one
+  // font size. We use both token width and row height because bank PDFs can
+  // mix 8px, 9px and 10px fonts on the same page.
+  const widths = all.map(t => t.width).filter(v => v > 0).sort((a,b)=>a-b);
+  const heights = all.map(t => Math.max(1,t.height||0)).sort((a,b)=>a-b);
+  const medianWidth = robustMedian(widths) || 12;
+  const medianHeight = robustMedian(heights) || 10;
+  const xTol = Math.max(2.5, Math.min(8, medianWidth * 0.18));
+  const edgeTol = Math.max(2.5, Math.min(7, medianWidth * 0.16));
+  const centerTol = Math.max(3, Math.min(9, medianWidth * 0.22));
+  const yTol = Math.max(2, Math.min(6, medianHeight * 0.55));
+
+  function clusterValues(values, tolerance, key) {
+    const arr = values
+      .filter(v => Number.isFinite(v.value))
+      .sort((a,b)=>a.value-b.value);
+    const out=[];
+    for (const entry of arr) {
+      let best=null;
+      for (const c of out) {
+        if (Math.abs(entry.value-c.center)<=tolerance) {
+          best=c;
+          break;
+        }
+      }
+      if (!best) {
+        best={center:entry.value, values:[], rows:new Set(), tokens:new Set(), kind:key};
+        out.push(best);
+      }
+      best.values.push(entry.value);
+      best.rows.add(entry.rowIndex);
+      best.tokens.add(entry.id || `${entry.rowIndex}:${entry.tokenIndex}`);
+      best.center=robustMedian(best.values);
+    }
+    return out;
   }
 
-  return boundaries.map((b, i) => {
-    const left = i === 0
-      ? (Number.isFinite(Number(b.headerX)) ? Number(b.headerX) : centers[i] - 40)
-      : (centers[i - 1] + centers[i]) / 2;
-    const right = i === boundaries.length - 1
-      ? Math.max(Number(b.headerEnd) || centers[i] + 40, centers[i] + 40)
-      : (centers[i] + centers[i + 1]) / 2;
+  const leftClusters = clusterValues(all.map(t=>({value:t.x,rowIndex:t.rowIndex,id:t.id})), xTol, 'left');
+  const rightClusters = clusterValues(all.map(t=>({value:t.right,rowIndex:t.rowIndex,id:t.id})), edgeTol, 'right');
+  const centerClusters = clusterValues(all.map(t=>({value:t.center,rowIndex:t.rowIndex,id:t.id})), centerTol, 'center');
+  const topClusters = clusterValues(all.map(t=>({value:t.y,rowIndex:t.rowIndex,id:t.id})), yTol, 'top');
 
-    const kind = headerColumnKind(headers?.[i] || b.header || '');
-    const allTokens = rowData.flatMap(r => r.tokens);
-    const numericTokens = allTokens.filter(t => kind === 'numeric' && Number.isFinite(t.right));
-    const rightClusters = clusterEvidence(numericTokens.map(t => t.right), 4);
+  // Only alignments supported by multiple distinct rows are structural.
+  // Single-row alignments are retained as weak evidence but cannot become a
+  // table boundary on their own.
+  const structuralThreshold = Math.max(2, Math.ceil(rowCount * 0.08));
+  const clusters = [...leftClusters,...rightClusters,...centerClusters,...topClusters]
+    .map((c,index)=>({
+      ...c,
+      id:`a${index}`,
+      rowSupport:c.rows.size,
+      tokenSupport:c.tokens.size,
+      strength:(c.rows.size * 3) + Math.min(c.tokens.size, rowCount*2)
+    }));
 
-    // Count rows whose tokens have meaningful content inside this structural
-    // band. This is confidence metadata only, never a reason to remove a
-    // column or row.
-    let rowSupport = 0;
-    for (const r of rowData) {
-      if (r.tokens.some(t => t.center >= left && t.center < right)) rowSupport++;
+  // Map each token to all alignment nodes it participates in.
+  const tokenNodes=new Map();
+  const addNode=(tokenId,nodeId)=>{
+    if(!tokenNodes.has(tokenId)) tokenNodes.set(tokenId,[]);
+    tokenNodes.get(tokenId).push(nodeId);
+  };
+  const assignClusterMembers=(list, kind, tol)=>{
+    for(const c of list){
+      for(const t of all){
+        const value=kind==='left'?t.x:kind==='right'?t.right:kind==='center'?t.center:t.y;
+        if(Math.abs(value-c.center)<=tol) addNode(t.id, c.id);
+      }
     }
+  };
+  assignClusterMembers(leftClusters,'left',xTol);
+  assignClusterMembers(rightClusters,'right',edgeTol);
+  assignClusterMembers(centerClusters,'center',centerTol);
+  assignClusterMembers(topClusters,'top',yTol);
+
+  // Alignment graph: two alignment nodes are connected when they repeatedly
+  // occur on the same tokens/rows. A token sharing several axes is therefore
+  // a stronger structural bridge than a lone X coordinate.
+  const graph=new Map(clusters.map(c=>[c.id,new Map()]));
+  for(const nodes of tokenNodes.values()){
+    const unique=[...new Set(nodes)];
+    for(let i=0;i<unique.length;i++) for(let j=i+1;j<unique.length;j++){
+      const a=unique[i],b=unique[j];
+      graph.get(a).set(b,(graph.get(a).get(b)||0)+1);
+      graph.get(b).set(a,(graph.get(b).get(a)||0)+1);
+    }
+  }
+
+  // Prune isolated/weak alignment nodes. We do NOT delete PDF text. This
+  // only decides which geometric evidence is trusted for table structure.
+  const active=new Set();
+  for(const c of clusters){
+    const degree=[...(graph.get(c.id)||new Map()).values()].reduce((a,b)=>a+b,0);
+    const strong = c.rowSupport >= structuralThreshold || degree >= 3 || c.strength >= 7;
+    if(strong) active.add(c.id);
+  }
+
+  // Find the strongest seed. Prefer a cluster with broad row coverage,
+  // multiple graph connections, and a central position in the page. The
+  // seed is a starting point, not a column by itself.
+  let seed=null, seedScore=-Infinity;
+  const xMin=Math.min(...all.map(t=>t.x)), xMax=Math.max(...all.map(t=>t.right));
+  const xMid=(xMin+xMax)/2;
+  for(const c of clusters){
+    if(!active.has(c.id)) continue;
+    const degree=[...(graph.get(c.id)||new Map()).entries()]
+      .filter(([id])=>active.has(id))
+      .reduce((s,[,w])=>s+w,0);
+    const central=1-Math.min(1,Math.abs(c.center-xMid)/Math.max(1,xMax-xMin));
+    const score=(c.rowSupport*8)+(degree*3)+(Math.min(c.tokenSupport,rowCount*2)*1.5)+(central*2);
+    if(score>seedScore){seedScore=score;seed=c;}
+  }
+
+  // Build a set of strong horizontal anchors. Header centres are included as
+  // semantic anchors, while the graph supplies repeated body alignments.
+  const graphAnchors=[];
+  for(const c of clusters){
+    if(!active.has(c.id) || c.kind==='top') continue;
+    const degree=[...(graph.get(c.id)||new Map()).entries()]
+      .filter(([id])=>active.has(id))
+      .reduce((s,[,w])=>s+w,0);
+    graphAnchors.push({
+      x:c.center,
+      rows:c.rowSupport,
+      degree,
+      strength:c.strength + degree*2,
+      kind:c.kind,
+      id:c.id
+    });
+  }
+  graphAnchors.sort((a,b)=>a.x-b.x);
+
+  // Merge nearby graph anchors. This prevents DAVID x255 and OBI x277 from
+  // becoming two columns merely because both have repeated left edges.
+  const mergedAnchors=[];
+  const anchorMergeTol=Math.max(10, medianWidth*1.4);
+  for(const a of graphAnchors){
+    const last=mergedAnchors[mergedAnchors.length-1];
+    if(last && Math.abs(a.x-last.x)<=anchorMergeTol){
+      const total=last.strength+a.strength;
+      last.x=(last.x*last.strength+a.x*a.strength)/total;
+      last.strength=total;
+      last.rows=Math.max(last.rows,a.rows);
+      last.degree=Math.max(last.degree,a.degree);
+      last.kinds.add(a.kind);
+    } else {
+      mergedAnchors.push({...a,kinds:new Set([a.kind])});
+    }
+  }
+
+  // Derive empirical gaps from consecutive tokens in each row. Large gaps
+  // are stronger evidence of cell boundaries than ordinary word spacing.
+  const gaps=[];
+  for(const r of rowData){
+    for(let i=0;i<r.tokens.length-1;i++){
+      const a=r.tokens[i],b=r.tokens[i+1];
+      const gap=Math.max(0,b.x-a.right);
+      if(gap>0) gaps.push({gap,x:(a.right+b.x)/2,left:a,right:b,row:r.rowIndex});
+    }
+  }
+  const gapValues=gaps.map(g=>g.gap).filter(v=>v>0).sort((a,b)=>a-b);
+  const typicalGap=robustMedian(gapValues) || Math.max(3,medianWidth*0.45);
+  const gapCutoff=Math.max(typicalGap*2.2, medianWidth*0.9);
+
+  // Grow a network region from the strongest seed. This is intentionally
+  // iterative: a cluster can join the region if it is connected to an active
+  // member OR repeatedly occurs near the region's horizontal/vertical extent.
+  const region=new Set(seed ? [seed.id] : []);
+  let changed=true, iterations=0;
+  while(changed && iterations<12){
+    changed=false; iterations++;
+    for(const c of clusters){
+      if(!active.has(c.id)||region.has(c.id)) continue;
+      const neighbours=[...(graph.get(c.id)||new Map())]
+        .filter(([id])=>region.has(id))
+        .reduce((s,[,w])=>s+w,0);
+      const nearSeed=seed && Math.abs(c.center-seed.center)<=Math.max(160, (xMax-xMin)*0.35);
+      if(neighbours>=2 || (neighbours>=1 && c.rowSupport>=structuralThreshold) || (nearSeed && c.rowSupport>=Math.max(3,structuralThreshold*2))){
+        region.add(c.id); changed=true;
+      }
+    }
+  }
+
+  // Header-aware boundaries remain the final structural scaffold, but their
+  // placement is refined using network/gap evidence. A boundary is allowed to
+  // move only within the gap between the two adjacent header centres.
+  const centers=boundaries.map(b=>Number(b.headerCenterX ?? b.center));
+  for(let i=1;i<centers.length;i++) if(!(centers[i]>centers[i-1])) centers[i]=centers[i-1]+1;
+
+  const lanes=boundaries.map((b,i)=>{
+    const leftCenter=centers[i];
+    const prevCenter=i?centers[i-1]:null;
+    const nextCenter=i<centers.length-1?centers[i+1]:null;
+    let left=i===0 ? Math.min(Number(b.headerX)||leftCenter,leftCenter-Math.max(24,medianWidth*3)) : (prevCenter+leftCenter)/2;
+    let right=i===centers.length-1 ? Math.max(Number(b.headerEnd)||leftCenter+40,leftCenter+Math.max(24,medianWidth*3)) : (leftCenter+nextCenter)/2;
+
+    // For each boundary, score actual whitespace gaps near it. A repeated
+    // gap/anchor gets more weight than a single unusual word position.
+    if(i>0){
+      const lo=centers[i-1], hi=centers[i];
+      const candidates=gaps.filter(g=>g.x>=lo && g.x<=hi && g.gap>=gapCutoff);
+      if(candidates.length){
+        const grouped=clusterValues(candidates.map(g=>({value:g.x,rowIndex:g.row})),Math.max(4,medianWidth*0.5),'gap');
+        grouped.sort((a,b)=>((b.rows.size*4)+b.values.length)-((a.rows.size*4)+a.values.length));
+        const best=grouped[0];
+        if(best && best.rows.size>=Math.min(2,rowCount)){
+          const boundaryX=best.center;
+          if(boundaryX>lo+3 && boundaryX<hi-3){
+            // Apply only a restrained refinement; header geometry still wins.
+            const midpoint=(lo+hi)/2;
+            const refined=midpoint*0.35 + boundaryX*0.65;
+            left=refined;
+            const previous=lanes[i-1];
+            if(previous) previous.laneRight=refined;
+          }
+        }
+      }
+    }
+
+    const kind=headerColumnKind(headers?.[i]||b.header||'');
+    const corridorWidth=Math.max(20, Math.abs(right-left));
+    const graphSupport=mergedAnchors
+      .filter(a=>a.x>=left && a.x<=right)
+      .reduce((s,a)=>s+a.strength,0);
 
     return {
       ...b,
-      index: i,
+      index:i,
       kind,
-      anchorX: centers[i],
-      laneLeft: left,
-      laneRight: right,
-      repeatedLeft: rowSupport,
-      rowSupport,
-      laneConfidence: rowSupport / rowCount,
-      rightClusters: rightClusters.slice(0, 5),
-      alignmentModel: 'header-center-midpoint',
-      fallback: false
+      anchorX:leftCenter,
+      laneLeft:left,
+      laneRight:right,
+      rowSupport:rowCount,
+      laneConfidence:Math.min(1,(graphSupport/(Math.max(1,rowCount*4)))+0.25),
+      alignmentModel:'network-alignment-graph',
+      graphSeed:seed?.id||null,
+      graphRegionSize:region.size,
+      graphIterations:iterations,
+      typicalGap,
+      gapCutoff,
+      corridorWidth,
+      graphSupport,
+      graphAnchors:mergedAnchors.filter(a=>a.x>=left && a.x<=right).slice(0,12),
+      fallback:false
     };
   });
+
+  // Enforce strict monotonic, non-overlapping corridors after all refinements.
+  // This is a safety invariant for the existing assignment function.
+  for(let i=0;i<lanes.length-1;i++){
+    const split=(lanes[i].laneRight+lanes[i+1].laneLeft)/2;
+    if(!(lanes[i].laneRight>lanes[i].laneLeft)) lanes[i].laneRight=split;
+    if(!(lanes[i+1].laneLeft<lanes[i+1].laneRight)) lanes[i+1].laneLeft=split;
+    const boundary=Math.max(lanes[i].laneLeft+1,Math.min(lanes[i+1].laneRight-1,split));
+    lanes[i].laneRight=boundary;
+    lanes[i+1].laneLeft=boundary;
+  }
+
+  return lanes;
 }
-
 function assignRowTokensToXLanes(row, lanes, headers) {
-  /*
-   * ROOT CAUSE OF THE "CONTENT CUT OFF INTO WRONG COLUMN" BUG — AND THE FIX
-   *
-   * The old code called expandSpatialTokens() which split each PDF.js text
-   * item into individual word-level tokens and ESTIMATED each word's X
-   * position using canvas font measurement or a proportional fallback.
-   * Estimates are inherently imprecise — especially for proportional fonts and
-   * long narrations.  By the last word of "TRANSFER FROM OLUMIDE ADEYEMI VIA
-   * GT BANK" the estimated offset can be several points past the lane
-   * boundary, so "GT" and "BANK" ended up in the Credit column.
-   *
-   * Fix: assign at the TEXT-ITEM level, not the individual-word level.
-   *
-   * PDF.js item.x and item.width come directly from the PDF's glyph advance
-   * widths — they are EXACT.  Using the item's own bounding box eliminates
-   * all estimation error.  An entire text item is assigned as a unit to
-   * whichever lane its LEFT EDGE and CENTER belong to, keeping multi-word
-   * descriptions intact and in the correct column.
-   *
-   * Assignment priority (applied in order):
-   *   1. Left edge inside lane  — wins for left-aligned text (descriptions)
-   *   2. Center inside lane     — handles short/centred items
-   *   3. Maximum bounding-box overlap — wins for right-aligned amounts whose
-   *      left edge straddles a boundary but whose bulk is in the right lane
-   *   4. Nearest lane           — last resort, prevents data loss
-   */
-  if (!row?.items?.length || !lanes.length) return [];
-
-  const items = row.items
-    .map(it => {
-      const x = Number(it.x) || 0;
-      const w = Math.max(0, Number(it.width) || 0);
-      const r = Number.isFinite(Number(it.right)) ? Number(it.right) : x + w;
-      const cx = Number.isFinite(Number(it.centerX)) ? Number(it.centerX) : x + w / 2;
-      return { text: String(it.text || '').trim(), x, width: w, right: r, center: cx };
-    })
-    .filter(it => it.text)
-    .sort((a, b) => a.x - b.x);
-
-  if (!items.length) return [];
+  const tokens = row?.items?.flatMap(expandSpatialTokens)
+    .filter(t => String(t.text || '').trim())
+    .sort((a,b) => a.x - b.x || a.right - b.right) || [];
+  if (!tokens.length || !lanes.length) return [];
 
   const groups = Array.from({ length: lanes.length }, () => []);
 
-  for (const item of items) {
-    const { x, right, center } = item;
-    let col = -1;
+  for (const token of tokens) {
+    const center = Number.isFinite(Number(token.center))
+      ? Number(token.center)
+      : (Number(token.x) || 0) + (Number(token.width) || 0) / 2;
 
-    // 1. Left edge inside a lane (left-aligned text: descriptions, narrations)
-    if (col < 0) col = lanes.findIndex(l => x >= l.laneLeft && x < l.laneRight);
+    // Primary rule: token centre belongs to the header-defined structural
+    // band. This preserves every real column and keeps words such as
+    // "DAVID" + "OBI" together when both are inside Name's band.
+    let col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
 
-    // 2. Center inside a lane (centred items, short items in column margin)
-    if (col < 0) col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
-
-    // 3. Maximum bounding-box overlap (right-aligned amounts)
+    // A token can sit just outside a band because its PDF.js text box is
+    // right/left aligned. Use overlap as a second, deterministic rule.
     if (col < 0) {
+      let best = -1;
       let bestOverlap = 0;
-      let bestCol = -1;
+      const left = Number(token.x) || center;
+      const right = Number(token.right) || center;
       lanes.forEach((lane, i) => {
-        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(x, lane.laneLeft));
-        if (overlap > bestOverlap) { bestOverlap = overlap; bestCol = i; }
+        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(left, lane.laneLeft));
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          best = i;
+        }
       });
-      col = bestCol >= 0 ? bestCol : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
+      col = best >= 0 ? best : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
     }
 
-    groups[col].push(item.text);
+    groups[col].push(token.text);
   }
 
+  // IMPORTANT: do not drop empty columns. The caller creates the full header
+  // length array; returning only populated groups here is fine as long as all
+  // populated groups retain their original column index.
   return groups
     .map((parts, col) => ({
       col,
       text: parts.join(' ').trim(),
-      positionConfidence: lanes[col]?.laneConfidence >= 0.55
+      positionConfidence: lanes[col].laneConfidence >= 0.55
         ? 'coordinate-alignment'
         : 'header-alignment'
     }))
@@ -1194,6 +1392,23 @@ function rowLooksLikeRepeatedHeader(cells, headers) {
   return matches >= Math.max(2, Math.ceil(headers.length * 0.5));
 }
 
+function rowLooksLikeTransaction(cells, headers) {
+  const dateIndexes = [];
+  const creditIndexes = [];
+
+  headers.forEach((h, i) => {
+    const n = normalizeHeaderLabel(h);
+    if (n === "date" || n === "datetime" || n === "time") dateIndexes.push(i);
+    if (n === "credit" || VERIFY_CREDIT_HEADER_SYNONYMS.includes(n)) creditIndexes.push(i);
+  });
+
+  const hasDate = dateIndexes.some(i => looksLikeDate(cells[i]));
+  const hasCredit = creditIndexes.some(i => extractAmount(cells[i]) !== null);
+
+  // Some bank statements have date/time split across cells. A transaction
+  // row still needs a recognizable date OR a valid credit value.
+  return hasDate || hasCredit;
+}
 
 
 function stripExtractionArtifacts(text) {
@@ -1312,82 +1527,14 @@ function extractAmount(raw) {
   const c = amountCandidatesFromText(raw);
   return c.length ? c[0].value : null;
 }
-
-function mergeContinuationRows(rows, boundaries, headers) {
-  /*
-   * Fix: the old implementation checked
-   *   normalizeHeaderLabel(h) === "name" || "description"
-   * to detect text-heavy columns where a continuation line could appear.
-   * With the open groupHeaderCells that accepts ANY header text, Nigerian
-   * bank headers like "Narration", "Remarks", "Details", "Particulars",
-   * "Transaction Details" never matched those two strings, so their wrapped
-   * second/third lines were never merged — long descriptions appeared as
-   * separate rows with only the first fragment in the right cell.
-   *
-   * Fix: identify text-heavy columns by EXCLUDING known non-text types
-   * (date, numeric, reference) rather than requiring an exact name match.
-   */
-  if (!rows.length || !boundaries.length) return rows;
-  const out = [];
-
-  const hasDateOrAmount = items => {
-    const t = items.map(x => String(x.text || '')).join(' ');
-    return !!extractDate(t) || extractAmount(t) !== null;
-  };
-
-  const isTextHeavyCol = header => {
-    const norm = normalizeHeaderLabel(header || '');
-    const raw  = String(header || '').toLowerCase();
-    if (!header) return false;
-    if (norm === 'date' || norm === 'datetime' || norm === 'time') return false;
-    if (norm === 'credit' || norm === 'debit' || norm === 'balance' || norm === 'amount') return false;
-    if (VERIFY_CREDIT_HEADER_SYNONYMS.includes(norm)) return false;
-    if (/\bdate\b|\btime\b|\bbalance\b|\bcredit\b|\bdebit\b|\bamount\b/.test(raw)) return false;
-    if (/\blodge|\bwithdraw|\binflow|\boutflow|\bdeposit/.test(raw)) return false;
-    if (/^s\/?n$|^seq$|^serial/.test(raw)) return false;
-    return true;
-  };
-
-  for (const row of rows) {
-    if (!out.length) { out.push(row); continue; }
-
-    const prev = out[out.length - 1];
-    const text = row.items.map(x => String(x.text || '').trim()).filter(Boolean).join(' ');
-    const gap  = Math.abs(Number(prev.centerY) - Number(row.centerY));
-    const fx   = Number(row.items[0]?.x) || 0;
-
-    const startsInTextCol = boundaries.some((b, i) =>
-      isTextHeavyCol(headers[i]) && fx >= b.x - 14 && fx <= b.end + 14
-    );
-
-    if (text && gap <= 18 && !hasDateOrAmount(row.items) && startsInTextCol && hasDateOrAmount(prev.items)) {
-      prev.items.push(...row.items);
-      prev.items.sort((a, b) => a.x - b.x);
-    } else {
-      out.push(row);
-    }
-  }
-  return out;
+function extractAllAmounts(text) {
+  return amountCandidatesFromText(text).map(x=>x.value);
 }
 
-function headersSemanticallyCompatible(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  return a.every((value, index) => {
-    const left = normalizeHeaderLabel(value);
-    const right = normalizeHeaderLabel(b[index]);
-    return left === right || normalizeHeaderWord(value) === normalizeHeaderWord(b[index]);
-  });
-}
-
-function findRepeatedSchemaHeaderRow(rows, expectedHeaders) {
-  if (!Array.isArray(rows) || !Array.isArray(expectedHeaders) || !expectedHeaders.length) return -1;
-
-  for (let i = 0; i < rows.length; i++) {
-    const cells = groupHeaderCells(rows[i]);
-    if (cells.length !== expectedHeaders.length) continue;
-    if (headersSemanticallyCompatible(cells.map(c => c.text), expectedHeaders)) return i;
-  }
-  return -1;
+function mergeContinuationRows(rows,boundaries,headers){
+  if(!rows.length||!boundaries.length)return rows;const out=[];
+  const hasDateOrAmount=items=>{const t=items.map(x=>x.text||"").join(" ");return !!extractDate(t)||extractAmount(t)!==null;};
+  for(const row of rows){if(!out.length){out.push(row);continue;}const prev=out[out.length-1],text=row.items.map(x=>String(x.text||"").trim()).filter(Boolean).join(" ");const gap=Math.abs(Number(prev.centerY)-Number(row.centerY)),fx=Number(row.items[0]?.x)||0;const textCol=boundaries.some((b,i)=>{const h=normalizeHeaderLabel(headers[i]||"");return(h==="name"||h==="description")&&fx>=b.x-12&&fx<=b.end+12;});if(text&&gap<=18&&!hasDateOrAmount(row.items)&&textCol&&hasDateOrAmount(prev.items)){prev.items.push(...row.items);prev.items.sort((a,b)=>a.x-b.x);}else out.push(row);}return out;
 }
 
 function buildTableFromPage(pageItems, schemaHint = null) {
@@ -1404,10 +1551,8 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     headers = [...schemaHint.headers];
     boundaries = schemaHint.boundaries.map(b => ({ ...b }));
 
-    // A continuation page may have no repeated header at all. Do NOT run the
-    // generic header detector here because a normal transaction row can look
-    // like a header (date + amount + description) and would then be discarded.
-    headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
+    // Repeated header is optional on continuation pages.
+    headerIdx = detectHeaderRow(rows);
   } else {
     headerIdx = detectHeaderRow(rows);
     if (headerIdx === -1) return null;
@@ -1496,10 +1641,11 @@ async function detectStatementTables() {
 
       // Only tables with the same real header structure belong to the same
       // statement transaction table. Page furniture is ignored.
-      const sameSchema = headersSemanticallyCompatible(
-        table.headers,
-        canonicalSchema.headers
-      );
+      const sameSchema =
+        table.headers.length === canonicalSchema.headers.length &&
+        table.headers.every((h, index) =>
+          normalizeHeaderWord(h) === normalizeHeaderWord(canonicalSchema.headers[index])
+        );
 
       if (sameSchema) tables.push(table);
     }
@@ -2131,6 +2277,10 @@ function getAmountCandidates(amount) {
   return set ? [...set] : [];
 }
 
+function intersectIds(a, b) {
+  const bSet = new Set(b);
+  return a.filter(id => bSet.has(id));
+}
 
 function imageHasAmount(image, amount) {
   const target=Number(amount);if(!Number.isFinite(target))return false;
@@ -2219,7 +2369,102 @@ function valueForSearch(v) {
     .trim();
 }
 
+function findSupportingEvidence(row, image) {
+  const primaryIndexes = new Set([
+    verifyState.selectedColumns.dateCol,
+    verifyState.selectedColumns.nameCol,
+    verifyState.selectedColumns.creditCol
+  ]);
 
+  const matches = [];
+
+  row.cells.forEach(cell => {
+    if (primaryIndexes.has(cell.columnIndex)) return;
+
+    if (cellMatchesImage(cell.value, image)) {
+      matches.push(cell.value);
+    }
+  });
+
+  return [...new Set(matches)];
+}
+
+function findCoreMatchesForRow(row) {
+  if (row.credit === null || row.credit <= 0) {
+    return {
+      type: "SKIPPED",
+      row,
+      candidates: [],
+      reason: "No valid positive Credit."
+    };
+  }
+
+  if (!row.date) {
+    return {
+      type: "REVIEW REQUIRED",
+      row,
+      candidates: [],
+      reason: "The selected Date column could not be normalized for this row."
+    };
+  }
+
+  if (!row.nameRaw) {
+    return {
+      type: "REVIEW REQUIRED",
+      row,
+      candidates: [],
+      reason: "The selected Name / Description cell is empty."
+    };
+  }
+
+  // Candidate narrowing starts with the mandatory Credit amount.
+  let candidateIds = getAmountCandidates(row.credit);
+
+  if (!candidateIds.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No payment image contains the statement Credit amount."
+    };
+  }
+
+  // Date must also occur in the SAME image.
+  candidateIds = candidateIds.filter(id => {
+    const image = getImageById(id);
+    return image && imageHasDate(image, row.date);
+  });
+
+  if (!candidateIds.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No payment image contains both the statement Credit amount and Date."
+    };
+  }
+
+  // Name / Description must be present in the SAME candidate image.
+  const nameMatches = candidateIds.filter(id => {
+    const image = getImageById(id);
+    return image && textFieldMatchesImage(row.nameRaw, image);
+  });
+
+  if (!nameMatches.length) {
+    return {
+      type: "NOT VERIFIED",
+      row,
+      candidates: [],
+      reason: "No single payment image contains the required Credit, Date, and Name / Description."
+    };
+  }
+
+  return {
+    type: "CORE",
+    row,
+    candidates: nameMatches
+  };
+}
 
 function renderLiveImageCheck(image, index, total, candidates, statusText = "Checking…") {
   const body = document.getElementById("verifyBody");
