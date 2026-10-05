@@ -702,15 +702,41 @@ function escapeRegExp(s) {
 
 
 function groupHeaderCells(headerRow) {
-  // FIXED: old implementation used an allowlist and silently dropped columns
-  // text wasn't on the list — causing real columns to disappear, their
-  // data to bleed into adjacent recognised columns ("unnecessary stuff"),
-  // and the column-picker indices to mismatch the table-row arrays
-  // ("Column 2 / Column 3" phantom entries).
+  // THE PREVIOUS THRESHOLD BUG THAT CAUSED ALL HEADERS TO MERGE:
   //
-  // New approach: purely spatial. Every text fragment in the header row
-  // is kept; physically-close fragments (one multi-word header) are joined.
-  // Nothing is discarded on pattern grounds.
+  // The old approach used: gapThreshold = Math.max(8, medianCW * 2.2)
+  //
+  // In compact bank-statement PDFs — especially those where column headers
+  // are tightly packed (e.g. "NARRATION" ends at x=160, "DEBIT" starts at
+  // x=160, gap = 0) — this 8px minimum threshold was far too large.
+  // Every inter-column gap (0-5px) fell below 8, so ALL header items were
+  // clustered into a single cell, producing output like:
+  //   "NARRATIONDEBITCREDITBALANCEDATE DATENO"
+  // instead of seven separate column cells.
+  //
+  // The same over-merging caused data rows to be reconstructed as one big
+  // blob under that one phantom column, which is what the user saw in the
+  // preview table.
+  //
+  // ROOT CAUSE: using a FIXED minimum gap (8px) that is larger than many
+  // real inter-column gaps in Nigerian bank statement PDFs.
+  //
+  // FIX: derive the threshold from the ACTUAL GAP DISTRIBUTION in this
+  // specific header row, using a bimodal-detection strategy:
+  //
+  //   1. Compute all gaps between adjacent items.
+  //   2. If there is a CLEAR bimodal split (some gaps ≤ 2px, others ≥ 6px),
+  //      the small gaps are between words within the same header cell (e.g.
+  //      "VALUE" and "DATE") and the large gaps separate distinct columns.
+  //      → threshold = 2px (merge only the tiny-gap pairs).
+  //   3. Otherwise be maximally conservative: threshold = -0.5px.
+  //      This means ONLY physically-overlapping items (gap < 0) are merged —
+  //      which handles rare PDFs that split a single glyph across two items —
+  //      and every positive-gap item becomes its own independent column cell.
+  //
+  // Being conservative avoids the corrupting over-merge. The worst case is
+  // a two-word header ("VALUE DATE") appearing as two separate selectable
+  // options in the column picker — the user still picks the right one.
 
   const items = [...(headerRow?.items || [])]
     .filter(it => String(it.text || "").trim())
@@ -718,20 +744,34 @@ function groupHeaderCells(headerRow) {
 
   if (!items.length) return [];
 
-  // Calibrate the gap threshold from the median character width so the
-  // function works across narrow compact tables and wide ones alike.
-  const charWidths = items.map(it => {
-    const w = Math.max(0, Number(it.width) || 0);
-    const len = String(it.text || "").trim().length;
-    return len ? w / len : 0;
-  }).filter(w => w > 0).sort((a, b) => a - b);
-  const medianCW = charWidths.length
-    ? charWidths[Math.floor(charWidths.length / 2)]
-    : 6;
-  // Words within the same header cell are typically ≤ 1.5 chars apart.
-  // A gap wider than ~2 chars separates distinct header cells.
-  const gapThreshold = Math.max(8, medianCW * 2.2);
+  // --- compute per-gap values (right-edge of prev → left-edge of next) ---
+  const gaps = [];
+  for (let i = 1; i < items.length; i++) {
+    const prevRight = (Number(items[i-1].x) || 0) + (Number(items[i-1].width) || 0);
+    const curLeft  = Number(items[i].x) || 0;
+    gaps.push(curLeft - prevRight); // negative = overlap, 0 = touching, positive = space
+  }
 
+  // --- determine merging threshold from gap distribution ---
+  const positiveGaps  = gaps.filter(g => g > 0).sort((a, b) => a - b);
+  const tinyGaps      = positiveGaps.filter(g => g <= 2);   // within-word space
+  const largeGaps     = positiveGaps.filter(g => g > 6);    // inter-column space
+
+  // Conservative default: only merge overlapping items (gap strictly negative)
+  let gapThreshold = -0.5;
+
+  if (tinyGaps.length > 0 && largeGaps.length > 0) {
+    // Clear bimodal: merge tiny gaps (within multi-word headers), keep large ones.
+    gapThreshold = 2;
+  }
+  // If all gaps are similarly small (compact layout): gapThreshold = -0.5
+  //   → nothing merges → each item is its own column cell  ✓
+  // If all gaps are similarly large (spaced layout):  gapThreshold = -0.5
+  //   → nothing merges → each item is its own column cell  ✓
+  // If clear bimodal (mixed):                          gapThreshold = 2
+  //   → only tiny gaps (≤2px) merge → multi-word headers join ✓
+
+  // --- cluster items ---
   const clusters = [];
   let cluster = {
     items: [items[0]],
@@ -740,9 +780,9 @@ function groupHeaderCells(headerRow) {
   };
 
   for (let i = 1; i < items.length; i++) {
-    const it = items[i];
+    const it    = items[i];
     const itemX = Number(it.x) || 0;
-    const gap = itemX - cluster.end;
+    const gap   = gaps[i - 1]; // pre-computed
 
     if (gap <= gapThreshold) {
       cluster.items.push(it);
@@ -763,8 +803,6 @@ function groupHeaderCells(headerRow) {
         .trim();
       return { x: cl.x, end: cl.end, center: (cl.x + cl.end) / 2, text };
     })
-    // Only discard genuinely empty cells or pure-punctuation artefacts —
-    // never drop a cell because its text is not on an allowlist.
     .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
@@ -806,8 +844,12 @@ function detectHeaderRow(rows) {
     if (cells.length >= 3) score += 1;
     if (cells.length >= 5) score += 1;
 
-    // At minimum we need a date column AND an amount column.
-    if (score >= 7 && score > bestScore) {
+    // At minimum we need a date column AND an amount column (score 3+4=7),
+    // or a date + description (3+2=5) with multiple cells as extra evidence.
+    // Lowered from 7 to 5 so that compact headers (each item is one cell,
+    // so cells.length may be lower after the conservative groupHeaderCells)
+    // are still detected correctly.
+    if (score >= 5 && score > bestScore) {
       bestScore = score;
       bestIndex = index;
     }
