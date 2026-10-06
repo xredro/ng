@@ -1640,7 +1640,12 @@ async function ensureStatementMLDetector() {
     throw new Error("The browser ML table recognizer could not be loaded.");
   }
   renderVerifyProgress("table", "Loading financial table ML model…");
-  verifyState._statementMLReady = window.loadXredroTableML();
+  verifyState._statementMLReady = window.loadXredroTableML().catch(err => {
+    verifyState._statementMLReady = null;
+    const detail = err?.message || String(err || "unknown ML initialization error");
+    console.error("X-Redro financial table ML initialization failed:", err);
+    throw new Error(`Financial table ML initialization failed: ${detail}`);
+  });
   return verifyState._statementMLReady;
 }
 
