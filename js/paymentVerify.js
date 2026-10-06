@@ -76,6 +76,8 @@ function createVerifyState() {
     results: [],
     columnPickerResolve: null,
     _statementBuffer: null,
+    _statementMLPages: [],
+    _statementMLReady: null,
     ocrWorker: null
   };
 }
@@ -310,27 +312,47 @@ async function loadStatementPdf(buffer, password) {
     const content = await page.getTextContent();
     const viewport = page.getViewport({ scale: 1 });
 
-    // Keep the PDF's real 2-D coordinate system. We do not need to display
-    // this canvas; it is a spatial working surface used to reconstruct the
-    // table before any normalization or matching happens.
+    const pageItems = content.items.map((it, itemIndex) => {
+      const x = Number(it.transform?.[4]) || 0;
+      const y = Number(it.transform?.[5]) || 0;
+      const width = Math.max(0, Number(it.width) || 0);
+      const height = Math.max(0, Number(it.height) || 0);
+      return {
+        id: `p${i}-t${itemIndex}`,
+        text: String(it.str || ''),
+        x, y, width, height,
+        right: x + width,
+        top: y + height,
+        centerX: x + width / 2,
+        centerY: y + height / 2
+      };
+    });
+
+    // Render the page once for the ML structure recognizer. PDF coordinates
+    // remain the source of truth for text; the image is used only to discover
+    // table/row/column/header geometry.
+    const renderScale = 1.75;
+    const renderViewport = page.getViewport({ scale: renderScale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil(renderViewport.width);
+    canvas.height = Math.ceil(renderViewport.height);
+    const ctx = canvas.getContext("2d", { alpha: false });
+    await page.render({ canvasContext: ctx, viewport: renderViewport }).promise;
+
     pages.push({
       width: viewport.width,
       height: viewport.height,
-      items: content.items.map((it, itemIndex) => {
-        const x = Number(it.transform?.[4]) || 0;
-        const y = Number(it.transform?.[5]) || 0;
-        const width = Math.max(0, Number(it.width) || 0);
-        const height = Math.max(0, Number(it.height) || 0);
-        return {
-          id: `p${i}-t${itemIndex}`,
-          text: String(it.str || ''),
-          x, y, width, height,
-          right: x + width,
-          top: y + height,
-          centerX: x + width / 2,
-          centerY: y + height / 2
-        };
-      })
+      items: pageItems
+    });
+
+    verifyState._statementMLPages.push({
+      pageNumber: i,
+      canvas,
+      scale: renderScale,
+      width: viewport.width,
+      height: viewport.height,
+      pixelWidth: canvas.width,
+      pixelHeight: canvas.height
     });
   }
 
@@ -1612,33 +1634,316 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   };
 }
 
+async function ensureStatementMLDetector() {
+  if (verifyState._statementMLReady) return verifyState._statementMLReady;
+  if (typeof window.loadXredroTableML !== "function") {
+    throw new Error("The browser ML table recognizer could not be loaded.");
+  }
+  renderVerifyProgress("table", "Loading financial table ML model…");
+  verifyState._statementMLReady = window.loadXredroTableML();
+  return verifyState._statementMLReady;
+}
+
+function mlBoxToPdf(box, pageInfo) {
+  const scale = Number(pageInfo.scale) || 1;
+  const pageHeight = Number(pageInfo.height) || 0;
+  const xmin = Number(box?.xmin) || 0;
+  const xmax = Number(box?.xmax) || xmin;
+  const ymin = Number(box?.ymin) || 0;
+  const ymax = Number(box?.ymax) || ymin;
+
+  // ML boxes use image coordinates (top-left origin). PDF.js text uses
+  // PDF coordinates (bottom-left origin).
+  return {
+    x: xmin / scale,
+    right: xmax / scale,
+    top: pageHeight - (ymin / scale),
+    y: pageHeight - (ymax / scale),
+    width: Math.max(0, (xmax - xmin) / scale),
+    height: Math.max(0, (ymax - ymin) / scale),
+    centerX: ((xmin + xmax) / 2) / scale,
+    centerY: pageHeight - (((ymin + ymax) / 2) / scale)
+  };
+}
+
+function pdfItemImageBox(item, pageInfo) {
+  const scale = Number(pageInfo.scale) || 1;
+  const pageHeight = Number(pageInfo.height) || 0;
+  return {
+    xmin: (Number(item.x) || 0) * scale,
+    xmax: (Number(item.right) || Number(item.x) || 0) * scale,
+    ymin: (pageHeight - (Number(item.top) || Number(item.y) || 0)) * scale,
+    ymax: (pageHeight - (Number(item.y) || 0)) * scale
+  };
+}
+
+function boxIntersection(a, b) {
+  const x1 = Math.max(a.xmin, b.xmin);
+  const y1 = Math.max(a.ymin, b.ymin);
+  const x2 = Math.min(a.xmax, b.xmax);
+  const y2 = Math.min(a.ymax, b.ymax);
+  return Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+}
+
+function boxArea(b) {
+  return Math.max(0, b.xmax - b.xmin) * Math.max(0, b.ymax - b.ymin);
+}
+
+function boxIoU(a, b) {
+  const inter = boxIntersection(a, b);
+  const denom = boxArea(a) + boxArea(b) - inter;
+  return denom > 0 ? inter / denom : 0;
+}
+
+function textInsideMLBox(item, box, pageInfo) {
+  const ib = pdfItemImageBox(item, pageInfo);
+  const area = boxArea(ib);
+  const inter = boxIntersection(ib, box);
+  if (area <= 0) return false;
+  const cx = (ib.xmin + ib.xmax) / 2;
+  const cy = (ib.ymin + ib.ymax) / 2;
+  return (inter / area) >= 0.20 ||
+    (cx >= box.xmin && cx <= box.xmax && cy >= box.ymin && cy <= box.ymax);
+}
+
+function textForMLBox(items, box, pageInfo) {
+  return items
+    .filter(item => String(item.text || '').trim() && textInsideMLBox(item, box, pageInfo))
+    .sort((a, b) => {
+      const ay = Number(a.centerY) || 0;
+      const by = Number(b.centerY) || 0;
+      return Math.abs(ay - (Number(b.centerY) || 0)) < 0.1
+        ? (Number(a.x) || 0) - (Number(b.x) || 0)
+        : by - ay;
+    })
+    .sort((a, b) => (Number(b.centerY) || 0) - (Number(a.centerY) || 0) ||
+                    (Number(a.x) || 0) - (Number(b.x) || 0))
+    .map(x => String(x.text || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function dedupeMLBoxes(boxes, iouThreshold = 0.75) {
+  const sorted = [...boxes].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const kept = [];
+  for (const candidate of sorted) {
+    if (!kept.some(existing => boxIoU(candidate.box, existing.box) >= iouThreshold)) {
+      kept.push(candidate);
+    }
+  }
+  return kept;
+}
+
+function normalizeMLDetections(output) {
+  const allowed = new Set([
+    'table',
+    'table column',
+    'table row',
+    'table column header',
+    'table projected row header',
+    'table spanning cell'
+  ]);
+  return (Array.isArray(output) ? output : [])
+    .filter(o => allowed.has(String(o.label || '').toLowerCase()))
+    .map(o => ({
+      label: String(o.label || '').toLowerCase(),
+      score: Number(o.score) || 0,
+      box: o.box || {}
+    }))
+    .filter(o => Number.isFinite(Number(o.box?.xmin)) && Number.isFinite(Number(o.box?.xmax)) &&
+                 Number.isFinite(Number(o.box?.ymin)) && Number.isFinite(Number(o.box?.ymax)));
+}
+
+function makeMLTableFromDetections(page, pageInfo, detections, schemaHint = null) {
+  const tableCandidates = detections.filter(x => x.label === 'table' && x.score >= 0.35);
+  if (!tableCandidates.length) return null;
+
+  const bestTable = tableCandidates.sort((a, b) => b.score - a.score)[0];
+  const tableBox = bestTable.box;
+  const tableChildren = detections.filter(d =>
+    d.label !== 'table' && d.score >= 0.30 && boxIoU(d.box, tableBox) >= 0.20
+  );
+
+  let columns = dedupeMLBoxes(
+    tableChildren.filter(d => d.label === 'table column').map(d => ({ ...d })),
+    0.70
+  ).sort((a, b) => a.box.xmin - b.box.xmin);
+
+  let rows = dedupeMLBoxes(
+    tableChildren.filter(d => d.label === 'table row').map(d => ({ ...d })),
+    0.70
+  ).sort((a, b) => a.box.ymin - b.box.ymin);
+
+  if (columns.length < 2 || rows.length < 2) return null;
+
+  // Clip the ML boxes to the detected table. This prevents page furniture or
+  // nearby text from being assigned to the table.
+  columns = columns.map(c => ({
+    ...c,
+    box: {
+      xmin: Math.max(c.box.xmin, tableBox.xmin),
+      xmax: Math.min(c.box.xmax, tableBox.xmax),
+      ymin: Math.max(c.box.ymin, tableBox.ymin),
+      ymax: Math.min(c.box.ymax, tableBox.ymax)
+    }
+  })).filter(c => c.box.xmax > c.box.xmin && c.box.ymax > c.box.ymin);
+
+  rows = rows.map(r => ({
+    ...r,
+    box: {
+      xmin: Math.max(r.box.xmin, tableBox.xmin),
+      xmax: Math.min(r.box.xmax, tableBox.xmax),
+      ymin: Math.max(r.box.ymin, tableBox.ymin),
+      ymax: Math.min(r.box.ymax, tableBox.ymax)
+    }
+  })).filter(r => r.box.xmax > r.box.xmin && r.box.ymax > r.box.ymin);
+
+  const headerBoxes = dedupeMLBoxes(
+    tableChildren.filter(d => d.label === 'table column header' && d.score >= 0.30),
+    0.65
+  );
+
+  const headerRowIndices = new Set();
+  for (let ri = 0; ri < rows.length; ri++) {
+    const rb = rows[ri].box;
+    if (headerBoxes.some(h => boxIoU(rb, h.box) >= 0.05 || boxIntersection(rb, h.box) / Math.max(1, boxArea(h.box)) >= 0.35)) {
+      headerRowIndices.add(ri);
+    }
+  }
+
+  // Convert ML image coordinates to PDF coordinates so the rest of the
+  // verifier can keep using its existing row/cell representation.
+  const pdfColumns = columns.map((c, index) => ({
+    ...mlBoxToPdf(c.box, pageInfo),
+    index,
+    center: mlBoxToPdf(c.box, pageInfo).centerX,
+    x: mlBoxToPdf(c.box, pageInfo).x,
+    end: mlBoxToPdf(c.box, pageInfo).right,
+    header: ''
+  }));
+
+  const pageItems = page.items || [];
+  const headerRowIndexes = [...headerRowIndices].sort((a, b) => a - b);
+  const firstHeaderIndex = headerRowIndexes.length ? headerRowIndexes[0] : -1;
+
+  const headers = pdfColumns.map((column, colIndex) => {
+    const columnBox = columns[colIndex].box;
+    const headerTexts = [];
+    for (const hb of headerBoxes) {
+      const overlap = boxIntersection(columnBox, hb.box);
+      if (overlap / Math.max(1, boxArea(hb.box)) < 0.15 &&
+          overlap / Math.max(1, boxArea(columnBox)) < 0.05) continue;
+      const txt = textForMLBox(pageItems, hb.box, pageInfo);
+      if (txt) headerTexts.push(txt);
+    }
+
+    if (headerTexts.length) return headerTexts.join(' ').trim();
+    if (schemaHint?.headers?.[colIndex]) return schemaHint.headers[colIndex];
+    return `Column ${colIndex + 1}`;
+  });
+
+  // If the model did not emit explicit header boxes, identify the first
+  // detected row as the header only when its text contains bank-table header
+  // vocabulary. Otherwise the seller's existing column picker can still work
+  // from the schema supplied by an earlier page.
+  if (firstHeaderIndex === -1 && !schemaHint?.headers?.length) {
+    const firstRow = rows[0];
+    const rowText = textForMLBox(pageItems, firstRow.box, pageInfo);
+    const headerScore = (rowText.match(/\b(date|time|name|description|narration|details|credit|debit|balance|reference|ref|channel)\b/gi) || []).length;
+    if (headerScore >= 2) headerRowIndices.add(0);
+  }
+
+  const dataRows = [];
+  for (let ri = 0; ri < rows.length; ri++) {
+    if (headerRowIndices.has(ri)) continue;
+    const row = rows[ri];
+    const cells = new Array(pdfColumns.length).fill('');
+
+    for (let ci = 0; ci < columns.length; ci++) {
+      const cellBox = {
+        xmin: columns[ci].box.xmin,
+        xmax: columns[ci].box.xmax,
+        ymin: row.box.ymin,
+        ymax: row.box.ymax
+      };
+      const value = textForMLBox(pageItems, cellBox, pageInfo);
+      if (value) cells[ci] = value;
+    }
+
+    const cleaned = cleanRowCells(cells, headers);
+    if (!cleaned.some(Boolean)) continue;
+    if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
+    if (cleaned.filter(Boolean).length < 2) continue;
+    dataRows.push(cleaned);
+  }
+
+  if (!dataRows.length) return null;
+
+  return {
+    headers,
+    rows: dataRows,
+    boundaries: pdfColumns,
+    xLanes: pdfColumns.map((c, i) => ({
+      ...c,
+      laneLeft: c.x,
+      laneRight: c.end,
+      anchorX: c.center,
+      index: i,
+      alignmentModel: 'ml-table-transformer-fin'
+    })),
+    ml: {
+      tableScore: bestTable.score,
+      columns: columns.length,
+      rows: rows.length,
+      headerRows: headerRowIndices.size
+    }
+  };
+}
+
 async function detectStatementTables() {
-  renderVerifyProgress("table", "Detecting the transactions table…");
+  renderVerifyProgress("table", "Preparing ML table reconstruction…");
 
+  const detector = await ensureStatementMLDetector();
   const tables = [];
-
   let canonicalSchema = null;
 
   for (let i = 0; i < verifyState.statementText.length; i++) {
-    // The first real transaction table establishes the exact column schema.
-    // Continuation pages reuse it instead of inventing new columns from
-    // arbitrary PDF.js text fragments.
-    const table = buildTableFromPage(
-      verifyState.statementText[i],
-      canonicalSchema
+    const page = verifyState.statementText[i];
+    const pageInfo = verifyState._statementMLPages[i];
+    if (!pageInfo) continue;
+
+    updateVerifyProgress(
+      `ML analysing statement page ${i + 1} of ${verifyState.statementText.length}…`,
+      i,
+      verifyState.statementText.length
     );
+
+    const output = await detector(pageInfo.canvas, { threshold: 0.30 });
+    const detections = normalizeMLDetections(output);
+
+    let table = makeMLTableFromDetections(page, pageInfo, detections, canonicalSchema);
+
+    // A continuation page may not contain a header. The ML model can still
+    // identify its rows/columns; reuse the canonical semantic headers from
+    // the first page without forcing the old heuristic lane reconstruction.
+    if (table && canonicalSchema) {
+      if (table.headers.length !== canonicalSchema.headers.length) {
+        table = null;
+      } else {
+        table.headers = [...canonicalSchema.headers];
+      }
+    }
 
     if (table && table.rows.length) {
       if (!canonicalSchema) {
         canonicalSchema = {
           headers: [...table.headers],
-          boundaries: table.boundaries.map(b => ({ ...b })),
-          xLanes: (table.xLanes || []).map(l => ({ ...l }))
+          boundaries: table.boundaries.map(b => ({ ...b }))
         };
       }
 
-      // Only tables with the same real header structure belong to the same
-      // statement transaction table. Page furniture is ignored.
       const sameSchema =
         table.headers.length === canonicalSchema.headers.length &&
         table.headers.every((h, index) =>
@@ -1649,7 +1954,7 @@ async function detectStatementTables() {
     }
 
     updateVerifyProgress(
-      `Scanning statement page ${i + 1} of ${verifyState.statementText.length}…`,
+      `ML reconstructed page ${i + 1}: ${table?.rows?.length || 0} transaction rows…`,
       i + 1,
       verifyState.statementText.length
     );
@@ -1659,11 +1964,12 @@ async function detectStatementTables() {
 
   if (!tables.length) {
     showVerifyError(
-      "Couldn't detect a transaction table in this statement. The PDF needs selectable text with a recognizable table header."
+      "Couldn't detect a transaction table with the ML table recognizer. The PDF may contain a layout the financial table model cannot recognize."
     );
     return;
   }
 
+  renderVerifyProgress("table", "ML table reconstruction complete.", 1, 1);
   renderStatementColumnPicker();
 }
 
