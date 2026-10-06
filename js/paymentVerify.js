@@ -1542,98 +1542,375 @@ function findRepeatedSchemaHeaderRow(rows, expectedHeaders) {
   return -1;
 }
 
+/* =========================================================
+   BODY-FIRST TABLE RECONSTRUCTION
+   ---------------------------------------------------------
+   The PDF header is semantic information, not the table structure.
+   Transaction rows are reconstructed first from repeated X positions.
+   Header labels are then attached to those already-established columns.
+========================================================= */
+const GENERIC_COLUMN_NAMES = [
+  'Date', 'Time', 'Name', 'Description', 'Reference', 'Amount',
+  'Debit', 'Credit', 'Balance', 'Channel', 'Transaction ID',
+  'Account', 'Type', 'Status', 'Details'
+];
+
+function bodyItemText(row) {
+  return (row?.items || [])
+    .map(it => String(it.text || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function rowHasMoney(row) {
+  return extractAmount(bodyItemText(row)) !== null;
+}
+
+function rowHasDate(row) {
+  return !!extractDate(bodyItemText(row));
+}
+
+function rowIsPageFurniture(row) {
+  const text = bodyItemText(row).toLowerCase();
+  if (!text) return true;
+  if (/^page\s+\d+(?:\s+of\s+\d+)?$/i.test(text)) return true;
+  if (/^(?:statement|account)\s+(?:generated|printed|created)\b/i.test(text)) return true;
+  if (/^(?:generated|printed|created)\s+(?:on|at)\b/i.test(text)) return true;
+  if (/^(?:opening|closing)\s+balance\b/i.test(text) && !rowHasDate(row) && !rowHasMoney(row)) return true;
+  if (/^(?:total|grand total|summary)\b/i.test(text) && !rowHasDate(row)) return true;
+  return false;
+}
+
+function rowIsHeaderLike(row) {
+  const text = bodyItemText(row);
+  if (!text || rowHasDate(row) || rowHasMoney(row)) return false;
+  const items = (row.items || []).filter(it => String(it.text || '').trim());
+  const labels = items.filter(it => headerFragmentLooksLikeLabel(it.text)).length;
+  return labels >= Math.max(2, Math.ceil(items.length * 0.5));
+}
+
+function mergeBodyContinuationRows(rows) {
+  const out = [];
+  const ordered = [...(rows || [])].sort((a,b) => Number(a.centerY) - Number(b.centerY));
+
+  for (const row of ordered) {
+    if (!row?.items?.length || rowIsPageFurniture(row)) continue;
+    if (rowIsHeaderLike(row)) continue;
+    if (!out.length) { out.push(row); continue; }
+
+    const prev = out[out.length - 1];
+    const gap = Math.abs(Number(prev.centerY) - Number(row.centerY));
+    const currentText = bodyItemText(row);
+    const prevText = bodyItemText(prev);
+    const currentHasDate = rowHasDate(row);
+    const currentHasMoney = rowHasMoney(row);
+    const prevHasDate = rowHasDate(prev);
+    const prevHasMoney = rowHasMoney(prev);
+    const firstX = Number(row.items[0]?.x) || 0;
+
+    // A continuation line normally has no new date/amount and begins inside
+    // the same text corridor as an earlier transaction. It may contain an
+    // amount-looking number in a reference/phone field, so the conservative
+    // check below also requires close vertical spacing and X overlap.
+    const prevTextItems = prev.items.filter(it => String(it.text || '').trim());
+    const textAnchors = prevTextItems
+      .filter(it => !extractAmount(String(it.text || '')) && !looksLikeDate(String(it.text || '')))
+      .map(it => Number(it.x) || 0);
+    const nearestTextX = textAnchors.length
+      ? Math.min(...textAnchors.map(x => Math.abs(firstX - x)))
+      : Infinity;
+
+    const likelyContinuation =
+      gap <= 20 &&
+      !currentHasDate &&
+      !currentHasMoney &&
+      prevHasDate &&
+      (nearestTextX <= 28 || firstX <= (Number(prev.right) || firstX) + 28);
+
+    if (likelyContinuation && currentText) {
+      prev.items.push(...row.items);
+      prev.items.sort((a,b) => Number(a.x || 0) - Number(b.x || 0));
+      prev.centerY = prev.items.reduce((sum, x) => sum + (Number(x.centerY) || Number(x.y) || 0), 0) / prev.items.length;
+      prev.right = Math.max(Number(prev.right) || 0, ...prev.items.map(x => Number(x.right) || Number(x.x) || 0));
+    } else {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+function clusterBodyAnchors(values, tolerance = 8) {
+  const sorted = values.filter(v => Number.isFinite(v)).sort((a,b)=>a-b);
+  const clusters = [];
+  for (const value of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (!last || Math.abs(value - last.center) > tolerance) {
+      clusters.push({ center: value, values: [value], rows: new Set() });
+    } else {
+      last.values.push(value);
+      last.center = medianNumber(last.values);
+    }
+  }
+  return clusters;
+}
+
+function inferBodyColumnAnchors(rows, expectedHeaderCells = []) {
+  const rowList = (rows || []).filter(r => r?.items?.length);
+  if (!rowList.length) return [];
+
+  // One X-start contributes at most once per physical transaction row. This
+  // prevents a long description split into many PDF.js items from inflating
+  // one apparent column.
+  const raw = [];
+  rowList.forEach((row, rowIndex) => {
+    const starts = [];
+    for (const item of row.items) {
+      const text = String(item.text || '').trim();
+      if (!text) continue;
+      const x = Number(item.x);
+      if (!Number.isFinite(x)) continue;
+      if (!starts.some(v => Math.abs(v - x) <= 5)) starts.push(x);
+    }
+    starts.forEach(x => raw.push({ x, rowIndex }));
+  });
+
+  const clusters = clusterBodyAnchors(raw.map(v => v.x), 9);
+  clusters.forEach(cluster => {
+    raw.forEach(v => {
+      if (Math.abs(v.x - cluster.center) <= 9) cluster.rows.add(v.rowIndex);
+    });
+    cluster.support = cluster.rows.size / Math.max(1, rowList.length);
+  });
+
+  // A stable table column normally appears at the same X in multiple rows.
+  // Keep strong repeated starts first; isolated starts are allowed only when
+  // header geometry clearly confirms an additional column.
+  let anchors = clusters
+    .filter(c => c.rows.size >= Math.max(2, Math.ceil(rowList.length * 0.18)))
+    .sort((a,b)=>a.center-b.center);
+
+  // Merge near-duplicate anchors created by slightly different font/layout
+  // positioning. Never merge columns separated by a meaningful gap.
+  const merged = [];
+  for (const c of anchors) {
+    const last = merged[merged.length - 1];
+    if (last && Math.abs(last.center - c.center) <= 14) {
+      last.values.push(...c.values);
+      last.center = medianNumber(last.values);
+      last.rows = new Set([...last.rows, ...c.rows]);
+      last.support = last.rows.size / Math.max(1, rowList.length);
+    } else merged.push({ ...c, values: [...c.values], rows: new Set(c.rows) });
+  }
+  anchors = merged;
+
+  // If the body has too few repeated starts, header positions are structural
+  // evidence only for COUNT recovery. They do not determine body cell text.
+  for (const h of expectedHeaderCells || []) {
+    const x = Number(h.center);
+    if (!Number.isFinite(x)) continue;
+    if (!anchors.some(a => Math.abs(a.center - x) <= 24)) {
+      anchors.push({ center: x, values: [x], rows: new Set(), support: 0, headerConfirmed: true });
+    }
+  }
+
+  anchors.sort((a,b)=>a.center-b.center);
+
+  // Guard against a malformed row producing a dozen fake columns. The stable
+  // width is the repeated body structure, not the maximum item count of one
+  // row. A realistic bank table normally has <= 15 useful columns.
+  if (anchors.length > 15) {
+    anchors = anchors
+      .sort((a,b)=>(b.support-a.support) || (a.center-b.center))
+      .slice(0,15)
+      .sort((a,b)=>a.center-b.center);
+  }
+
+  return anchors;
+}
+
+function buildBodyColumnBoundaries(anchors) {
+  if (!anchors?.length) return [];
+  return anchors.map((a,i) => {
+    const prev = anchors[i-1];
+    const next = anchors[i+1];
+    const center = Number(a.center) || 0;
+    const left = prev ? (prev.center + center) / 2 : center - Math.max(35, (next ? next.center-center : 70) * 0.5);
+    const right = next ? (center + next.center) / 2 : center + Math.max(35, (center-(prev ? prev.center : center-70)) * 0.5);
+    return {
+      x: left,
+      end: right,
+      center,
+      headerX: center,
+      headerEnd: center,
+      headerCenterX: center,
+      header: '',
+      bodyAnchor: true,
+      support: Number(a.support) || 0
+    };
+  });
+}
+
+function classifyColumnFromBody(rows, boundaries, index) {
+  const samples = [];
+  const b = boundaries[index];
+  for (const row of rows || []) {
+    const texts = (row.items || []).filter(it => {
+      const x = Number(it.x) || 0;
+      const cx = Number(it.centerX) || x + (Number(it.width)||0)/2;
+      return x >= b.x && x < b.end || cx >= b.x && cx < b.end;
+    }).map(it => String(it.text || '').trim()).filter(Boolean);
+    if (texts.length) samples.push(texts.join(' '));
+  }
+  const sample = samples.slice(0, 30).join(' ');
+  const dateHits = samples.filter(v => looksLikeDate(v)).length;
+  const amountHits = samples.filter(v => extractAmount(v) !== null).length;
+  const refHits = samples.filter(v => /\b\d{6,}\b/.test(v) || /\b(?:ref|reference|trace|txn|transaction)\b/i.test(v)).length;
+  const timeHits = samples.filter(v => /\b\d{1,2}:\d{2}(?::\d{2})?\b/.test(v)).length;
+  const channelHits = samples.filter(v => /\b(?:mobile|ussd|pos|web|atm|transfer|online|branch)\b/i.test(v)).length;
+
+  if (dateHits >= Math.max(1, samples.length * 0.35)) return 'Date';
+  if (timeHits >= Math.max(1, samples.length * 0.5) && dateHits < samples.length * 0.25) return 'Time';
+  if (amountHits >= Math.max(1, samples.length * 0.45)) return 'Amount';
+  if (refHits >= Math.max(1, samples.length * 0.4)) return 'Reference';
+  if (channelHits >= Math.max(1, samples.length * 0.45)) return 'Channel';
+  if (sample) {
+    // A text-heavy first/early column is commonly a name/description field.
+    if (index <= 2) return index === 0 ? 'Name' : 'Description';
+    return 'Details';
+  }
+  return null;
+}
+
+function assignHeadersToBodyColumns(anchors, bodyBoundaries, logicalHeaderCells, bodyRows = []) {
+  const count = anchors.length;
+  const headers = new Array(count).fill('');
+  const used = new Set();
+  const cells = [...(logicalHeaderCells || [])].sort((a,b)=>Number(a.center)-Number(b.center));
+
+  // Header labels are assigned to the already-existing body columns by X.
+  for (const cell of cells) {
+    const x = Number(cell.center);
+    if (!Number.isFinite(x)) continue;
+    let best = -1, distance = Infinity;
+    for (let i=0;i<bodyBoundaries.length;i++) {
+      if (used.has(i)) continue;
+      const d = Math.abs(x - bodyBoundaries[i].center);
+      if (d < distance) { distance=d; best=i; }
+    }
+    if (best >= 0 && distance <= Math.max(35, (bodyBoundaries[best].end-bodyBoundaries[best].x)*0.75)) {
+      headers[best] = String(cell.text || '').trim();
+      used.add(best);
+    }
+  }
+
+  // Generic semantic names fill gaps. They are deliberately based on BODY
+  // evidence rather than invented from the number of header fragments.
+  const usedNames = new Set(headers.map(h => normalizeHeaderLabel(h)).filter(Boolean));
+  for (let i=0;i<count;i++) {
+    if (headers[i]) continue;
+    let guess = classifyColumnFromBody(bodyRows, bodyBoundaries, i) || '';
+    if (!guess) guess = GENERIC_COLUMN_NAMES[i] || `Column ${i+1}`;
+    if (usedNames.has(normalizeHeaderLabel(guess))) {
+      const alternatives = ['Details','Reference','Amount','Type','Status','Column'];
+      guess = alternatives.find(x => !usedNames.has(normalizeHeaderLabel(x))) || `Column ${i+1}`;
+    }
+    headers[i] = guess;
+    usedNames.add(normalizeHeaderLabel(guess));
+  }
+  return headers;
+}
+
+function buildBodyLanes(rows, boundaries, headers) {
+  return boundaries.map((b,i) => ({
+    ...b,
+    index: i,
+    kind: headerColumnKind(headers?.[i] || ''),
+    anchorX: b.center,
+    laneLeft: b.x,
+    laneRight: b.end,
+    laneConfidence: Number(b.support) || 0,
+    alignmentModel: 'body-repeat-x',
+    fallback: true
+  }));
+}
+
 function buildTableFromPage(pageItems, schemaHint = null) {
   const pageModel = (pageItems && !Array.isArray(pageItems) && Array.isArray(pageItems.items))
     ? build2DPageModel(pageItems)
     : build2DPageModel({ items: Array.isArray(pageItems) ? pageItems : [] });
-  let rows = pageModel.rows;
+  let rows = mergeBodyContinuationRows(pageModel.rows);
 
+  if (!rows.length) return null;
+
+  let logicalHeader = null;
   let headerIdx = -1;
-  let headerEndIdx = -1;
-  let boundaries = [];
-  let headers = [];
-
-  if (schemaHint?.headers?.length && schemaHint?.boundaries?.length) {
-    headers = [...schemaHint.headers];
-    boundaries = schemaHint.boundaries.map(b => ({ ...b }));
-
-    // A continuation page may have no repeated header at all. Do NOT run the
-    // generic header detector here because a normal transaction row can look
-    // like a header (date + amount + description) and would then be discarded.
-    headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
-    headerEndIdx = headerIdx >= 0 ? headerIdx : -1;
-
-    // If the repeated header itself is stacked over multiple Y rows, consume
-    // that header region before the body starts.
-    if (headerIdx >= 0) {
-      const logical = collectLogicalHeader(rows, headerIdx);
-      if (logical?.cells?.length === headers.length && headersSemanticallyCompatible(logical.cells.map(c => c.text), headers)) {
-        headerEndIdx = logical.endIndex;
-      }
-    }
-  } else {
+  if (!schemaHint?.headers?.length) {
     headerIdx = detectHeaderRow(rows);
-    if (headerIdx === -1) return null;
-
-    const logicalHeader = collectLogicalHeader(rows, headerIdx);
-    if (!logicalHeader?.cells?.length || logicalHeader.cells.length < 3) return null;
-
-    headers = logicalHeader.cells.map(c => c.text);
-    boundaries = buildColumnBoundaries({ items: logicalHeader.cells.map(c => ({ ...c, width: Math.max(0, Number(c.end) - Number(c.x)) })) });
-    headerEndIdx = logicalHeader.endIndex;
-
-    // Never manufacture blank "Column N" names here. If the PDF did not
-    // expose a real header, that position is not considered a column.
-    if (headers.length !== boundaries.length) return null;
+    if (headerIdx >= 0) logicalHeader = collectLogicalHeader(rows, headerIdx);
+  } else {
+    // On continuation pages, try to consume a repeated header but never make
+    // a transaction row disappear merely because it resembles one.
+    headerIdx = findRepeatedSchemaHeaderRow(rows, schemaHint.headers);
+    if (headerIdx >= 0) logicalHeader = collectLogicalHeader(rows, headerIdx);
   }
 
-  rows = mergeContinuationRows(rows, boundaries, headers);
+  const headerCells = logicalHeader?.cells?.length ? logicalHeader.cells : [];
+  const headerEnd = logicalHeader?.endIndex >= 0 ? logicalHeader.endIndex : -1;
+  const bodyRows = rows.filter((row, idx) => idx > headerEnd && !rowIsPageFurniture(row) && !rowIsHeaderLike(row));
 
-  // IMPORTANT: skip the entire logical header region, not just its first Y
-  // row. This prevents lower-line fragments such as the second "DATE" in
-  // "TRANS DATE / DATE" from becoming an empty transaction row.
-  const dataStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
+  // BODY FIRST: infer stable columns from repeated transaction geometry.
+  let anchors = inferBodyColumnAnchors(bodyRows, headerCells);
+  if (!anchors.length) return null;
+
+  let boundaries = buildBodyColumnBoundaries(anchors);
+  let headers;
+
+  if (schemaHint?.headers?.length === anchors.length) {
+    headers = [...schemaHint.headers];
+  } else {
+    headers = assignHeadersToBodyColumns(anchors, boundaries, headerCells, bodyRows);
+  }
+
+  // If the body supplied too few repeated anchors, retain the old v29 header
+  // schema as a fallback. This is only a recovery path for sparse statements.
+  if (headerCells.length > anchors.length && headerCells.length <= 15) {
+    const headerBoundaries = buildColumnBoundaries({ items: headerCells.map(c => ({
+      ...c, width: Math.max(0, Number(c.end)-Number(c.x))
+    })) });
+    if (headerBoundaries.length > boundaries.length) {
+      anchors = headerBoundaries.map(b => ({ center: b.center, support: 0, headerConfirmed: true }));
+      boundaries = buildBodyColumnBoundaries(anchors);
+      headers = schemaHint?.headers?.length === anchors.length
+        ? [...schemaHint.headers]
+        : assignHeadersToBodyColumns(anchors, boundaries, headerCells, bodyRows);
+    }
+  }
+
+  if (!headers.length || headers.length !== boundaries.length) return null;
+
+  // Now, and only now, reconstruct every row against the stable body lanes.
+  const lanes = buildBodyLanes(bodyRows, boundaries, headers);
   const tableRows = [];
-  const dataRowsForLaneLearning = rows.slice(dataStart).filter(row => row.items?.length);
-  const xLanes = buildGlobalXLanes(dataRowsForLaneLearning, boundaries, headers);
-
-  for (let i = dataStart; i < rows.length; i++) {
-    const cells = new Array(headers.length).fill("");
-
-    // Reconstruct the whole physical row at once. This lets repeated X
-    // coordinates determine where a cell starts and prevents a long
-    // Description from spilling into Credit merely because its last word is
-    // physically closer to the Credit header.
-    const parts = assignRowTokensToXLanes(rows[i], xLanes, headers);
+  for (const row of bodyRows) {
+    const cells = new Array(headers.length).fill('');
+    const parts = assignRowTokensToXLanes(row, lanes, headers);
     parts.forEach(part => {
       const col = part.col;
       if (col < 0 || col >= cells.length) return;
-      const value = String(part.text || "").trim();
-      if (!value) return;
-      cells[col] = cells[col] ? `${cells[col]} ${value}` : value;
+      const value = String(part.text || '').trim();
+      if (value) cells[col] = cells[col] ? `${cells[col]} ${value}` : value;
     });
 
     const cleaned = cleanRowCells(cells, headers);
-
     if (!cleaned.some(Boolean)) continue;
     if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
-
-    // Preserve the complete physical row. Do not discard it merely because
-    // date/credit recognition failed at extraction time: the seller will
-    // explicitly choose Date / Name-Description / Credit later, and a shifted
-    // or partially formatted row must not silently disappear from the preview.
-    // Very small one-cell page furniture is still ignored.
     if (cleaned.filter(Boolean).length < 2) continue;
-
     tableRows.push(cleaned);
   }
 
-  return {
-    headers,
-    rows: tableRows,
-    boundaries,
-    xLanes
-  };
+  return { headers, rows: tableRows, boundaries, xLanes: lanes };
 }
 
 async function detectStatementTables() {
