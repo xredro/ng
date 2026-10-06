@@ -428,126 +428,6 @@ async function openPdfDocument(buffer, password, useWorker = true) {
   return await loadingTask.promise;
 }
 
-
-function matrixMultiply(a, b) {
-  return [
-    a[0]*b[0] + a[2]*b[1],
-    a[1]*b[0] + a[3]*b[1],
-    a[0]*b[2] + a[2]*b[3],
-    a[1]*b[2] + a[3]*b[3],
-    a[0]*b[4] + a[2]*b[5] + a[4],
-    a[1]*b[4] + a[3]*b[5] + a[5]
-  ];
-}
-
-function transformPoint(m, x, y) {
-  return { x: m[0]*x + m[2]*y + m[4], y: m[1]*x + m[3]*y + m[5] };
-}
-
-function addVectorSegment(segments, p1, p2) {
-  if (!p1 || !p2) return;
-  const dx = p2.x - p1.x;
-  const dy = p2.y - p1.y;
-  const length = Math.hypot(dx, dy);
-  if (!Number.isFinite(length) || length < 2) return;
-  const horizontal = Math.abs(dy) <= Math.max(1.5, length * 0.008);
-  const vertical = Math.abs(dx) <= Math.max(1.5, length * 0.008);
-  if (!horizontal && !vertical) return;
-  segments.push({
-    x1: Math.min(p1.x, p2.x), y1: Math.min(p1.y, p2.y),
-    x2: Math.max(p1.x, p2.x), y2: Math.max(p1.y, p2.y),
-    length, horizontal, vertical
-  });
-}
-
-async function extractPdfVectorLines(page) {
-  // PDF.js exposes the page drawing stream through getOperatorList(). We only
-  // retain long horizontal/vertical stroked paths; ordinary text glyph paths,
-  // logos and decorative diagonals are intentionally ignored.
-  try {
-    if (!page || typeof page.getOperatorList !== 'function') return [];
-    const list = await page.getOperatorList();
-    const OPS = window.pdfjsLib?.OPS || {};
-    const fn = list?.fnArray || [];
-    const args = list?.argsArray || [];
-    const moveTo = OPS.moveTo;
-    const lineTo = OPS.lineTo;
-    const constructPath = OPS.constructPath;
-    const strokeOps = new Set([OPS.stroke, OPS.closeStroke, OPS.eoStroke].filter(v => Number.isFinite(v)));
-    const out = [];
-    let ctm = [1,0,0,1,0,0];
-    const stack = [];
-    let path = [];
-    let current = null;
-
-    const flush = () => {
-      if (path.length) out.push(...path);
-      path = [];
-    };
-
-    for (let i=0; i<fn.length; i++) {
-      const op = fn[i];
-      const a = args[i] || [];
-      if (op === OPS.save) { stack.push(ctm.slice()); continue; }
-      if (op === OPS.restore) { ctm = stack.pop() || ctm; continue; }
-      if (op === OPS.transform && a.length >= 6) {
-        ctm = matrixMultiply(ctm, a.slice(0,6).map(Number));
-        continue;
-      }
-      if (op === moveTo && a.length >= 2) {
-        current = transformPoint(ctm, Number(a[0]), Number(a[1]));
-        continue;
-      }
-      if (op === lineTo && a.length >= 2) {
-        const next = transformPoint(ctm, Number(a[0]), Number(a[1]));
-        addVectorSegment(path, current, next);
-        current = next;
-        continue;
-      }
-      if (op === constructPath && a.length >= 2) {
-        const operators = a[0] || [];
-        const coords = a[1] || [];
-        let ci = 0;
-        let start = current;
-        for (const subop of operators) {
-          // PDF.js path op codes are stable: moveTo=0, lineTo=1, curveTo=2,
-          // curveTo2=3, curveTo3=4, closePath=5.
-          if (subop === 0 && ci + 1 < coords.length) {
-            current = transformPoint(ctm, Number(coords[ci]), Number(coords[ci+1]));
-            start = current; ci += 2;
-          } else if (subop === 1 && ci + 1 < coords.length) {
-            const next = transformPoint(ctm, Number(coords[ci]), Number(coords[ci+1]));
-            addVectorSegment(path, current, next); current = next; ci += 2;
-          } else if (subop === 2 && ci + 5 < coords.length) {
-            // Curves are not table boundaries. Consume their coordinates but
-            // deliberately do not turn them into candidate grid lines.
-            current = transformPoint(ctm, Number(coords[ci+4]), Number(coords[ci+5])); ci += 6;
-          } else if (subop === 3 && ci + 3 < coords.length) {
-            current = transformPoint(ctm, Number(coords[ci+2]), Number(coords[ci+3])); ci += 4;
-          } else if (subop === 4 && ci + 3 < coords.length) {
-            current = transformPoint(ctm, Number(coords[ci+2]), Number(coords[ci+3])); ci += 4;
-          } else if (subop === 5) {
-            if (current && start) addVectorSegment(path, current, start);
-            current = start;
-          }
-        }
-        continue;
-      }
-      if (strokeOps.has(op)) {
-        flush();
-        current = null;
-        continue;
-      }
-    }
-    flush();
-    return out.filter(s => s.length >= 20);
-  } catch (_) {
-    // Vector extraction is an enhancement. Never make an otherwise readable
-    // selectable-text PDF fail because a PDF drawing stream is unusual.
-    return [];
-  }
-}
-
 async function loadStatementPdf(buffer, password) {
   renderVerifyProgress("statement", "Reading statement PDF…");
 
@@ -605,7 +485,6 @@ async function loadStatementPdf(buffer, password) {
 
     try {
       const extracted = await extractPdfPageText(page, i);
-      const vectorLines = await extractPdfVectorLines(page);
       totalItems += extracted.items.length;
       if (extracted.items.some(item => item.text.trim())) pagesWithText++;
 
@@ -614,8 +493,7 @@ async function loadStatementPdf(buffer, password) {
         width: Number(viewport.width) || 0,
         height: Number(viewport.height) || 0,
         items: extracted.items,
-        rawItemCount: extracted.rawItemCount,
-        vectorLines
+        rawItemCount: extracted.rawItemCount
       });
     } catch (err) {
       failedPages.push(i);
@@ -890,113 +768,52 @@ function groupHeaderCells(headerRow) {
     .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
-function detectHeaderRegion(rows, vectorLines = []) {
+function detectHeaderRow(rows) {
+  // FIXED: old implementation required exact normalizeHeaderLabel() matches
+  // (e.g. n === "credit") so it missed any column whose header text wasn't
+  // mapped by that function — e.g. "Lodgements (CR)", "WITHDRAWALS",
+  // "AMOUNT", "S/N".  Raising the threshold to 7 made it even stricter.
+  //
+  // New approach: plain substring / word-boundary regex on the raw header
+  // text.  This recognises the real variety of Nigerian bank statement
+  // headers without requiring an exhaustive mapping dictionary.
+
   let bestIndex = -1;
   let bestScore = 0;
-  const candidates = [];
 
-  (rows || []).forEach((row, index) => {
+  rows.forEach((row, index) => {
     const cells = groupHeaderCells(row);
     if (cells.length < 2) return;
-    const texts = cells.map(c => String(c.text || '').toLowerCase());
-    const hasDate = texts.some(t => /\bdate\b|\bvalue\s*date\b|\bposting\s*date\b|\btran(?:saction)?\s*date\b|\btime\b|\btimestamp\b/.test(t));
-    const hasAmount = texts.some(t => /\bcredit\b|\blodge(?:ment)?s?\b|\binflow\b|\bdeposit\b|\breceived?\b|\bamount\b|\bdebit\b|\bwithdraw(?:al)?s?\b|\boutflow\b|\bbalance\b/.test(t));
-    const hasDescription = texts.some(t => /\bdescription\b|\bnarration\b|\bdetails?\b|\bparticular\b|\bname\b|\bremarks?\b|\breference\b|\bref\b|\btransaction\b/.test(t));
+
+    const texts = cells.map(c => String(c.text || "").toLowerCase());
+
+    const hasDate = texts.some(t =>
+      /\bdate\b|\bvalue\s*date\b|\bposting\s*date\b|\btran(?:saction)?\s*date\b|\btime\b|\btimestamp\b/.test(t)
+    );
+
+    const hasAmount = texts.some(t =>
+      /\bcredit\b|\blodge(?:ment)?s?\b|\binflow\b|\bdeposit\b|\breceived?\b|\bamount\b|\bdebit\b|\bwithdraw(?:al)?s?\b|\boutflow\b|\bbalance\b/.test(t)
+    );
+
+    const hasDescription = texts.some(t =>
+      /\bdescription\b|\bnarration\b|\bdetails?\b|\bparticular\b|\bname\b|\bremarks?\b|\breference\b|\bref\b|\btransaction\b/.test(t)
+    );
+
     let score = 0;
-    if (hasDate) score += 3;
-    if (hasAmount) score += 4;
+    if (hasDate)        score += 3;
+    if (hasAmount)      score += 4;
     if (hasDescription) score += 2;
     if (cells.length >= 3) score += 1;
     if (cells.length >= 5) score += 1;
-    if (score >= 6) candidates.push({ index, score, cells });
+
+    // At minimum we need a date column AND an amount column.
+    if (score >= 7 && score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
   });
 
-  if (candidates.length) {
-    candidates.sort((a,b)=>b.score-a.score || a.index-b.index);
-    bestIndex = candidates[0].index;
-    bestScore = candidates[0].score;
-  }
-  if (bestIndex < 0) return { index: -1, endIndex: -1, cells: [], score: 0 };
-
-  // A header may occupy several PDF.js Y rows. Expand around the strongest
-  // semantic row while staying above the first transaction-like row. Clear
-  // horizontal vector lines are used as a hard visual separator when present.
-  const base = rows[bestIndex];
-  const rowYs = rows.map(r => r.centerY).filter(Number.isFinite);
-  const gaps = [];
-  for (let i=1;i<rowYs.length;i++) gaps.push(Math.abs(rowYs[i-1]-rowYs[i]));
-  const typicalGap = Math.max(4, medianNumber(gaps.filter(g=>g>0)) || 10);
-  const minY = Math.min(...base.items.map(x=>x.centerY));
-  const maxY = Math.max(...base.items.map(x=>x.centerY));
-  let start = bestIndex;
-  let end = bestIndex;
-
-  // Include immediately adjacent rows that look like header continuations
-  // (short labels, no transaction date/amount) and lie within ~2 row gaps.
-  for (let i=bestIndex-1; i>=0; i--) {
-    const d = Math.abs(rows[i].centerY - minY);
-    const cells = groupHeaderCells(rows[i]);
-    const text = cells.map(c=>c.text).join(' ').toLowerCase();
-    const looksHeaderish = cells.length >= 2 && !rows[i].items.some(it => looksLikeDate(it.text) && /\d/.test(it.text));
-    if (d <= typicalGap*2.5 && looksHeaderish && !/\b(?:25|100|1000|10000|25000|50000)\b/.test(text)) start = i;
-    else break;
-  }
-  for (let i=bestIndex+1; i<rows.length; i++) {
-    const d = Math.abs(rows[i].centerY - maxY);
-    const cells = groupHeaderCells(rows[i]);
-    const text = cells.map(c=>c.text).join(' ').toLowerCase();
-    const hasBodyDate = rows[i].items.some(it => looksLikeDate(it.text));
-    const hasNumericAmount = rows[i].items.some(it => /(?:₦|ngn|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b)/i.test(it.text));
-    const continuation = cells.length >= 1 && !hasBodyDate && !hasNumericAmount && d <= typicalGap*2.5 && text.length <= 100;
-    if (continuation) end = i;
-    else break;
-  }
-
-  // If a horizontal vector line sits between the candidate and a nearby row,
-  // do not cross it. It is a stronger indication of header/body separation.
-  const ys = rows.slice(start, end+1).flatMap(r=>r.items.map(it=>it.centerY));
-  const headerTop = Math.min(...ys), headerBottom = Math.max(...ys);
-  const horizontal = (vectorLines || []).filter(l=>l.horizontal && l.length >= 40);
-  if (horizontal.length) {
-    const separators = horizontal.map(l=>Math.max(l.y1,l.y2)).filter(y=>Number.isFinite(y));
-    const nearest = separators.filter(y=>Math.abs(y-headerBottom)<=typicalGap*1.5);
-    if (nearest.length) {
-      // keep the semantic header rows; the line is used downstream for grid
-      // geometry rather than deleting a header row solely from coordinates.
-    }
-  }
-
-  const combinedItems = [];
-  for (let i=start;i<=end;i++) combinedItems.push(...rows[i].items);
-  return { index:start, endIndex:end, cells: groupHeaderZoneCells({items:combinedItems}), score:bestScore };
-}
-
-function detectHeaderRow(rows) {
-  return detectHeaderRegion(rows, []).index;
-}
-
-function groupHeaderZoneCells(headerZone) {
-  const items = [...(headerZone?.items || [])].filter(it=>String(it.text||'').trim());
-  if (!items.length) return [];
-  const sorted = items.slice().sort((a,b)=>(a.x-b.x)||(a.centerY-b.centerY));
-  const widths = sorted.map(it => Math.max(0, Number(it.width)||0)).filter(Boolean);
-  const tolerance = Math.max(7, medianNumber(widths)*0.8);
-  const clusters=[];
-  for (const it of sorted) {
-    const left=Number(it.x)||0, right=Number(it.right)||left+(Number(it.width)||0), center=(left+right)/2;
-    let best=null, bestDist=Infinity;
-    for(const c of clusters){
-      const overlap=Math.min(right,c.right)-Math.max(left,c.left);
-      const dist=Math.abs(center-c.center);
-      if(overlap>0 || dist<=tolerance){ if(dist<bestDist){best=c;bestDist=dist;} }
-    }
-    if(!best){ clusters.push({items:[it],left,right,center}); }
-    else { best.items.push(it); best.left=Math.min(best.left,left); best.right=Math.max(best.right,right); best.center=(best.left+best.right)/2; }
-  }
-  return clusters.sort((a,b)=>a.center-b.center).map(c=>({
-    x:c.left,end:c.right,center:c.center,
-    text:c.items.slice().sort((a,b)=>b.centerY-a.centerY||a.x-b.x).map(it=>String(it.text||'').trim()).filter(Boolean).join(' ').replace(/\s+/g,' ').trim()
-  })).filter(c=>c.text && /[A-Za-z0-9]/.test(c.text));
+  return bestIndex;
 }
 
 function buildColumnBoundaries(headerRow) {
@@ -1428,9 +1245,159 @@ function extractAmount(raw) {
 }
 
 function mergeContinuationRows(rows,boundaries,headers){
-  if(!rows.length||!boundaries.length)return rows;const out=[];
-  const hasDateOrAmount=items=>{const t=items.map(x=>x.text||"").join(" ");return !!extractDate(t)||extractAmount(t)!==null;};
-  for(const row of rows){if(!out.length){out.push(row);continue;}const prev=out[out.length-1],text=row.items.map(x=>String(x.text||"").trim()).filter(Boolean).join(" ");const gap=Math.abs(Number(prev.centerY)-Number(row.centerY)),fx=Number(row.items[0]?.x)||0;const textCol=boundaries.some((b,i)=>{const h=normalizeHeaderLabel(headers[i]||"");return(h==="name"||h==="description")&&fx>=b.x-12&&fx<=b.end+12;});if(text&&gap<=18&&!hasDateOrAmount(row.items)&&textCol&&hasDateOrAmount(prev.items)){prev.items.push(...row.items);prev.items.sort((a,b)=>a.x-b.x);}else out.push(row);}return out;
+  if(!rows.length||!boundaries.length)return rows;
+
+  // PDF.js can place a single logical transaction on several visual Y rows.
+  // Do NOT use arbitrary digits as proof that a row is a new transaction:
+  // narration/reference text commonly contains numbers such as 2070I7SV or
+  // 628749317248. Instead, inspect the actual structural columns.
+  const columnIndexForToken = token => {
+    const center = Number.isFinite(Number(token.center))
+      ? Number(token.center)
+      : (Number(token.x)||0) + (Number(token.width)||0)/2;
+    let col = boundaries.findIndex(b => center >= b.x && center < b.end);
+    if (col >= 0) return col;
+    let best=-1, overlap=0;
+    for(let i=0;i<boundaries.length;i++){
+      const left=Math.max(Number(token.x)||0, Number(boundaries[i].x)||0);
+      const right=Math.min(Number(token.right)||((Number(token.x)||0)+(Number(token.width)||0)), Number(boundaries[i].end)||0);
+      const o=Math.max(0,right-left);
+      if(o>overlap){overlap=o;best=i;}
+    }
+    return best;
+  };
+
+  const tokensFor = row => row.items.flatMap(expandSpatialTokens).filter(t=>String(t.text||'').trim());
+  const semantic = headers.map(h=>normalizeHeaderLabel(h||''));
+  const dateCols = semantic.map((h,i)=>({h,i})).filter(x=>x.h==='date'||x.h==='datetime'||x.h==='time').map(x=>x.i);
+  const moneyCols = semantic.map((h,i)=>({h,i})).filter(x=>['credit','debit','balance','amount','inflow','outflow'].includes(x.h)).map(x=>x.i);
+  const textCols = semantic.map((h,i)=>({h,i})).filter(x=>x.h==='name'||x.h==='description'||x.h==='reference'||x.h==='channel'||x.h==='details').map(x=>x.i);
+
+  const rowHasDate = row => tokensFor(row).some(t=>{
+    const col=columnIndexForToken(t);
+    return dateCols.includes(col) && looksLikeDate(t.text);
+  });
+
+  const numericAmount = text => {
+    const s=String(text||'').trim();
+    if(!s || /^(?:-|—|–|n\/a)$/i.test(s)) return false;
+    // Only treat clearly amount-like values as monetary evidence. Long
+    // references and alphanumeric narration IDs therefore cannot block a
+    // continuation merge.
+    return /^(?:₦|NGN|N|\$|€|£)?\s*\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(s) ||
+           /^(?:₦|NGN|N|\$|€|£)\s*\d+(?:\.\d{1,2})?$/.test(s) ||
+           /^\d+(?:\.\d{1,2})?$/.test(s) && s.replace(/\D/g,'').length<=7;
+  };
+
+  const rowHasMoneyInStructuralColumn = row => tokensFor(row).some(t=>{
+    const col=columnIndexForToken(t);
+    return moneyCols.includes(col) && numericAmount(t.text);
+  });
+
+  const rowHasMeaningfulText = row => tokensFor(row).some(t=>{
+    const col=columnIndexForToken(t);
+    return textCols.includes(col) && /[A-Za-z]/.test(String(t.text||''));
+  });
+
+  const rowStartsInTextColumn = row => tokensFor(row).some(t=>{
+    const col=columnIndexForToken(t);
+    return textCols.includes(col);
+  });
+
+  const yDistances=[];
+  for(let i=1;i<rows.length;i++){
+    const d=Math.abs(Number(rows[i-1].centerY)-Number(rows[i].centerY));
+    if(Number.isFinite(d)&&d>0)yDistances.push(d);
+  }
+  const typicalGap=Math.max(4, medianNumber(yDistances)||10);
+  const maxContinuationGap=Math.max(18, Math.min(30, typicalGap*2.8));
+
+  const out=[];
+  for(const row of rows){
+    if(!out.length){out.push(row);continue;}
+
+    const prev=out[out.length-1];
+    const gap=Math.abs(Number(prev.centerY)-Number(row.centerY));
+    const text=String(row.items.map(x=>x.text||'').join(' ')).replace(/\s+/g,' ').trim();
+
+    const currentHasDate=rowHasDate(row);
+    const currentHasMoney=rowHasMoneyInStructuralColumn(row);
+    const currentHasText=rowHasMeaningfulText(row);
+    const startsInText=rowStartsInTextColumn(row);
+
+    // A continuation must look like text belonging to an existing text cell,
+    // must not introduce a new date, and must not introduce a monetary value
+    // in a real amount column. Numbers embedded in narration/reference text
+    // are therefore harmless.
+    const previousIsTransaction=rowHasDate(prev) || rowHasMoneyInStructuralColumn(prev) || rowHasMeaningfulText(prev);
+    const continuation = Boolean(
+      text &&
+      gap <= maxContinuationGap &&
+      !currentHasDate &&
+      !currentHasMoney &&
+      currentHasText &&
+      startsInText &&
+      previousIsTransaction
+    );
+
+    if(continuation){
+      prev.items.push(...row.items);
+      // Keep the original X ordering within each visual line while retaining
+      // the Y coordinate so later tokenization can reconstruct the text in
+      // visual order.
+      prev.items.sort((a,b)=>Number(b.centerY)-Number(a.centerY)||Number(a.x)-Number(b.x));
+      prev.centerY=(prev.items.reduce((sum,x)=>sum+(Number(x.centerY)||0),0)/prev.items.length);
+    }else{
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+// Collapse a multi-line header into one logical header row without requiring
+// every header label to share the same PDF Y coordinate. This is deliberately
+// separate from body continuation logic.
+function mergeHeaderContinuationRows(rows, headerIdx){
+  if(headerIdx<0 || headerIdx>=rows.length) return {rows, headerIdx};
+  const all=[...rows];
+  const base=all[headerIdx];
+  const heights=all.map(r=>Math.abs(Number(r.centerY)||0));
+  const gaps=[];
+  for(let i=1;i<heights.length;i++){const d=Math.abs(heights[i]-heights[i-1]);if(d>0)gaps.push(d);}
+  const typicalGap=Math.max(4,medianNumber(gaps)||10);
+  const maxGap=Math.max(18,Math.min(30,typicalGap*2.8));
+  const headerWords=/^(?:date|time|value|trans\.?|transaction|posting|description|narration|name|credit|debit|balance|amount|reference|ref|channel|no\.?|number|details|particulars?|remarks?)$/i;
+
+  const isContinuation=row=>{
+    const cells=groupHeaderCells(row);
+    if(!cells.length || cells.length>Math.max(3,groupHeaderCells(base).length)) return false;
+    const text=cells.map(c=>c.text).join(' ').trim();
+    if(!text || text.length>80) return false;
+    if(row.items.some(it=>looksLikeDate(it.text))) return false;
+    const words=text.split(/\s+/).filter(Boolean);
+    return words.length<=8 && words.some(w=>headerWords.test(w.replace(/[.:]/g,'')));
+  };
+
+  // Usually the second line is below the semantic header. Also allow a small
+  // preceding line because some PDFs position a stacked header unusually.
+  let start=headerIdx, end=headerIdx;
+  for(let i=headerIdx+1;i<all.length;i++){
+    const gap=Math.abs(Number(all[i].centerY)-Number(all[end].centerY));
+    if(gap<=maxGap && isContinuation(all[i])) end=i; else break;
+  }
+  for(let i=headerIdx-1;i>=0;i--){
+    const gap=Math.abs(Number(all[i].centerY)-Number(all[start].centerY));
+    if(gap<=maxGap && isContinuation(all[i])) start=i; else break;
+  }
+
+  if(start===headerIdx && end===headerIdx) return {rows,headerIdx};
+  const combined={...base,items:[]};
+  for(let i=start;i<=end;i++) combined.items.push(...all[i].items);
+  combined.items.sort((a,b)=>Number(a.x)-Number(b.x)||Number(b.centerY)-Number(a.centerY));
+  combined.centerY=(combined.items.reduce((sum,x)=>sum+(Number(x.centerY)||0),0)/Math.max(1,combined.items.length));
+  const next=all.filter((_,i)=>i<start||i>end);
+  next.splice(start,0,combined);
+  return {rows:next,headerIdx:start};
 }
 
 function headersSemanticallyCompatible(a, b) {
@@ -1453,55 +1420,13 @@ function findRepeatedSchemaHeaderRow(rows, expectedHeaders) {
   return -1;
 }
 
-
-function detectClearVectorGrid(vectorLines, pageWidth, pageHeight) {
-  const lines = Array.isArray(vectorLines) ? vectorLines : [];
-  if (!lines.length) return null;
-  const longH = lines.filter(l=>l.horizontal && l.length >= Math.max(40, pageWidth*0.25));
-  const longV = lines.filter(l=>l.vertical && l.length >= Math.max(25, pageHeight*0.08));
-  if (longH.length < 2 || longV.length < 2) return null;
-  const cluster = (vals,tol) => { const out=[]; for(const v of vals.sort((a,b)=>a-b)){ const last=out[out.length-1]; if(!last||Math.abs(v-last.center)>tol) out.push({center:v,count:1}); else {last.center=(last.center*last.count+v)/(last.count+1);last.count++;}} return out; };
-  const xs=cluster(longV.map(l=>(l.x1+l.x2)/2),3).filter(c=>c.count>=1);
-  const ys=cluster(longH.map(l=>(l.y1+l.y2)/2),3).filter(c=>c.count>=1);
-  if(xs.length<3 || ys.length<2) return null;
-  return { vertical:xs.map(c=>c.center), horizontal:ys.map(c=>c.center), confidence:Math.min(1,(xs.length/8)*0.6+(ys.length/12)*0.4) };
-}
-
-function applyVectorGridToBoundaries(boundaries, vectorGrid) {
-  if(!vectorGrid || !boundaries?.length || vectorGrid.vertical.length<2) return boundaries;
-  const xs=[...vectorGrid.vertical].sort((a,b)=>a-b);
-  const out=boundaries.map(b=>{
-    const center=Number(b.headerCenterX ?? b.center);
-    if(!Number.isFinite(center)) return b;
-    let left=null, right=null;
-    for(let i=0;i<xs.length-1;i++){
-      if(xs[i] <= center && center <= xs[i+1]) { left=xs[i]; right=xs[i+1]; break; }
-    }
-    if(left===null){
-      const nearest=xs.reduce((best,x)=>Math.abs(x-center)<Math.abs(best-center)?x:best,xs[0]);
-      const idx=xs.indexOf(nearest);
-      left=idx>0?xs[idx-1]:nearest; right=idx<xs.length-1?xs[idx+1]:nearest;
-    }
-    if(!Number.isFinite(left)||!Number.isFinite(right)||right<=left) return b;
-    return {...b, headerX:left, headerEnd:right, headerCenterX:(left+right)/2, center:(left+right)/2, vectorBoundary:true};
-  });
-  // A vector line can theoretically bracket two header centres when a PDF has
-  // decorative lines. Reject that grid rather than creating overlapping cells.
-  for(let i=1;i<out.length;i++){
-    if(!(out[i].headerX >= out[i-1].headerEnd)) return boundaries;
-  }
-  return out;
-}
-
 function buildTableFromPage(pageItems, schemaHint = null) {
   const pageModel = (pageItems && !Array.isArray(pageItems) && Array.isArray(pageItems.items))
     ? build2DPageModel(pageItems)
     : build2DPageModel({ items: Array.isArray(pageItems) ? pageItems : [] });
-  const vectorLines = Array.isArray(pageItems?.vectorLines) ? pageItems.vectorLines : [];
   let rows = pageModel.rows;
 
   let headerIdx = -1;
-  let headerEndIdx = -1;
   let boundaries = [];
   let headers = [];
 
@@ -1509,53 +1434,35 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     headers = [...schemaHint.headers];
     boundaries = schemaHint.boundaries.map(b => ({ ...b }));
 
-    // Continuation pages keep the established body reconstruction exactly as
-    // before. A repeated header is optional and never changes the schema.
+    // A continuation page may have no repeated header at all. Do NOT run the
+    // generic header detector here because a normal transaction row can look
+    // like a header (date + amount + description) and would then be discarded.
     headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
-    headerEndIdx = headerIdx;
   } else {
-    // NEW: the header is allowed to occupy multiple Y rows. The body is NOT
-    // reconstructed from this geometry; only the header cells establish the
-    // column centres/corridors used by the existing v21 body reconstruction.
-    const headerRegion = detectHeaderRegion(rows, vectorLines);
-    headerIdx = headerRegion.index;
-    headerEndIdx = headerRegion.endIndex;
-    if (headerIdx === -1 || headerEndIdx < headerIdx) return null;
+    headerIdx = detectHeaderRow(rows);
+    if (headerIdx === -1) return null;
 
-    const headerCells = headerRegion.cells;
+    // A header may be physically stacked across multiple PDF Y coordinates.
+    // Collapse those visual header rows into one logical row before deriving
+    // column boundaries. This does not alter transaction rows.
+    const mergedHeader = mergeHeaderContinuationRows(rows, headerIdx);
+    rows = mergedHeader.rows;
+    headerIdx = mergedHeader.headerIdx;
+
+    const headerCells = groupHeaderCells(rows[headerIdx]);
     if (headerCells.length < 3) return null;
 
     headers = headerCells.map(c => c.text);
+    boundaries = buildColumnBoundaries(rows[headerIdx]);
 
-    // IMPORTANT: vector lines are used ONLY to help define the header column
-    // widths. They are never applied to transaction/body rows.
-    boundaries = buildColumnBoundaries({
-      items: headerCells.map(c => ({
-        text: c.text,
-        x: c.x,
-        width: c.end-c.x,
-        right: c.end,
-        centerX: c.center,
-        centerY: rows[headerIdx]?.centerY || 0
-      }))
-    });
-
-    const vectorGrid = detectClearVectorGrid(vectorLines, pageModel.width, pageModel.height);
-    if (vectorGrid && vectorGrid.vertical.length >= boundaries.length + 1) {
-      const headerBoundaries = applyVectorGridToBoundaries(boundaries, vectorGrid);
-      if (headerBoundaries.length === boundaries.length) boundaries = headerBoundaries;
-    }
-
+    // Never manufacture blank "Column N" names here. If the PDF did not
+    // expose a real header, that position is not considered a column.
     if (headers.length !== boundaries.length) return null;
   }
 
-  // Existing v21 continuation-row handling remains authoritative for the
-  // transaction body. The only difference is that a multi-line header's full
-  // Y span is skipped, preventing a second header line such as "DATE DATE"
-  // from becoming an empty transaction row.
   rows = mergeContinuationRows(rows, boundaries, headers);
 
-  const dataStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
+  const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0;
   const tableRows = [];
   const dataRowsForLaneLearning = rows.slice(dataStart).filter(row => row.items?.length);
   const xLanes = buildGlobalXLanes(dataRowsForLaneLearning, boundaries, headers);
@@ -1563,8 +1470,10 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   for (let i = dataStart; i < rows.length; i++) {
     const cells = new Array(headers.length).fill("");
 
-    // v21 body reconstruction: repeated X alignment/column corridors determine
-    // transaction cells. Vector geometry does not participate here.
+    // Reconstruct the whole physical row at once. This lets repeated X
+    // coordinates determine where a cell starts and prevents a long
+    // Description from spilling into Credit merely because its last word is
+    // physically closer to the Credit header.
     const parts = assignRowTokensToXLanes(rows[i], xLanes, headers);
     parts.forEach(part => {
       const col = part.col;
@@ -1578,6 +1487,12 @@ function buildTableFromPage(pageItems, schemaHint = null) {
 
     if (!cleaned.some(Boolean)) continue;
     if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
+
+    // Preserve the complete physical row. Do not discard it merely because
+    // date/credit recognition failed at extraction time: the seller will
+    // explicitly choose Date / Name-Description / Credit later, and a shifted
+    // or partially formatted row must not silently disappear from the preview.
+    // Very small one-cell page furniture is still ignored.
     if (cleaned.filter(Boolean).length < 2) continue;
 
     tableRows.push(cleaned);
@@ -1591,7 +1506,7 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   };
 }
 
-function detectStatementTables() {
+async function detectStatementTables() {
   renderVerifyProgress("table", "Detecting the transactions table…");
 
   const tables = [];
