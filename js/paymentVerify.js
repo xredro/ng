@@ -806,16 +806,57 @@ function groupHeaderCells(headerRow) {
     .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
-function detectHeaderRow(rows) {
-  // FIXED: old implementation required exact normalizeHeaderLabel() matches
-  // (e.g. n === "credit") so it missed any column whose header text wasn't
-  // mapped by that function — e.g. "Lodgements (CR)", "WITHDRAWALS",
-  // "AMOUNT", "S/N".  Raising the threshold to 7 made it even stricter.
-  //
-  // New approach: plain substring / word-boundary regex on the raw header
-  // text.  This recognises the real variety of Nigerian bank statement
-  // headers without requiring an exhaustive mapping dictionary.
+function headerFragmentLooksLikeLabel(text) {
+  const raw = String(text || '').trim().toLowerCase();
+  if (!raw) return false;
+  const n = normalizeHeaderWord(raw);
+  if (!n) return false;
 
+  // Header fragments can be split across lines, so accept short/common
+  // header words individually. This deliberately does NOT require the
+  // complete logical header (e.g. "VALUE DATE") to exist on one Y row.
+  const labelWords = [
+    'trans','transaction','transactions','date','value','posting','time',
+    'timestamp','description','narration','details','detail','particular',
+    'particulars','remarks','name','customer','counterparty','sender',
+    'beneficiary','credit','credits','debit','debits','balance','amount',
+    'reference','ref','code','trace','channel','cheque','chq','no','number',
+    'total','count','opening','closing','value', 'dr','cr'
+  ];
+  if (labelWords.includes(n)) return true;
+
+  // Multi-word labels and common variants can still be header material.
+  return VERIFY_HEADER_PATTERNS.some(pattern => {
+    const pn = normalizeHeaderWord(pattern);
+    return n === pn || n.includes(pn) || pn.includes(n);
+  });
+}
+
+function rowLooksLikeHeaderFragment(row) {
+  const items = (row?.items || []).filter(it => String(it.text || '').trim());
+  if (!items.length) return false;
+
+  const combined = items.map(it => String(it.text || '').trim()).join(' ');
+
+  // A real transaction row must never be swallowed into the header region.
+  // Header continuation lines contain labels, not actual date/amount values.
+  if (looksLikeDate(combined)) return false;
+  if (extractAmount(combined) !== null) return false;
+
+  const labelCount = items.filter(it => headerFragmentLooksLikeLabel(it.text)).length;
+  return labelCount >= Math.max(1, Math.ceil(items.length * 0.5));
+}
+
+function headerRowGap(rows, a, b) {
+  if (!rows[a] || !rows[b]) return Infinity;
+  return Math.abs(Number(rows[a].centerY) - Number(rows[b].centerY));
+}
+
+function detectHeaderRow(rows) {
+  // The body extractor works best when the transaction rows remain untouched.
+  // Therefore this function identifies the PRIMARY/top header row only. A
+  // separate header-region pass below absorbs stacked header fragments on
+  // neighbouring Y coordinates before column boundaries are built.
   let bestIndex = -1;
   let bestScore = 0;
 
@@ -823,32 +864,29 @@ function detectHeaderRow(rows) {
     const cells = groupHeaderCells(row);
     if (cells.length < 2) return;
 
-    const texts = cells.map(c => String(c.text || "").toLowerCase());
-
+    const texts = cells.map(c => String(c.text || '').toLowerCase());
     const hasDate = texts.some(t =>
       /\bdate\b|\bvalue\s*date\b|\bposting\s*date\b|\btran(?:saction)?\s*date\b|\btime\b|\btimestamp\b/.test(t)
     );
-
     const hasAmount = texts.some(t =>
       /\bcredit\b|\blodge(?:ment)?s?\b|\binflow\b|\bdeposit\b|\breceived?\b|\bamount\b|\bdebit\b|\bwithdraw(?:al)?s?\b|\boutflow\b|\bbalance\b/.test(t)
     );
-
     const hasDescription = texts.some(t =>
-      /\bdescription\b|\bnarration\b|\bdetails?\b|\bparticular\b|\bname\b|\bremarks?\b|\breference\b|\bref\b|\btransaction\b/.test(t)
+      /\bdescription\b|\bnarration\b|\bdetails?\b|\bparticulars?\b|\bname\b|\bremarks?\b|\breference\b|\bref\b|\btransaction\b/.test(t)
     );
 
     let score = 0;
-    if (hasDate)        score += 3;
-    if (hasAmount)      score += 4;
+    if (hasDate) score += 3;
+    if (hasAmount) score += 4;
     if (hasDescription) score += 2;
     if (cells.length >= 3) score += 1;
     if (cells.length >= 5) score += 1;
 
-    // At minimum we need a date column AND an amount column (score 3+4=7),
-    // or a date + description (3+2=5) with multiple cells as extra evidence.
-    // Lowered from 7 to 5 so that compact headers (each item is one cell,
-    // so cells.length may be lower after the conservative groupHeaderCells)
-    // are still detected correctly.
+    // Also recognize a strongly labelled row even when its companion header
+    // words are on the next Y coordinate.
+    const fragmentCount = cells.filter(c => headerFragmentLooksLikeLabel(c.text)).length;
+    if (fragmentCount >= 2) score += 2;
+
     if (score >= 5 && score > bestScore) {
       bestScore = score;
       bestIndex = index;
@@ -856,6 +894,109 @@ function detectHeaderRow(rows) {
   });
 
   return bestIndex;
+}
+
+function collectLogicalHeader(rows, headerIdx) {
+  if (headerIdx < 0 || !rows?.[headerIdx]) return null;
+
+  const primaryRow = rows[headerIdx];
+  const primaryCells = groupHeaderCells(primaryRow);
+  if (primaryCells.length < 2) return null;
+
+  // Start with the strongest header row and extend only through immediately
+  // adjacent Y rows that contain header labels. This keeps the transaction
+  // body exactly as the v21 extractor sees it.
+  const regionRows = [primaryRow];
+  const maxHeaderRows = 3;
+  const medianH = medianNumber(primaryRow.items.map(it => Number(it.height) || 0).filter(Boolean)) || 10;
+  const maxGap = Math.max(10, Math.min(28, medianH * 2.8));
+
+  // Header continuations normally sit BELOW the main header. We also inspect
+  // one row above because some PDFs position a small top label above the main
+  // header. Only rows that pass rowLooksLikeHeaderFragment are accepted.
+  for (let step = 1; step <= maxHeaderRows; step++) {
+    const idx = headerIdx + step;
+    if (!rows[idx] || headerRowGap(rows, headerIdx, idx) > maxGap) break;
+    if (!rowLooksLikeHeaderFragment(rows[idx])) break;
+    regionRows.push(rows[idx]);
+  }
+  for (let step = 1; step <= 1; step++) {
+    const idx = headerIdx - step;
+    if (!rows[idx] || headerRowGap(rows, headerIdx, idx) > maxGap) break;
+    if (!rowLooksLikeHeaderFragment(rows[idx])) break;
+    regionRows.unshift(rows[idx]);
+  }
+
+  // The primary row establishes the number/order of columns. Every additional
+  // fragment is assigned to the nearest primary header by X, not by Y. This
+  // is the critical part for centered two-line headers such as:
+  //
+  //   TRANS DATE   VALUE DATE   NARRATION   CREDIT
+  //   DATE         DATE
+  //
+  // The lower DATE fragments can therefore never fall through into the body.
+  const logical = primaryCells.map(c => ({
+    x: c.x,
+    end: c.end,
+    center: c.center,
+    textParts: [c.text]
+  }));
+
+  const primaryItemIds = new Set((primaryRow.items || []).map(it => it.id));
+  const primaryCenters = logical.map(c => c.center);
+
+  const sortedCenters = [...primaryCenters].sort((a,b)=>a-b);
+  const nearestIndex = x => {
+    let best = -1;
+    let distance = Infinity;
+    for (let i = 0; i < primaryCenters.length; i++) {
+      const d = Math.abs(x - primaryCenters[i]);
+      if (d < distance) { distance = d; best = i; }
+    }
+    return { index: best, distance };
+  };
+
+  for (const row of regionRows) {
+    if (row === primaryRow) continue;
+    const fragments = groupHeaderCells(row);
+    for (const fragment of fragments) {
+      const hit = nearestIndex(fragment.center);
+      if (hit.index < 0) continue;
+
+      // A continuation must remain within the logical column's natural
+      // corridor. Use neighbouring primary centres to define that corridor,
+      // with a modest minimum so narrow centred labels still work.
+      const left = hit.index === 0
+        ? primaryCenters[0] - Math.max(28, (primaryCenters[1] - primaryCenters[0]) * 0.5)
+        : (primaryCenters[hit.index - 1] + primaryCenters[hit.index]) / 2;
+      const right = hit.index === primaryCenters.length - 1
+        ? primaryCenters[hit.index] + Math.max(28, (primaryCenters[hit.index] - primaryCenters[hit.index - 1]) * 0.5)
+        : (primaryCenters[hit.index] + primaryCenters[hit.index + 1]) / 2;
+
+      if (fragment.center >= left - 12 && fragment.center <= right + 12) {
+        logical[hit.index].textParts.push(fragment.text);
+        logical[hit.index].x = Math.min(logical[hit.index].x, fragment.x);
+        logical[hit.index].end = Math.max(logical[hit.index].end, fragment.end);
+      }
+    }
+  }
+
+  const cells = logical.map(c => {
+    const parts = [...new Set(c.textParts.map(t => String(t || '').trim()).filter(Boolean))];
+    return {
+      x: c.x,
+      end: c.end,
+      center: c.center,
+      text: parts.join(' ').replace(/\s+/g, ' ').trim()
+    };
+  });
+
+  return {
+    startIndex: Math.min(...regionRows.map(r => r.index)),
+    endIndex: Math.max(...regionRows.map(r => r.index)),
+    rows: regionRows,
+    cells
+  };
 }
 
 function buildColumnBoundaries(headerRow) {
@@ -1383,9 +1524,20 @@ function findRepeatedSchemaHeaderRow(rows, expectedHeaders) {
   if (!Array.isArray(rows) || !Array.isArray(expectedHeaders) || !expectedHeaders.length) return -1;
 
   for (let i = 0; i < rows.length; i++) {
-    const cells = groupHeaderCells(rows[i]);
-    if (cells.length !== expectedHeaders.length) continue;
-    if (headersSemanticallyCompatible(cells.map(c => c.text), expectedHeaders)) return i;
+    const direct = groupHeaderCells(rows[i]);
+    if (direct.length === expectedHeaders.length &&
+        headersSemanticallyCompatible(direct.map(c => c.text), expectedHeaders)) {
+      return i;
+    }
+
+    // Continuation-page headers may be stacked over multiple Y coordinates.
+    // Reconstruct the logical header before deciding that the page has no
+    // repeated schema header.
+    const logical = collectLogicalHeader(rows, i);
+    if (logical?.cells?.length === expectedHeaders.length &&
+        headersSemanticallyCompatible(logical.cells.map(c => c.text), expectedHeaders)) {
+      return i;
+    }
   }
   return -1;
 }
@@ -1397,6 +1549,7 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   let rows = pageModel.rows;
 
   let headerIdx = -1;
+  let headerEndIdx = -1;
   let boundaries = [];
   let headers = [];
 
@@ -1408,15 +1561,26 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     // generic header detector here because a normal transaction row can look
     // like a header (date + amount + description) and would then be discarded.
     headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
+    headerEndIdx = headerIdx >= 0 ? headerIdx : -1;
+
+    // If the repeated header itself is stacked over multiple Y rows, consume
+    // that header region before the body starts.
+    if (headerIdx >= 0) {
+      const logical = collectLogicalHeader(rows, headerIdx);
+      if (logical?.cells?.length === headers.length && headersSemanticallyCompatible(logical.cells.map(c => c.text), headers)) {
+        headerEndIdx = logical.endIndex;
+      }
+    }
   } else {
     headerIdx = detectHeaderRow(rows);
     if (headerIdx === -1) return null;
 
-    const headerCells = groupHeaderCells(rows[headerIdx]);
-    if (headerCells.length < 3) return null;
+    const logicalHeader = collectLogicalHeader(rows, headerIdx);
+    if (!logicalHeader?.cells?.length || logicalHeader.cells.length < 3) return null;
 
-    headers = headerCells.map(c => c.text);
-    boundaries = buildColumnBoundaries(rows[headerIdx]);
+    headers = logicalHeader.cells.map(c => c.text);
+    boundaries = buildColumnBoundaries({ items: logicalHeader.cells.map(c => ({ ...c, width: Math.max(0, Number(c.end) - Number(c.x)) })) });
+    headerEndIdx = logicalHeader.endIndex;
 
     // Never manufacture blank "Column N" names here. If the PDF did not
     // expose a real header, that position is not considered a column.
@@ -1425,7 +1589,10 @@ function buildTableFromPage(pageItems, schemaHint = null) {
 
   rows = mergeContinuationRows(rows, boundaries, headers);
 
-  const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0;
+  // IMPORTANT: skip the entire logical header region, not just its first Y
+  // row. This prevents lower-line fragments such as the second "DATE" in
+  // "TRANS DATE / DATE" from becoming an empty transaction row.
+  const dataStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
   const tableRows = [];
   const dataRowsForLaneLearning = rows.slice(dataStart).filter(row => row.items?.length);
   const xLanes = buildGlobalXLanes(dataRowsForLaneLearning, boundaries, headers);
