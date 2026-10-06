@@ -1279,8 +1279,6 @@ function buildGlobalXLanes(rows, boundaries, headers) {
             const midpoint=(lo+hi)/2;
             const refined=midpoint*0.35 + boundaryX*0.65;
             left=refined;
-            const previous=lanes[i-1];
-            if(previous) previous.laneRight=refined;
           }
         }
       }
