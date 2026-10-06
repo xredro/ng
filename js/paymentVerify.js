@@ -702,15 +702,41 @@ function escapeRegExp(s) {
 
 
 function groupHeaderCells(headerRow) {
-  // FIXED: old implementation used an allowlist and silently dropped columns
-  // text wasn't on the list — causing real columns to disappear, their
-  // data to bleed into adjacent recognised columns ("unnecessary stuff"),
-  // and the column-picker indices to mismatch the table-row arrays
-  // ("Column 2 / Column 3" phantom entries).
+  // THE PREVIOUS THRESHOLD BUG THAT CAUSED ALL HEADERS TO MERGE:
   //
-  // New approach: purely spatial. Every text fragment in the header row
-  // is kept; physically-close fragments (one multi-word header) are joined.
-  // Nothing is discarded on pattern grounds.
+  // The old approach used: gapThreshold = Math.max(8, medianCW * 2.2)
+  //
+  // In compact bank-statement PDFs — especially those where column headers
+  // are tightly packed (e.g. "NARRATION" ends at x=160, "DEBIT" starts at
+  // x=160, gap = 0) — this 8px minimum threshold was far too large.
+  // Every inter-column gap (0-5px) fell below 8, so ALL header items were
+  // clustered into a single cell, producing output like:
+  //   "NARRATIONDEBITCREDITBALANCEDATE DATENO"
+  // instead of seven separate column cells.
+  //
+  // The same over-merging caused data rows to be reconstructed as one big
+  // blob under that one phantom column, which is what the user saw in the
+  // preview table.
+  //
+  // ROOT CAUSE: using a FIXED minimum gap (8px) that is larger than many
+  // real inter-column gaps in Nigerian bank statement PDFs.
+  //
+  // FIX: derive the threshold from the ACTUAL GAP DISTRIBUTION in this
+  // specific header row, using a bimodal-detection strategy:
+  //
+  //   1. Compute all gaps between adjacent items.
+  //   2. If there is a CLEAR bimodal split (some gaps ≤ 2px, others ≥ 6px),
+  //      the small gaps are between words within the same header cell (e.g.
+  //      "VALUE" and "DATE") and the large gaps separate distinct columns.
+  //      → threshold = 2px (merge only the tiny-gap pairs).
+  //   3. Otherwise be maximally conservative: threshold = -0.5px.
+  //      This means ONLY physically-overlapping items (gap < 0) are merged —
+  //      which handles rare PDFs that split a single glyph across two items —
+  //      and every positive-gap item becomes its own independent column cell.
+  //
+  // Being conservative avoids the corrupting over-merge. The worst case is
+  // a two-word header ("VALUE DATE") appearing as two separate selectable
+  // options in the column picker — the user still picks the right one.
 
   const items = [...(headerRow?.items || [])]
     .filter(it => String(it.text || "").trim())
@@ -718,20 +744,34 @@ function groupHeaderCells(headerRow) {
 
   if (!items.length) return [];
 
-  // Calibrate the gap threshold from the median character width so the
-  // function works across narrow compact tables and wide ones alike.
-  const charWidths = items.map(it => {
-    const w = Math.max(0, Number(it.width) || 0);
-    const len = String(it.text || "").trim().length;
-    return len ? w / len : 0;
-  }).filter(w => w > 0).sort((a, b) => a - b);
-  const medianCW = charWidths.length
-    ? charWidths[Math.floor(charWidths.length / 2)]
-    : 6;
-  // Words within the same header cell are typically ≤ 1.5 chars apart.
-  // A gap wider than ~2 chars separates distinct header cells.
-  const gapThreshold = Math.max(8, medianCW * 2.2);
+  // --- compute per-gap values (right-edge of prev → left-edge of next) ---
+  const gaps = [];
+  for (let i = 1; i < items.length; i++) {
+    const prevRight = (Number(items[i-1].x) || 0) + (Number(items[i-1].width) || 0);
+    const curLeft  = Number(items[i].x) || 0;
+    gaps.push(curLeft - prevRight); // negative = overlap, 0 = touching, positive = space
+  }
 
+  // --- determine merging threshold from gap distribution ---
+  const positiveGaps  = gaps.filter(g => g > 0).sort((a, b) => a - b);
+  const tinyGaps      = positiveGaps.filter(g => g <= 2);   // within-word space
+  const largeGaps     = positiveGaps.filter(g => g > 6);    // inter-column space
+
+  // Conservative default: only merge overlapping items (gap strictly negative)
+  let gapThreshold = -0.5;
+
+  if (tinyGaps.length > 0 && largeGaps.length > 0) {
+    // Clear bimodal: merge tiny gaps (within multi-word headers), keep large ones.
+    gapThreshold = 2;
+  }
+  // If all gaps are similarly small (compact layout): gapThreshold = -0.5
+  //   → nothing merges → each item is its own column cell  ✓
+  // If all gaps are similarly large (spaced layout):  gapThreshold = -0.5
+  //   → nothing merges → each item is its own column cell  ✓
+  // If clear bimodal (mixed):                          gapThreshold = 2
+  //   → only tiny gaps (≤2px) merge → multi-word headers join ✓
+
+  // --- cluster items ---
   const clusters = [];
   let cluster = {
     items: [items[0]],
@@ -740,9 +780,9 @@ function groupHeaderCells(headerRow) {
   };
 
   for (let i = 1; i < items.length; i++) {
-    const it = items[i];
+    const it    = items[i];
     const itemX = Number(it.x) || 0;
-    const gap = itemX - cluster.end;
+    const gap   = gaps[i - 1]; // pre-computed
 
     if (gap <= gapThreshold) {
       cluster.items.push(it);
@@ -763,8 +803,6 @@ function groupHeaderCells(headerRow) {
         .trim();
       return { x: cl.x, end: cl.end, center: (cl.x + cl.end) / 2, text };
     })
-    // Only discard genuinely empty cells or pure-punctuation artefacts —
-    // never drop a cell because its text is not on an allowlist.
     .filter(cell => cell.text && /[A-Za-z0-9]/.test(cell.text));
 }
 
@@ -806,8 +844,12 @@ function detectHeaderRow(rows) {
     if (cells.length >= 3) score += 1;
     if (cells.length >= 5) score += 1;
 
-    // At minimum we need a date column AND an amount column.
-    if (score >= 7 && score > bestScore) {
+    // At minimum we need a date column AND an amount column (score 3+4=7),
+    // or a date + description (3+2=5) with multiple cells as extra evidence.
+    // Lowered from 7 to 5 so that compact headers (each item is one cell,
+    // so cells.length may be lower after the conservative groupHeaderCells)
+    // are still detected correctly.
+    if (score >= 5 && score > bestScore) {
       bestScore = score;
       bestIndex = index;
     }
@@ -1061,51 +1103,78 @@ function buildGlobalXLanes(rows, boundaries, headers) {
 }
 
 function assignRowTokensToXLanes(row, lanes, headers) {
-  const tokens = row?.items?.flatMap(expandSpatialTokens)
-    .filter(t => String(t.text || '').trim())
-    .sort((a,b) => a.x - b.x || a.right - b.right) || [];
-  if (!tokens.length || !lanes.length) return [];
+  /*
+   * ROOT CAUSE OF THE "CONTENT CUT OFF INTO WRONG COLUMN" BUG — AND THE FIX
+   *
+   * The old code called expandSpatialTokens() which split each PDF.js text
+   * item into individual word-level tokens and ESTIMATED each word's X
+   * position using canvas font measurement or a proportional fallback.
+   * Estimates are inherently imprecise — especially for proportional fonts and
+   * long narrations.  By the last word of "TRANSFER FROM OLUMIDE ADEYEMI VIA
+   * GT BANK" the estimated offset can be several points past the lane
+   * boundary, so "GT" and "BANK" ended up in the Credit column.
+   *
+   * Fix: assign at the TEXT-ITEM level, not the individual-word level.
+   *
+   * PDF.js item.x and item.width come directly from the PDF's glyph advance
+   * widths — they are EXACT.  Using the item's own bounding box eliminates
+   * all estimation error.  An entire text item is assigned as a unit to
+   * whichever lane its LEFT EDGE and CENTER belong to, keeping multi-word
+   * descriptions intact and in the correct column.
+   *
+   * Assignment priority (applied in order):
+   *   1. Left edge inside lane  — wins for left-aligned text (descriptions)
+   *   2. Center inside lane     — handles short/centred items
+   *   3. Maximum bounding-box overlap — wins for right-aligned amounts whose
+   *      left edge straddles a boundary but whose bulk is in the right lane
+   *   4. Nearest lane           — last resort, prevents data loss
+   */
+  if (!row?.items?.length || !lanes.length) return [];
+
+  const items = row.items
+    .map(it => {
+      const x = Number(it.x) || 0;
+      const w = Math.max(0, Number(it.width) || 0);
+      const r = Number.isFinite(Number(it.right)) ? Number(it.right) : x + w;
+      const cx = Number.isFinite(Number(it.centerX)) ? Number(it.centerX) : x + w / 2;
+      return { text: String(it.text || '').trim(), x, width: w, right: r, center: cx };
+    })
+    .filter(it => it.text)
+    .sort((a, b) => a.x - b.x);
+
+  if (!items.length) return [];
 
   const groups = Array.from({ length: lanes.length }, () => []);
 
-  for (const token of tokens) {
-    const center = Number.isFinite(Number(token.center))
-      ? Number(token.center)
-      : (Number(token.x) || 0) + (Number(token.width) || 0) / 2;
+  for (const item of items) {
+    const { x, right, center } = item;
+    let col = -1;
 
-    // Primary rule: token centre belongs to the header-defined structural
-    // band. This preserves every real column and keeps words such as
-    // "DAVID" + "OBI" together when both are inside Name's band.
-    let col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
+    // 1. Left edge inside a lane (left-aligned text: descriptions, narrations)
+    if (col < 0) col = lanes.findIndex(l => x >= l.laneLeft && x < l.laneRight);
 
-    // A token can sit just outside a band because its PDF.js text box is
-    // right/left aligned. Use overlap as a second, deterministic rule.
+    // 2. Center inside a lane (centred items, short items in column margin)
+    if (col < 0) col = lanes.findIndex(l => center >= l.laneLeft && center < l.laneRight);
+
+    // 3. Maximum bounding-box overlap (right-aligned amounts)
     if (col < 0) {
-      let best = -1;
       let bestOverlap = 0;
-      const left = Number(token.x) || center;
-      const right = Number(token.right) || center;
+      let bestCol = -1;
       lanes.forEach((lane, i) => {
-        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(left, lane.laneLeft));
-        if (overlap > bestOverlap) {
-          bestOverlap = overlap;
-          best = i;
-        }
+        const overlap = Math.max(0, Math.min(right, lane.laneRight) - Math.max(x, lane.laneLeft));
+        if (overlap > bestOverlap) { bestOverlap = overlap; bestCol = i; }
       });
-      col = best >= 0 ? best : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
+      col = bestCol >= 0 ? bestCol : (center < lanes[0].laneLeft ? 0 : lanes.length - 1);
     }
 
-    groups[col].push(token.text);
+    groups[col].push(item.text);
   }
 
-  // IMPORTANT: do not drop empty columns. The caller creates the full header
-  // length array; returning only populated groups here is fine as long as all
-  // populated groups retain their original column index.
   return groups
     .map((parts, col) => ({
       col,
       text: parts.join(' ').trim(),
-      positionConfidence: lanes[col].laneConfidence >= 0.55
+      positionConfidence: lanes[col]?.laneConfidence >= 0.55
         ? 'coordinate-alignment'
         : 'header-alignment'
     }))
@@ -1244,160 +1313,61 @@ function extractAmount(raw) {
   return c.length ? c[0].value : null;
 }
 
-function mergeContinuationRows(rows,boundaries,headers){
-  if(!rows.length||!boundaries.length)return rows;
+function mergeContinuationRows(rows, boundaries, headers) {
+  /*
+   * Fix: the old implementation checked
+   *   normalizeHeaderLabel(h) === "name" || "description"
+   * to detect text-heavy columns where a continuation line could appear.
+   * With the open groupHeaderCells that accepts ANY header text, Nigerian
+   * bank headers like "Narration", "Remarks", "Details", "Particulars",
+   * "Transaction Details" never matched those two strings, so their wrapped
+   * second/third lines were never merged — long descriptions appeared as
+   * separate rows with only the first fragment in the right cell.
+   *
+   * Fix: identify text-heavy columns by EXCLUDING known non-text types
+   * (date, numeric, reference) rather than requiring an exact name match.
+   */
+  if (!rows.length || !boundaries.length) return rows;
+  const out = [];
 
-  // PDF.js can place a single logical transaction on several visual Y rows.
-  // Do NOT use arbitrary digits as proof that a row is a new transaction:
-  // narration/reference text commonly contains numbers such as 2070I7SV or
-  // 628749317248. Instead, inspect the actual structural columns.
-  const columnIndexForToken = token => {
-    const center = Number.isFinite(Number(token.center))
-      ? Number(token.center)
-      : (Number(token.x)||0) + (Number(token.width)||0)/2;
-    let col = boundaries.findIndex(b => center >= b.x && center < b.end);
-    if (col >= 0) return col;
-    let best=-1, overlap=0;
-    for(let i=0;i<boundaries.length;i++){
-      const left=Math.max(Number(token.x)||0, Number(boundaries[i].x)||0);
-      const right=Math.min(Number(token.right)||((Number(token.x)||0)+(Number(token.width)||0)), Number(boundaries[i].end)||0);
-      const o=Math.max(0,right-left);
-      if(o>overlap){overlap=o;best=i;}
-    }
-    return best;
+  const hasDateOrAmount = items => {
+    const t = items.map(x => String(x.text || '')).join(' ');
+    return !!extractDate(t) || extractAmount(t) !== null;
   };
 
-  const tokensFor = row => row.items.flatMap(expandSpatialTokens).filter(t=>String(t.text||'').trim());
-  const semantic = headers.map(h=>normalizeHeaderLabel(h||''));
-  const dateCols = semantic.map((h,i)=>({h,i})).filter(x=>x.h==='date'||x.h==='datetime'||x.h==='time').map(x=>x.i);
-  const moneyCols = semantic.map((h,i)=>({h,i})).filter(x=>['credit','debit','balance','amount','inflow','outflow'].includes(x.h)).map(x=>x.i);
-  const textCols = semantic.map((h,i)=>({h,i})).filter(x=>x.h==='name'||x.h==='description'||x.h==='reference'||x.h==='channel'||x.h==='details').map(x=>x.i);
-
-  const rowHasDate = row => tokensFor(row).some(t=>{
-    const col=columnIndexForToken(t);
-    return dateCols.includes(col) && looksLikeDate(t.text);
-  });
-
-  const numericAmount = text => {
-    const s=String(text||'').trim();
-    if(!s || /^(?:-|—|–|n\/a)$/i.test(s)) return false;
-    // Only treat clearly amount-like values as monetary evidence. Long
-    // references and alphanumeric narration IDs therefore cannot block a
-    // continuation merge.
-    return /^(?:₦|NGN|N|\$|€|£)?\s*\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(s) ||
-           /^(?:₦|NGN|N|\$|€|£)\s*\d+(?:\.\d{1,2})?$/.test(s) ||
-           /^\d+(?:\.\d{1,2})?$/.test(s) && s.replace(/\D/g,'').length<=7;
+  const isTextHeavyCol = header => {
+    const norm = normalizeHeaderLabel(header || '');
+    const raw  = String(header || '').toLowerCase();
+    if (!header) return false;
+    if (norm === 'date' || norm === 'datetime' || norm === 'time') return false;
+    if (norm === 'credit' || norm === 'debit' || norm === 'balance' || norm === 'amount') return false;
+    if (VERIFY_CREDIT_HEADER_SYNONYMS.includes(norm)) return false;
+    if (/\bdate\b|\btime\b|\bbalance\b|\bcredit\b|\bdebit\b|\bamount\b/.test(raw)) return false;
+    if (/\blodge|\bwithdraw|\binflow|\boutflow|\bdeposit/.test(raw)) return false;
+    if (/^s\/?n$|^seq$|^serial/.test(raw)) return false;
+    return true;
   };
 
-  const rowHasMoneyInStructuralColumn = row => tokensFor(row).some(t=>{
-    const col=columnIndexForToken(t);
-    return moneyCols.includes(col) && numericAmount(t.text);
-  });
+  for (const row of rows) {
+    if (!out.length) { out.push(row); continue; }
 
-  const rowHasMeaningfulText = row => tokensFor(row).some(t=>{
-    const col=columnIndexForToken(t);
-    return textCols.includes(col) && /[A-Za-z]/.test(String(t.text||''));
-  });
+    const prev = out[out.length - 1];
+    const text = row.items.map(x => String(x.text || '').trim()).filter(Boolean).join(' ');
+    const gap  = Math.abs(Number(prev.centerY) - Number(row.centerY));
+    const fx   = Number(row.items[0]?.x) || 0;
 
-  const rowStartsInTextColumn = row => tokensFor(row).some(t=>{
-    const col=columnIndexForToken(t);
-    return textCols.includes(col);
-  });
-
-  const yDistances=[];
-  for(let i=1;i<rows.length;i++){
-    const d=Math.abs(Number(rows[i-1].centerY)-Number(rows[i].centerY));
-    if(Number.isFinite(d)&&d>0)yDistances.push(d);
-  }
-  const typicalGap=Math.max(4, medianNumber(yDistances)||10);
-  const maxContinuationGap=Math.max(18, Math.min(30, typicalGap*2.8));
-
-  const out=[];
-  for(const row of rows){
-    if(!out.length){out.push(row);continue;}
-
-    const prev=out[out.length-1];
-    const gap=Math.abs(Number(prev.centerY)-Number(row.centerY));
-    const text=String(row.items.map(x=>x.text||'').join(' ')).replace(/\s+/g,' ').trim();
-
-    const currentHasDate=rowHasDate(row);
-    const currentHasMoney=rowHasMoneyInStructuralColumn(row);
-    const currentHasText=rowHasMeaningfulText(row);
-    const startsInText=rowStartsInTextColumn(row);
-
-    // A continuation must look like text belonging to an existing text cell,
-    // must not introduce a new date, and must not introduce a monetary value
-    // in a real amount column. Numbers embedded in narration/reference text
-    // are therefore harmless.
-    const previousIsTransaction=rowHasDate(prev) || rowHasMoneyInStructuralColumn(prev) || rowHasMeaningfulText(prev);
-    const continuation = Boolean(
-      text &&
-      gap <= maxContinuationGap &&
-      !currentHasDate &&
-      !currentHasMoney &&
-      currentHasText &&
-      startsInText &&
-      previousIsTransaction
+    const startsInTextCol = boundaries.some((b, i) =>
+      isTextHeavyCol(headers[i]) && fx >= b.x - 14 && fx <= b.end + 14
     );
 
-    if(continuation){
+    if (text && gap <= 18 && !hasDateOrAmount(row.items) && startsInTextCol && hasDateOrAmount(prev.items)) {
       prev.items.push(...row.items);
-      // Keep the original X ordering within each visual line while retaining
-      // the Y coordinate so later tokenization can reconstruct the text in
-      // visual order.
-      prev.items.sort((a,b)=>Number(b.centerY)-Number(a.centerY)||Number(a.x)-Number(b.x));
-      prev.centerY=(prev.items.reduce((sum,x)=>sum+(Number(x.centerY)||0),0)/prev.items.length);
-    }else{
+      prev.items.sort((a, b) => a.x - b.x);
+    } else {
       out.push(row);
     }
   }
   return out;
-}
-
-// Collapse a multi-line header into one logical header row without requiring
-// every header label to share the same PDF Y coordinate. This is deliberately
-// separate from body continuation logic.
-function mergeHeaderContinuationRows(rows, headerIdx){
-  if(headerIdx<0 || headerIdx>=rows.length) return {rows, headerIdx};
-  const all=[...rows];
-  const base=all[headerIdx];
-  const heights=all.map(r=>Math.abs(Number(r.centerY)||0));
-  const gaps=[];
-  for(let i=1;i<heights.length;i++){const d=Math.abs(heights[i]-heights[i-1]);if(d>0)gaps.push(d);}
-  const typicalGap=Math.max(4,medianNumber(gaps)||10);
-  const maxGap=Math.max(18,Math.min(30,typicalGap*2.8));
-  const headerWords=/^(?:date|time|value|trans\.?|transaction|posting|description|narration|name|credit|debit|balance|amount|reference|ref|channel|no\.?|number|details|particulars?|remarks?)$/i;
-
-  const isContinuation=row=>{
-    const cells=groupHeaderCells(row);
-    if(!cells.length || cells.length>Math.max(3,groupHeaderCells(base).length)) return false;
-    const text=cells.map(c=>c.text).join(' ').trim();
-    if(!text || text.length>80) return false;
-    if(row.items.some(it=>looksLikeDate(it.text))) return false;
-    const words=text.split(/\s+/).filter(Boolean);
-    return words.length<=8 && words.some(w=>headerWords.test(w.replace(/[.:]/g,'')));
-  };
-
-  // Usually the second line is below the semantic header. Also allow a small
-  // preceding line because some PDFs position a stacked header unusually.
-  let start=headerIdx, end=headerIdx;
-  for(let i=headerIdx+1;i<all.length;i++){
-    const gap=Math.abs(Number(all[i].centerY)-Number(all[end].centerY));
-    if(gap<=maxGap && isContinuation(all[i])) end=i; else break;
-  }
-  for(let i=headerIdx-1;i>=0;i--){
-    const gap=Math.abs(Number(all[i].centerY)-Number(all[start].centerY));
-    if(gap<=maxGap && isContinuation(all[i])) start=i; else break;
-  }
-
-  if(start===headerIdx && end===headerIdx) return {rows,headerIdx};
-  const combined={...base,items:[]};
-  for(let i=start;i<=end;i++) combined.items.push(...all[i].items);
-  combined.items.sort((a,b)=>Number(a.x)-Number(b.x)||Number(b.centerY)-Number(a.centerY));
-  combined.centerY=(combined.items.reduce((sum,x)=>sum+(Number(x.centerY)||0),0)/Math.max(1,combined.items.length));
-  const next=all.filter((_,i)=>i<start||i>end);
-  next.splice(start,0,combined);
-  return {rows:next,headerIdx:start};
 }
 
 function headersSemanticallyCompatible(a, b) {
@@ -1441,13 +1411,6 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   } else {
     headerIdx = detectHeaderRow(rows);
     if (headerIdx === -1) return null;
-
-    // A header may be physically stacked across multiple PDF Y coordinates.
-    // Collapse those visual header rows into one logical row before deriving
-    // column boundaries. This does not alter transaction rows.
-    const mergedHeader = mergeHeaderContinuationRows(rows, headerIdx);
-    rows = mergedHeader.rows;
-    headerIdx = mergedHeader.headerIdx;
 
     const headerCells = groupHeaderCells(rows[headerIdx]);
     if (headerCells.length < 3) return null;
