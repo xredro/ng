@@ -1498,10 +1498,10 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     ? build2DPageModel(pageItems)
     : build2DPageModel({ items: Array.isArray(pageItems) ? pageItems : [] });
   const vectorLines = Array.isArray(pageItems?.vectorLines) ? pageItems.vectorLines : [];
-  pageModel.vectorLines = vectorLines;
   let rows = pageModel.rows;
 
   let headerIdx = -1;
+  let headerEndIdx = -1;
   let boundaries = [];
   let headers = [];
 
@@ -1509,39 +1509,53 @@ function buildTableFromPage(pageItems, schemaHint = null) {
     headers = [...schemaHint.headers];
     boundaries = schemaHint.boundaries.map(b => ({ ...b }));
 
-    // A continuation page may have no repeated header at all. Do NOT run the
-    // generic header detector here because a normal transaction row can look
-    // like a header (date + amount + description) and would then be discarded.
+    // Continuation pages keep the established body reconstruction exactly as
+    // before. A repeated header is optional and never changes the schema.
     headerIdx = findRepeatedSchemaHeaderRow(rows, headers);
+    headerEndIdx = headerIdx;
   } else {
+    // NEW: the header is allowed to occupy multiple Y rows. The body is NOT
+    // reconstructed from this geometry; only the header cells establish the
+    // column centres/corridors used by the existing v21 body reconstruction.
     const headerRegion = detectHeaderRegion(rows, vectorLines);
     headerIdx = headerRegion.index;
-    if (headerIdx === -1) return null;
+    headerEndIdx = headerRegion.endIndex;
+    if (headerIdx === -1 || headerEndIdx < headerIdx) return null;
 
     const headerCells = headerRegion.cells;
     if (headerCells.length < 3) return null;
 
     headers = headerCells.map(c => c.text);
-    boundaries = buildColumnBoundaries({ items: headerCells.map(c => ({ text:c.text, x:c.x, width:c.end-c.x, right:c.end, centerX:c.center, centerY:rows[headerIdx]?.centerY || 0 })) });
 
-    // Prefer a clearly drawn vector table grid when one exists. The grid is
-    // only trusted when it has enough long, repeated horizontal/vertical lines
-    // to look like an actual table; otherwise the custom text-coordinate model
-    // remains authoritative.
+    // IMPORTANT: vector lines are used ONLY to help define the header column
+    // widths. They are never applied to transaction/body rows.
+    boundaries = buildColumnBoundaries({
+      items: headerCells.map(c => ({
+        text: c.text,
+        x: c.x,
+        width: c.end-c.x,
+        right: c.end,
+        centerX: c.center,
+        centerY: rows[headerIdx]?.centerY || 0
+      }))
+    });
+
     const vectorGrid = detectClearVectorGrid(vectorLines, pageModel.width, pageModel.height);
     if (vectorGrid && vectorGrid.vertical.length >= boundaries.length + 1) {
-      boundaries = applyVectorGridToBoundaries(boundaries, vectorGrid);
+      const headerBoundaries = applyVectorGridToBoundaries(boundaries, vectorGrid);
+      if (headerBoundaries.length === boundaries.length) boundaries = headerBoundaries;
     }
 
-    // Never manufacture blank "Column N" names here. If the PDF did not
-    // expose a real header, that position is not considered a column.
     if (headers.length !== boundaries.length) return null;
   }
 
+  // Existing v21 continuation-row handling remains authoritative for the
+  // transaction body. The only difference is that a multi-line header's full
+  // Y span is skipped, preventing a second header line such as "DATE DATE"
+  // from becoming an empty transaction row.
   rows = mergeContinuationRows(rows, boundaries, headers);
 
-  const headerEndIdx = (typeof headerRegion !== 'undefined' && headerRegion?.endIndex >= 0) ? headerRegion.endIndex : headerIdx;
-  const dataStart = headerIdx >= 0 ? headerEndIdx + 1 : 0;
+  const dataStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
   const tableRows = [];
   const dataRowsForLaneLearning = rows.slice(dataStart).filter(row => row.items?.length);
   const xLanes = buildGlobalXLanes(dataRowsForLaneLearning, boundaries, headers);
@@ -1549,10 +1563,8 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   for (let i = dataStart; i < rows.length; i++) {
     const cells = new Array(headers.length).fill("");
 
-    // Reconstruct the whole physical row at once. This lets repeated X
-    // coordinates determine where a cell starts and prevents a long
-    // Description from spilling into Credit merely because its last word is
-    // physically closer to the Credit header.
+    // v21 body reconstruction: repeated X alignment/column corridors determine
+    // transaction cells. Vector geometry does not participate here.
     const parts = assignRowTokensToXLanes(rows[i], xLanes, headers);
     parts.forEach(part => {
       const col = part.col;
@@ -1566,12 +1578,6 @@ function buildTableFromPage(pageItems, schemaHint = null) {
 
     if (!cleaned.some(Boolean)) continue;
     if (rowLooksLikeRepeatedHeader(cleaned, headers)) continue;
-
-    // Preserve the complete physical row. Do not discard it merely because
-    // date/credit recognition failed at extraction time: the seller will
-    // explicitly choose Date / Name-Description / Credit later, and a shifted
-    // or partially formatted row must not silently disappear from the preview.
-    // Very small one-cell page furniture is still ignored.
     if (cleaned.filter(Boolean).length < 2) continue;
 
     tableRows.push(cleaned);
@@ -1585,7 +1591,7 @@ function buildTableFromPage(pageItems, schemaHint = null) {
   };
 }
 
-async function detectStatementTables() {
+function detectStatementTables() {
   renderVerifyProgress("table", "Detecting the transactions table…");
 
   const tables = [];
