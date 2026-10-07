@@ -1896,32 +1896,36 @@ async function ocrPaymentImage(order,worker){
 
   const evidence = new Map((q.amountEvidence || []).map(e => [e.value.toFixed(2), e]));
   // OCR-only numeric repairs are not trusted unless the repaired value exists
-  // in the statement's actual Credit column.
+  // in the statement's actual Credit column. Do this from parsed numeric
+  // evidence rather than only raw currency-labelled text: Tesseract can emit
+  // a malformed currency fragment that the raw regex cannot capture cleanly.
+  // A common failure is one stray leading digit: 18,500 -> 418,500 or
+  // 25,000 -> 825,000. If the shorter value is an exact statement Credit and
+  // the longer value is not, the repair is safe enough to use as evidence.
   for (const [key, e] of [...evidence.entries()]) {
     if (e.repaired && !statementCredits.has(key)) evidence.delete(key);
   }
-  const rawCurrency = rawText.match(/(?:₦|NGN|\bN\b)\s*[0-9][0-9,\.\s]{3,24}/gi) || [];
-  rawCurrency.forEach(fragment => {
-    const digits = fragment.replace(/\D/g, '');
-    if (digits.length < 4 || digits.length > 7) return;
-    const direct = parseNumericAmountCandidate(fragment);
-    if (direct !== null && statementCredits.has(direct.toFixed(2))) return;
 
-    // Conservative OCR repair: only remove ONE leading digit when the result
-    // is an exact statement credit and the original is not.
-    if (digits.length >= 5) {
-      const repairedValue = Number(digits.slice(1));
-      if (Number.isFinite(repairedValue) && statementCredits.has(repairedValue.toFixed(2))) {
-        evidence.set(repairedValue.toFixed(2), {
-          value: repairedValue,
-          strength: 55,
-          raw: fragment,
-          reason: 'statement-confirmed-ocr-repair',
-          repaired: true
-        });
-      }
+  for (const e of [...evidence.values()]) {
+    const directKey = Number(e.value).toFixed(2);
+    if (statementCredits.has(directKey)) continue;
+
+    const digits = String(Math.trunc(Number(e.value))).replace(/\D/g, '');
+    if (digits.length < 5 || digits.length > 7) continue;
+
+    // Remove exactly one leading digit, never arbitrary digits.
+    const repairedValue = Number(digits.slice(1));
+    const repairedKey = Number.isFinite(repairedValue) ? repairedValue.toFixed(2) : '';
+    if (repairedKey && statementCredits.has(repairedKey) && repairedValue > 0) {
+      evidence.set(repairedKey, {
+        value: repairedValue,
+        strength: Math.max(55, Number(e.strength || 0)),
+        raw: e.raw,
+        reason: 'statement-confirmed-ocr-repair',
+        repaired: true
+      });
     }
-  });
+  }
 
   // If an exact statement-confirmed repair exists, discard the unconfirmed
   // one-leading-digit value that caused it. This is what prevents a receipt
@@ -2613,8 +2617,8 @@ function renderVerifyResultCard(result) {
 
       ${result.matchedImage ? `
         <div class="verify-matched-image">
-          <img src="${escapeHtml(paymentImageUrl(result.matchedImage.id))}" alt="Matched payment proof" loading="lazy">
-          <div><strong>Payment image checked</strong><small>${escapeHtml(result.row?.date || result.matchedImage.dates?.[0] || "Date not detected")} · ${result.row?.credit != null ? `₦${Number(result.row.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : (result.matchedImage.amounts?.[0] != null ? `₦${Number(result.matchedImage.amounts[0]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Amount not detected")}</small></div>
+          <img src="${escapeHtml(paymentImageUrl(result.matchedImage.id))}" alt="Payment proof checked" loading="lazy">
+          <div><strong>${result.verdict === "NOT VERIFIED" ? "Payment image checked" : "Matched payment proof"}</strong><small>${escapeHtml(result.row?.date || result.matchedImage.dates?.[0] || "Date not detected")} · ${result.row?.credit != null ? `₦${Number(result.row.credit).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : (result.matchedImage.amounts?.[0] != null ? `OCR extracted ₦${Number(result.matchedImage.amounts[0]).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "Amount not detected")}</small></div>
         </div>
         <div class="verify-check ok">&#10003; Required fields found in the same payment image</div>
       ` : ""}
