@@ -1236,9 +1236,20 @@ function parseNumericAmountCandidate(raw) {
     .trim();
   if (!c) return null;
 
-  // Spaces between thousands are valid OCR output: 18 500 -> 18500.
-  if (/^\d{1,3}(?:\s\d{3})+(?:[.,]\d{1,2})?$/.test(c)) c = c.replace(/\s+/g, ',');
-  else c = c.replace(/\s+/g, '');
+  // Spaces between thousands are valid OCR output (18 500 -> 18,500),
+  // but NEVER concatenate arbitrary numeric fragments. OCR commonly emits a
+  // stray leading digit from a nearby field, e.g. `4 18,500` or `8 25,000`.
+  // The old `else c.replace(/\s+/g, '')` silently turned those into
+  // `418,500` / `825,000`, creating a completely different payment amount.
+  // Only remove spaces when the entire value has a valid grouped-number
+  // structure; otherwise reject the candidate rather than inventing digits.
+  if (/^\d{1,3}(?:\s\d{3})+(?:[.,]\d{1,2})?$/.test(c)) {
+    c = c.replace(/\s+/g, ',');
+  } else if (/^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?$/.test(c) || /^\d+(?:[.,]\d{1,2})?$/.test(c)) {
+    // Already contiguous/grouped numeric text: preserve it.
+  } else {
+    return null;
+  }
 
   // Nigerian statement/payment amounts normally use comma thousands and a
   // decimal fraction. Handle the common European-style alternative too.
@@ -1268,7 +1279,13 @@ function amountCandidatesFromText(raw) {
     // Never treat common non-money numeric artifacts as payment amounts.
     // Dates, times, phone/account/reference IDs are especially dangerous.
     if (integerDigits.length < 2 || integerDigits.length > 7) return;
-    if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(String(rawValue).trim())) return;
+    const rawCandidate = String(rawValue).trim();
+    if (/^\d{1,2}:\d{2}(?::\d{2})?$/.test(rawCandidate)) return;
+
+    // Reject a numeric candidate whose whitespace separates a short leading
+    // fragment from an otherwise valid grouped amount. This is the common
+    // OCR shape behind false values such as `418,500` and `825,000`.
+    if (/^\d{1,2}\s+\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(rawCandidate)) return;
 
     const key = value.toFixed(2);
     const previous = found.get(key);
@@ -1554,7 +1571,8 @@ function renderStatementColumnPicker() {
     <p class="verify-sub">
       Select the three primary columns yourself. These choices are authoritative:
       <strong>Date</strong>, <strong>Name / Description</strong>, and <strong>Credit</strong>.
-      Other columns will still be retained as supporting evidence.
+      If Date and Name / Description are physically merged into one PDF column, you may select that same column for both.
+      <strong>Credit must remain a separate column.</strong> Other columns will still be retained as supporting evidence.
     </p>
 
     <div class="verify-column-selects">
@@ -1622,11 +1640,10 @@ function confirmStatementColumns() {
     !Number.isInteger(dateCol) ||
     !Number.isInteger(nameCol) ||
     !Number.isInteger(creditCol) ||
-    dateCol === nameCol ||
     dateCol === creditCol ||
     nameCol === creditCol
   ) {
-    error.textContent = "Select three different columns for Date, Name / Description, and Credit.";
+    error.textContent = "Credit must be a different column from Date and Name / Description. Date and Name / Description may use the same column when the PDF merges them.";
     error.classList.remove("hidden");
     return;
   }
