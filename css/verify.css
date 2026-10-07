@@ -191,10 +191,12 @@
   text-align: left;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
-  white-space: nowrap;
-  max-width: 230px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  min-width: 90px;
+  max-width: 320px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .verify-table-preview th {
