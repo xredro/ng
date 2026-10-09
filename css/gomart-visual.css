@@ -587,7 +587,7 @@ button:not(.remove):not(.expand-btn):not(.burger):not(.theme-toggle) {
 
 /* ================= NAV — real logo image, swapped by theme ================= */
 .logo-wrap { display: inline-flex; align-items: center; }
-.logo-img { height: 26px; width: auto; display: block; }
+.logo-img { height: 32px; width: auto; display: block; }
 .logo-dark { display: none; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }

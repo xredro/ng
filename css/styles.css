@@ -40,7 +40,7 @@ body {
 }
 
 .logo-wrap { display: inline-flex; align-items: center; }
-.logo-img { height: 28px; width: auto; display: block; }
+.logo-img { height: 32px; width: auto; display: block; }
 .logo-dark { display: none; }
 [data-theme="dark"] .logo-light { display: none; }
 [data-theme="dark"] .logo-dark { display: block; }
