@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Subscriptions | X REDRO</title>
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/alert.css">
+</head>
+<body>
+  <nav class="admin-nav">
+    <a class="admin-logo" href="index.html" aria-label="X Redro home">
+      <img src="assets/logo-light.png" alt="Xredro">
+    </a>
+    <a class="admin-home" href="index.html">Home</a>
+  </nav>
+
+  <main class="admin-page">
+    <section class="admin-header">
+      <div>
+        <p class="eyebrow">X REDRO ADMIN</p>
+        <h1>Subscription management</h1>
+        <p>Manually activate a user's subscription after confirming payment.</p>
+      </div>
+    </section>
+
+    <section id="adminAccessState" class="admin-card">
+      <div class="admin-loading">Checking admin access…</div>
+    </section>
+
+    <section id="adminPanel" class="admin-card hidden">
+      <form id="subscriptionForm">
+        <label for="userEmail">Customer email</label>
+        <div class="search-row">
+          <input id="userEmail" type="email" autocomplete="off" placeholder="customer@example.com" required>
+          <button type="button" id="findUserBtn">Find account</button>
+        </div>
+
+        <div id="accountPreview" class="account-preview hidden"></div>
+
+        <label for="planSelect">Payment plan</label>
+        <select id="planSelect" required>
+          <option value="">Select a plan</option>
+          <option value="weekly">Weekly — 7 days</option>
+          <option value="monthly">Monthly — 30 days</option>
+          <option value="quarterly">Quarterly — 90 days</option>
+          <option value="custom">Custom duration</option>
+        </select>
+
+        <div id="customDaysWrap" class="hidden">
+          <label for="customDays">Duration in days</label>
+          <input id="customDays" type="number" min="1" max="3650" step="1" placeholder="e.g. 45">
+        </div>
+
+        <button class="activate-btn" type="submit" id="activateBtn">Activate subscription</button>
+      </form>
+
+      <div id="adminResult" class="admin-result hidden"></div>
+    </section>
+  </main>
+
+  <div id="toast-container"></div>
+  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/alert.js"></script>
+</body>
+</html>

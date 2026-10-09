@@ -9,8 +9,7 @@
   <link rel="stylesheet" href="css/gomart-visual.css">
   <link rel="stylesheet" href="css/verify.css">
   <link rel="stylesheet" href="css/alert.css" />
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-</head>
+  </head>
 <body>
 <script>
   (function () {
@@ -23,7 +22,7 @@
 <!-- NAV -->
 <nav class="nav">
   <div class="nav-inner">
-    <span class="logo-wrap"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></span>
+    <a class="logo-wrap" href="index.html" aria-label="X Redro home"><img src="assets/logo-light.png" class="logo-img logo-light" alt="Xredro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="Xredro"></a>
 
     <!-- Desktop links -->
     <div class="nav-links desktop-only">
@@ -67,7 +66,7 @@
     <h1>Orders</h1>
     <div class="actions">
       <button onclick="openOrderDeleteModal()">Delete Orders</button>
-      <button type="button" onclick="exportOrdersCSV()">Export CSV</button>
+      <button type="button" onclick="openDeliverySummary()">Products to deliver</button>
       <button type="button" onclick="exportOrdersPDF()">Export PDF</button>
       <button type="button" onclick="openVerifyOverlay()">Verify Payments</button>
     </div>
@@ -104,6 +103,24 @@
 </div>
 
 <div id="modal" class="modal hidden"></div>
+
+<!-- PRODUCT DELIVERY SUMMARY -->
+<div id="deliverySummaryModal" class="modal hidden" onclick="closeDeliverySummary(event)">
+  <div class="modal-content delivery-summary-modal" onclick="event.stopPropagation()">
+    <div class="delivery-summary-head">
+      <div>
+        <h2>Products to deliver</h2>
+        <p>Paid orders only</p>
+      </div>
+      <button class="modal-close-btn" type="button" onclick="closeDeliverySummary()" aria-label="Close">&times;</button>
+    </div>
+    <div id="deliverySummaryList" class="order-products-detail delivery-summary-list"></div>
+  </div>
+</div>
+
+<button id="ordersTopButton" class="orders-top-button" type="button" onclick="scrollOrdersToTop()" aria-label="Back to top" title="Back to top">
+  <span aria-hidden="true">↑</span>
+</button>
 
 <div id="subscriptionModal" class="modal hidden">
   <!-- <button onclick="goToSelar()">Buy Subscription</button> -->

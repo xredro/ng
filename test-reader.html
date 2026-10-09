@@ -1,0 +1,12 @@
+<!doctype html><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script><script>
+window.addEventListener('load', async()=>{
+ const out={};
+ try{
+  const r=await fetch('/01.pdf'); const b=await r.arrayBuffer();
+  const pdf=await pdfjsLib.getDocument({data:b,useWorker:false}).promise;
+  out.pages=pdf.numPages; out.items=[];
+  for(let i=1;i<=pdf.numPages;i++){const p=await pdf.getPage(i); const c=await p.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false}); out.items.push(c.items.length);}
+  document.body.textContent=JSON.stringify(out);
+ }catch(e){document.body.textContent='ERR '+e.name+' '+e.message}
+});
+</script>
