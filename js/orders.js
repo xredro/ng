@@ -164,21 +164,22 @@ function parseFormData(raw) {
     .filter(Boolean);
 }
 
-function getProductSummary(rawFormData, maxItems = null) {
+function getProductSummary(rawFormData, maxItems = 3) {
   const formData = parseFormData(rawFormData);
   const products = [];
 
   formData.forEach(f => {
     if (f.type === "product" && Array.isArray(f.value)) {
       f.value.forEach(p => {
-        products.push(`${p.name} x${p.qty}`);
+        const name = String(p.name || "Product").trim();
+        if (name) products.push(name);
       });
     }
   });
 
-  return maxItems !== null
-    ? products.slice(0, maxItems).join(", ")
-    : products.join(", ");
+  const visible = maxItems === null ? products : products.slice(0, maxItems);
+  const result = visible.join(", ");
+  return products.length > visible.length ? `${result}, …` : result;
 }
 
 function getCardTitle(order) {
@@ -406,64 +407,9 @@ async function deleteAllOrders() {
   showToast("All orders deleted successfully", "success");
 }
 
-function exportOrdersCSV() {
-  try {
-    if (!allOrders.length) {
-      showToast("No orders to export.", "info");
-      return;
-    }
-
-    const normalized = normalizeOrdersForExport(allOrders);
-
-    // Beautify values
-    const formatted = normalized.map(row => ({
-      ...row,
-      "Total Amount (₦)": row["Total Amount (₦)"],
-      "Order Details": row["Order Details"].replace(/\n/g, "\n\n")
-    }));
-
-    let csvContent = "";
-
-    if (window.Papa) {
-      csvContent = Papa.unparse(formatted, {
-        quotes: true,
-        newline: "\r\n"
-      });
-    } else {
-      const headers = Object.keys(formatted[0]);
-      const rows = formatted.map(r =>
-        headers.map(h => `"${String(r[h]).replace(/"/g, '""')}"`).join(",")
-      );
-      csvContent = [headers.join(","), ...rows].join("\n");
-    }
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;"
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `x_redro_orders_${Date.now()}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error("CSV export failed:", err);
-    showToast("CSV export failed, try another browser", "error");
-  }
-}
-
 function exportOrdersPDF() {
   if (!allOrders.length) return showToast("No orders to export.", "info");
   
-  if (allOrders.length > 500) {
-  showToast("Large dataset detected. CSV export recommended for analysis.", "warning");
-}
-
   const normalized = normalizeOrdersForExport(allOrders);
 
   const { jsPDF } = window.jspdf;
@@ -518,6 +464,54 @@ function exportOrdersPDF() {
   });
 
   doc.save(`x_redro_orders_${Date.now()}.pdf`);
+}
+
+function getPaidProductTotals() {
+  const totals = new Map();
+
+  allOrders
+    .filter(order => order.status === "paid")
+    .forEach(order => {
+      parseFormData(order.formData).forEach(field => {
+        if (field.type !== "product" || !Array.isArray(field.value)) return;
+        field.value.forEach(product => {
+          const name = String(product.name || "Product").trim();
+          const qty = Number(product.qty || 0);
+          if (!name || !Number.isFinite(qty) || qty <= 0) return;
+          totals.set(name, (totals.get(name) || 0) + qty);
+        });
+      });
+    });
+
+  return [...totals.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+}
+
+function openDeliverySummary() {
+  const modal = document.getElementById("deliverySummaryModal");
+  const list = document.getElementById("deliverySummaryList");
+  if (!modal || !list) return;
+
+  const totals = getPaidProductTotals();
+  if (!totals.length) {
+    list.innerHTML = `<div class="delivery-summary-empty">No paid-order products to deliver yet.</div>`;
+  } else {
+    list.innerHTML = totals.map(([name, qty]) => `
+      <div class="order-product-detail delivery-summary-item">
+        <div><strong>${escapeHtml(name)}</strong> × ${qty.toLocaleString("en-NG")}</div>
+      </div>
+    `).join("");
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeDeliverySummary(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById("deliverySummaryModal")?.classList.add("hidden");
+}
+
+function scrollOrdersToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 /* =========================
@@ -709,6 +703,17 @@ document.querySelectorAll(".filters button").forEach(btn => {
 modal.onclick = () => {
   modal.classList.add("hidden");
 };
+
+window.addEventListener("scroll", () => {
+  const btn = document.getElementById("ordersTopButton");
+  if (btn) btn.classList.toggle("visible", window.scrollY > 260);
+}, { passive: true });
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    closeDeliverySummary();
+  }
+});
 
 document.addEventListener("click", e => {
   document.querySelectorAll(".status-select").forEach(sel => {

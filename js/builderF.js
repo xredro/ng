@@ -325,7 +325,7 @@ function renderFields() {
             value="${field.label || ""}"
             onchange="updateLabel('${field.id}', this.value)"
           />
-          <span class="remove remove-field" data-id="${field.id}">×</span>
+          <span class="remove remove-field" data-id="${field.id}" onclick="event.stopPropagation(); removeField('${field.id}')">×</span>
         </div>
       `;
       card.appendChild(renderProducts(field));
@@ -348,7 +348,7 @@ function renderFields() {
           onclick="event.stopPropagation()"
         />
         ${hasBody ? `<span class="field-chevron">${isExpanded ? "&#9650;" : "&#9660;"}</span>` : ""}
-        <span class="remove remove-field" data-id="${field.id}" onclick="event.stopPropagation()">×</span>
+        <span class="remove remove-field" data-id="${field.id}" onclick="event.stopPropagation(); removeField('${field.id}')">×</span>
       </div>
     `;
 
@@ -373,13 +373,6 @@ function toggleFieldExpanded(e, id) {
   }
   renderFields();
 }
-
-document.addEventListener("click", (e) => {
-  if (e.target.classList.contains("remove-field")) {
-    const id = e.target.dataset.id;
-    removeField(id);
-  }
-});
 
 function updateLabel(id, value) {
   const f = fields.find(f => f.id === id);

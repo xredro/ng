@@ -137,13 +137,10 @@ function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, orderId 
     if (item.type !== "product") return;
 
     (item.value || []).forEach(product => {
-      const lineTotal = Number(product.qty || 0) * Number(product.price || 0);
-      const description = String(product.description || "").trim();
-      productLines.push(
-        `• ${product.qty} × ${product.name}` +
-        `${description ? ` — ${description}` : ""}` +
-        `${lineTotal ? ` — ₦${lineTotal.toLocaleString("en-NG")}` : ""}`
-      );
+      const qty = Number(product.qty || 0);
+      const name = String(product.name || "Product").trim();
+      if (!name || qty <= 0) return;
+      productLines.push(`• ${name} × ${qty.toLocaleString("en-NG")}`);
     });
   });
 
@@ -152,15 +149,12 @@ function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, orderId 
   // should receive a short, human-readable handoff message and the customer
   // attaches that same recent screenshot manually before pressing Send.
   const message = [
-    "Hello, I just placed an order on X-Redro.",
+    "Hello, I just placed an order via X-Redro.",
     "",
-    "Order details:",
+    "Selected products:",
     ...productLines,
     "",
-    `Total: ₦${Number(totalAmount || 0).toLocaleString("en-NG")}`,
-    orderId ? `Order ID: ${orderId}` : "",
-    "",
-    "I will attach the payment screenshot I just uploaded."
+    "Payment image will be uploaded below."
   ].filter(Boolean).join("\n");
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
