@@ -1,1 +1,9 @@
-jin
+{
+  "name": "xredro-subscription-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": { "start": "node src/main.js" },
+  "dependencies": { "node-appwrite": "^29.0.0" }
+}
