@@ -40,6 +40,7 @@
     <div class="nav-links desktop-only">
       <a href="dashboard.html">Dashboard</a>
       <a href="orders.html">Orders</a>
+      <a href="catalog.html">Catalogue</a>
       <a class="active" href="indexF.html">Form Builder</a>
       <a href="settings.html">Settings</a>
     </div>
@@ -61,6 +62,7 @@
   <div class="mobile-menu">
     <a href="dashboard.html">Dashboard</a>
     <a href="orders.html">Orders</a>
+    <a href="catalog.html">Catalogue</a>
     <a class="active" href="indexF.html">Form Builder</a>
     <a href="settings.html">Settings</a>
 
@@ -147,7 +149,7 @@
   <!-- INPUT FIELDS -->
   <div class="section-header">
     <h3 style="display: inline-block; margin-right: 10px;">Input Fields</h3>
-    <button class="add-btn" id="addFieldBtn" onclick="toggleAddMenu(this)" style="display: inline-block">+</button>
+    <button class="add-btn" id="addFieldBtn" aria-expanded="false" aria-controls="addMenu" onclick="toggleAddMenu(this)" style="display: inline-block">+</button>
   </div>
   <section class="inputCard">
     <div id="fields" class="fields"></div>
@@ -166,13 +168,16 @@
 </main>
 
 <!-- ADD MENU -->
-<div id="addMenu" class="add-menu hidden">
-  <div onclick="addField('text')">Text Input</div><hr>
-  <div onclick="addField('number')">Number Input</div><hr>
-  <div onclick="addField('textarea')">Text Area</div><hr>
-  <div onclick="addField('dropdown')">Drop-down Menu</div><hr>
-  <div onclick="addField('product')">Product Listing (New)</div><hr>
-  <div onclick="addField('additional_fee')">Additional Fee</div>
+<div id="addMenu" class="add-menu-overlay hidden" onclick="closeAddMenu(event)" aria-hidden="true">
+  <section class="add-menu-panel" role="dialog" aria-modal="true" aria-labelledby="addMenuTitle" onclick="event.stopPropagation()">
+    <div class="add-menu-heading"><h3 id="addMenuTitle">Add an input field</h3><button type="button" class="add-menu-close" onclick="closeAddMenu()" aria-label="Close">&times;</button></div>
+    <button type="button" class="add-menu-option" onclick="addField('text')">Text Input</button>
+    <button type="button" class="add-menu-option" onclick="addField('number')">Number Input</button>
+    <button type="button" class="add-menu-option" onclick="addField('textarea')">Text Area</button>
+    <button type="button" class="add-menu-option" onclick="addField('dropdown')">Drop-down Menu</button>
+    <button type="button" class="add-menu-option" onclick="addField('product')">Product Listing</button>
+    <button type="button" class="add-menu-option" onclick="addField('additional_fee')">Additional Fee</button>
+  </section>
 </div>
 
 <!-- Preview overlay is intentionally edge-to-edge (no bordered "card"
@@ -210,7 +215,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
-<script src="appwrite.js"></script>
 <script src="js/themeF.js"></script>
 <script src="js/storefront-render.js"></script>
 <script src="js/builderF.js"></script>

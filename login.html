@@ -19,25 +19,25 @@
 
     <div class="field">
       <label>Enter email</label>
-      <input type="email" id="loginEmail">
+      <input type="email" id="loginEmail" name="email" autocomplete="username" inputmode="email">
     </div>
 
     <div class="field">
       <label>Password</label>
       <div class="input-wrapper">
-        <input type="password" id="loginPassword">
+        <input type="password" id="loginPassword" name="password" autocomplete="current-password">
         <div class="toggle-password" onclick="togglePassword('loginPassword', this)">
           <img src="assets/eye.svg">
         </div>
       </div>
     </div>
 
-    <button class="primary-btn" onclick="login()">Log in</button>
+    <button type="button" class="primary-btn" onclick="login()">Log in</button>
 
     <div class="divider"><a href="signup.html"><span>Don't have an account</span></a></div>
 
     <div class="link">
-      <a href="#" onclick="openResetModal()">Forgot Password?</a>
+      <a href="#" onclick="event.preventDefault(); openResetModal()">Forgot Password?</a>
     </div>
 
   </div>
@@ -48,7 +48,7 @@
 <div id="resetModal" class="modal hidden" onclick="closeResetModal(event)">
   <div class="modal-content">
     <h3>Reset Password</h3>
-    <input id="resetEmail" type="email" placeholder="Enter your email">
+    <input id="resetEmail" name="email" type="email" autocomplete="email" placeholder="Enter your email">
     <button onclick="sendReset()">Send to email</button>
   </div>
 </div>
