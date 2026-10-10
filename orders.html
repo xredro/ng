@@ -9,7 +9,8 @@
   <link rel="stylesheet" href="css/gomart-visual.css">
   <link rel="stylesheet" href="css/verify.css">
   <link rel="stylesheet" href="css/alert.css" />
-  </head>
+    <link rel="stylesheet" href="css/nav-shared.css">
+</head>
 <body>
 <script>
   (function () {
@@ -38,7 +39,7 @@
     </div>
 
     <!-- Burger button -->
-    <button class="burger" aria-label="Menu">
+    <button class="burger" type="button" aria-label="Open menu" aria-expanded="false">
       <span></span>
       <span></span>
       <span></span>
@@ -49,6 +50,7 @@
   <div class="mobile-menu">
     <a href="dashboard.html">Dashboard</a>
     <a class="active" href="orders.html">Orders</a>
+    <a href="catalog.html">Catalogue</a>
     <a href="indexF.html">Form Builder</a>
     <a href="settings.html">Settings</a>
 
@@ -165,7 +167,8 @@
   const mobileMenu = document.querySelector('.mobile-menu');
 
   burger.addEventListener('click', () => {
-    mobileMenu.classList.toggle('open');
+    const open = mobileMenu.classList.toggle('open');
+    burger.setAttribute('aria-expanded', String(open));
   });
 </script>
 </body>

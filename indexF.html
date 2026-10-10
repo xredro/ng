@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="css/theme-r7.css">
   <link rel="stylesheet" href="css/theme-r8.css">
   <link rel="stylesheet" href="css/theme-r9.css">
+  <link rel="stylesheet" href="css/nav-shared.css">
 </head>
 <body>
 <script>
@@ -51,7 +52,7 @@
     </div>
 
     <!-- Burger button -->
-    <button class="burger" aria-label="Menu">
+    <button class="burger" type="button" aria-label="Open menu" aria-expanded="false">
       <span></span>
       <span></span>
       <span></span>
@@ -224,7 +225,8 @@
   const mobileMenu = document.querySelector('.mobile-menu');
 
   burger.addEventListener('click', () => {
-    mobileMenu.classList.toggle('open');
+    const open = mobileMenu.classList.toggle('open');
+    burger.setAttribute('aria-expanded', String(open));
   });
 </script>
 </script>
