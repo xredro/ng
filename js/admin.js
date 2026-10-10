@@ -6,7 +6,7 @@ const account = new Appwrite.Account(client);
 const functions = new Appwrite.Functions(client);
 
 // Replace this with the Function ID created in Appwrite Console.
-const ADMIN_FUNCTION_ID = "REPLACE_WITH_APPWRITE_FUNCTION_ID";
+const ADMIN_FUNCTION_ID = "6aca4fc1003185200a1c";
 // Authorization is enforced by Appwrite Function Execute permissions (X-Redro Admins Team),
 // not by a client-side email allowlist that can be edited in the browser.
 
