@@ -20,14 +20,14 @@ async function confirmReset() {
   const params = new URLSearchParams(location.search);
   const userId = params.get("userId");
   const secret = params.get("secret");
-  const password = newPassword.value.trim();
+  const password = document.getElementById("newPassword").value;
 
   if (!password || password.length < 8) {
     showToast("Password must be at least 8 characters", "warning");
     return;
   }
 
-  await account.updateRecovery(userId, secret, password);
-  showToast("Password updated", "sucsess");
+  await account.updateRecovery(userId, secret, password, password);
+  showToast("Password updated. Please log in.", "success");
   window.location.href = "login.html";
 }

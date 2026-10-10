@@ -53,61 +53,58 @@ function getUsernameFromEmail(email) {
 CORE BUSINESS LOGIC
 ========================= */
 /* LOGIN */
-async function login() {  
-  const email = loginEmail.value.trim();  
-  const password = loginPassword.value.trim();  
-    
-  if (!email || !password) {  
-    showToast("Please enter email and password", "error");  
-    return;  
-  }  
+async function login() {
+  const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+  const password = document.getElementById("loginPassword").value;
+  if (!email || !password) { showToast("Please enter email and password", "error"); return; }
+
+  const loginBtn = document.querySelector('.primary-btn[onclick="login()"]');
+  if (window.__xredroLoginInFlight) return;
+  window.__xredroLoginInFlight = true;
+  if (loginBtn) { loginBtn.disabled = true; loginBtn.dataset.originalText ||= loginBtn.textContent; loginBtn.textContent = "Logging in…"; }
 
   try {
-    // A session already exists: this login page should never trap an
-    // authenticated user. The dedicated login-page bootstrap below handles
-    // this before the form is used; this guard also covers manual login calls.
-    try {
-      await account.get();
-      window.location.replace("dashboard.html");
+    let user = null;
+    try { user = await account.get(); } catch (_) {}
+
+    if (!user) {
+      await account.createEmailSession(email, password);
+      user = await account.get();
+    }
+
+    if (!user.emailVerification) {
+      showToast("Please verify your email first. Check your inbox for the verification link.", "warning");
+      window.location.href = "verifyInfo.html";
       return;
-    } catch (_) {}
+    }
 
-    // Create the new session. Do not delete all sessions first; that made
-    // an already-authenticated browser unnecessarily destructive.
-    await account.createEmailSession(email, password);
-
-    const user = await account.get();  
-
-    window.location.href = "dashboard.html";  
-
-  } catch (err) {  
-    console.error("LOGIN ERROR:", err.message);  
-    showToast(err.message, "error");  
-  }  
+    await ensureUserProvisioned(user);
+    window.location.replace("dashboard.html");
+  } catch (err) {
+    console.error("LOGIN ERROR:", err);
+    const message = err?.code === 401 ? "Incorrect email or password. Please try again." : (err.message || "Login failed. Please try again.");
+    showToast(message, "error");
+  } finally {
+    window.__xredroLoginInFlight = false;
+    if (loginBtn) { loginBtn.disabled = false; loginBtn.textContent = loginBtn.dataset.originalText || "Log in"; }
+  }
 }
 
 /* SIGNUP + AUTO SETUP */
-async function signup() {  
-  try {  
+async function signup() {
+  const email = document.getElementById("signupEmail").value.trim().toLowerCase();
+  const password = document.getElementById("signupPassword").value;
+  const signupBtn = document.querySelector('.primary-btn[onclick="signup()"]');
+  if (window.__xredroSignupInFlight) return;
 
-    try {  
-      await account.deleteSessions();  
-    } catch (e) {}  
-      
-    const email = signupEmail.value.trim();  
-    const password = signupPassword.value.trim();  
+  if (!email || !password) { showToast("Enter your email and password.", "warning"); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showToast("Enter a valid email address.", "warning"); return; }
+  if (password.length < 8) { showToast("Password must be at least 8 characters", "warning"); return; }
 
+  window.__xredroSignupInFlight = true;
+  if (signupBtn) { signupBtn.disabled = true; signupBtn.dataset.originalText ||= signupBtn.textContent; signupBtn.textContent = "Creating account…"; }
+  try {
     const username = getUsernameFromEmail(email);  
-      
-    if (!email || !password) {  
-      showToast("All fields are required", "warning");  
-      return;  
-    }  
-
-    if (password.length < 8) {  
-      showToast("Password must be at least 8 characters", "warning");  
-      return;  
-    }  
 
     await account.create(  
       Appwrite.ID.unique(),  
@@ -118,15 +115,19 @@ async function signup() {
 
     await account.createEmailSession(email, password);  
 
-    await account.createVerification(  
-      `${location.origin}/ng/verify.html`  
+    await account.createVerification(
+      new URL("verify.html", window.location.href).href
     );  
       
     window.location.href = "verifyInfo.html";  
 
-  } catch (err) {  
-    showToast(err.message, "error");  
-  }  
+  } catch (err) {
+    console.error("SIGNUP ERROR:", err);
+    showToast(err.message || "Could not create your account. Please try again.", "error");
+  } finally {
+    window.__xredroSignupInFlight = false;
+    if (signupBtn) { signupBtn.disabled = false; signupBtn.textContent = signupBtn.dataset.originalText || "Create account"; }
+  }
 }
 
 async function sendReset() {  
@@ -138,16 +139,19 @@ async function sendReset() {
   }  
 
   try {  
-    await account.createRecovery(  
-      email,  
-      `${location.origin}/ng/reset-password.html`  
-    );  
+    await account.createRecovery(
+      email,
+      new URL("reset-password.html", window.location.href).href
+    );
 
-    showToast("Password reset link sent", "success");  
+    showToast("If an account exists for that email, a password reset link has been sent.", "success");
     closeResetModal();  
-  } catch (err) {  
-    showToast(err.message || "Failed to send email", "error");  
-  }  
+  } catch (err) {
+    // Do not disclose whether a particular email has an account.
+    console.error("PASSWORD RECOVERY REQUEST ERROR:", err);
+    showToast("If an account exists for that email, a password reset link has been sent.", "success");
+    closeResetModal();
+  }
 }
 
 async function resetPassword() {
@@ -156,8 +160,8 @@ async function resetPassword() {
   const userId = params.get("userId");
   const secret = params.get("secret");
 
-  const password = document.getElementById("newPassword").value.trim();
-  const confirm = document.getElementById("confirmPassword").value.trim();
+  const password = document.getElementById("newPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
 
   if (!userId || !secret) {
     showToast("Invalid or expired reset link");
@@ -187,12 +191,66 @@ async function resetPassword() {
       confirm
     );
 
-    showToast("Password reset successful. Please login.", "success");
-    window.location.href = "login.html";
+    // Revoke existing sessions after a successful password reset where possible.
+    try { await account.deleteSessions(); } catch (_) {}
+    window.location.replace("login.html?reset=1");
 
   } catch (err) {
     console.error(err);
     showToast(err.message || "Reset failed", "error");
+  }
+}
+
+/* =========================
+POST-VERIFICATION ACCOUNT PROVISIONING
+========================= */
+async function ensureUserProvisioned(user) {
+  if (!user || !user.$id || !user.emailVerification) return;
+
+  const now = new Date();
+  let profileExists = false;
+  try { await databases.getDocument(DB_ID, USERS, user.$id); profileExists = true; } catch (_) {}
+
+  if (!profileExists) {
+    try {
+      await databases.createDocument(DB_ID, USERS, user.$id, {
+        userId: user.$id, email: user.email, username: user.name || user.email.split("@")[0],
+        theme: "light", accountStatus: "active"
+      });
+    } catch (err) {
+      // A parallel login/verification tab may have created it already.
+      try { await databases.getDocument(DB_ID, USERS, user.$id); } catch (_) { throw err; }
+    }
+  }
+
+  let formExists = false;
+  try { await databases.getDocument(DB_ID, FORMS, user.$id); formExists = true; } catch (_) {}
+  if (!formExists) {
+    const defaultFields = [
+      { id: crypto.randomUUID(), type: "text", label: "Full Name", options: [], products: [] },
+      { id: crypto.randomUUID(), type: "text", label: "Phone Number", options: [], products: [] },
+      { id: crypto.randomUUID(), type: "textarea", label: "Delivery Address or Drop-Off Point", options: [], products: [] },
+      { id: crypto.randomUUID(), type: "text", label: "City / State", options: [], products: [] },
+      { id: crypto.randomUUID(), type: "textarea", label: "Additional Notes / Requests", options: [], products: [] },
+      { id: crypto.randomUUID(), type: "product", label: "Products", options: [], products: [{ name: "Sample Product", price: "0", imageId: "", imageUrl: "" }] }
+    ];
+    try {
+      await databases.createDocument(DB_ID, FORMS, user.$id, {
+        userId: user.$id, title: "My Business Name", subtitle: "Welcome to X-Redro, place your order",
+        fields: defaultFields.map(f => JSON.stringify(f)), isActive: true, whatsappNumber: "", whatsappOrderRedirectEnabled: false
+      });
+    } catch (err) {
+      try { await databases.getDocument(DB_ID, FORMS, user.$id); } catch (_) { throw err; }
+    }
+  }
+
+  const subs = await databases.listDocuments(DB_ID, SUBS, [Appwrite.Query.equal("userId", user.$id), Appwrite.Query.limit(100)]);
+  if (!subs.documents.length) {
+    const expiry = new Date(now); expiry.setDate(expiry.getDate() + 7);
+    await databases.createDocument(DB_ID, SUBS, Appwrite.ID.unique(), {
+      userId: user.$id, plan: "trial", durationDay: 7, startsAt: now.toISOString(),
+      expiresAt: expiry.toISOString(), status: "active"
+    });
   }
 }
 
@@ -217,7 +275,7 @@ async function resendVerification() {
     btn.classList.add("hidden");
 
     await account.createVerification(
-      `${location.origin}/ng/verify.html`
+      new URL("verify.html", window.location.href).href
     );
 
     showToast("Verification email sent", "success");
@@ -281,14 +339,22 @@ async function initLoginPage() {
   const passwordEl = document.getElementById("loginPassword");
   const loginBtn = document.querySelector('.primary-btn[onclick="login()"]');
   if (!emailEl || !passwordEl) return;
+  if (new URLSearchParams(window.location.search).get("reset") === "1") {
+    showToast("Password reset successful. Please log in with your new password.", "success");
+  }
 
   // Never show the login form to a browser that already has an Appwrite session.
   try {
-    await account.get();
+    const existingUser = await account.get();
+    if (!existingUser.emailVerification) {
+      window.location.replace("verifyInfo.html");
+      return;
+    }
+    await ensureUserProvisioned(existingUser);
     window.location.replace("dashboard.html");
     return;
   } catch (_) {
-    // No active session: stay on login page.
+    // No active session or account provisioning needs a normal login attempt.
   }
 
   // Browser password managers / Android credential prompts can fill the fields
@@ -300,9 +366,8 @@ async function initLoginPage() {
     attempts++;
     if (document.visibilityState === "hidden") return;
     const email = String(emailEl.value || "").trim();
-    const password = String(passwordEl.value || "").trim();
+    const password = String(passwordEl.value || "");
     if (email && password) {
-      if (loginBtn) loginBtn.disabled = true;
       await login();
       return;
     }

@@ -38,12 +38,14 @@ async function requireAuth() {
   try {
     return await account.get();
   } catch {
-    window.location.href = "login.html";
+    window.location.replace("login.html");
+    return null;
   }
 }
 
 async function loadUser() {
   user = await requireAuth();
+  if (!user) return;
 
   res = await databases.listDocuments(
     DB_ID,
@@ -79,15 +81,19 @@ async function loadUser() {
   //Quick Subscription Check
   const subRes = await databases.listDocuments(DB_ID, SUBS, [
     Query.equal("userId", user.$id),
+    Query.equal("status", "active"),
     Query.orderDesc("expiresAt"),
     Query.limit(1)
   ]);
 
+  if (!subRes.documents.length) {
+    document.getElementById("subscriptionModal")?.classList.remove("hidden");
+    return;
+  }
   const sub = subRes.documents[0];
   const daysLeft = Math.ceil(
     (new Date(sub.expiresAt) - new Date()) / 86400000
   );
-  if (!subRes.documents.length) return;
 
   if (daysLeft <= 0) {
     document.getElementById("subscriptionModal").classList.remove("hidden");
@@ -96,8 +102,8 @@ async function loadUser() {
 }
 
 async function changePassword() {
-  const current = document.getElementById("currentPassword").value.trim();
-  const next = document.getElementById("newPassword").value.trim();
+  const current = document.getElementById("currentPassword").value;
+  const next = document.getElementById("newPassword").value;
 
   if (!current || !next) {
     showToast("Please fill all fields", "warning");

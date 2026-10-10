@@ -1,25 +1,28 @@
-/* X-Redro manual subscription administration */
-const DB_ID = "695c4fce0039f513dc83";
-const USERS = "695c501b001d24549b03";
-const SUBS = "subscriptions";
-
+/* X-Redro manual subscription administration. Writes are performed by an Appwrite Function, not directly from the browser. */
 const client = new Appwrite.Client()
   .setEndpoint("https://nyc.cloud.appwrite.io/v1")
   .setProject("695981480033c7a4eb0d");
 const account = new Appwrite.Account(client);
-const databases = new Appwrite.Databases(client);
-const Query = Appwrite.Query;
+const functions = new Appwrite.Functions(client);
 
-/*
-  Admin access:
-  Put the email(s) of the Appwrite account(s) that you have authorised for
-  this page here. This is an additional UI gate; the Appwrite database
-  permissions should remain the real security boundary for subscription writes.
-*/
+// Replace this with the Function ID created in Appwrite Console.
+const ADMIN_FUNCTION_ID = "REPLACE_WITH_APPWRITE_FUNCTION_ID";
+// UI convenience gate only. Actual execution access must be restricted to the Appwrite Admins Team.
 const ADMIN_EMAILS = [
-  // Add the Appwrite account email that you have authorised for admin use.
   "REPLACE_WITH_YOUR_ADMIN_EMAIL@example.com"
 ].filter(v => !v.startsWith("REPLACE_WITH_")).map(v => v.toLowerCase());
+
+async function runAdminFunction(payload) {
+  if (!ADMIN_FUNCTION_ID || ADMIN_FUNCTION_ID.startsWith("REPLACE_WITH_")) {
+    throw new Error("Admin setup is incomplete: add your Appwrite Function ID in js/admin.js.");
+  }
+  const execution = await functions.createExecution(ADMIN_FUNCTION_ID, JSON.stringify(payload), false, "/", "POST");
+  let result;
+  try { result = JSON.parse(execution.responseBody || "{}"); }
+  catch (_) { throw new Error("The admin function returned an unreadable response. Check its Appwrite logs."); }
+  if (!result.ok) throw new Error(result.message || "Admin operation failed.");
+  return result;
+}
 
 let currentAdmin = null;
 let selectedUser = null;
@@ -59,24 +62,9 @@ async function findUser() {
   btn.textContent = "Searching…";
 
   try {
-    const result = await databases.listDocuments(DB_ID, USERS, [
-      Query.equal("email", email),
-      Query.limit(1)
-    ]);
-
-    if (!result.documents.length) {
-      showToast("No X-Redro account was found with that email.", "warning");
-      return;
-    }
-
-    const profile = result.documents[0];
-    if (!profile.userId) {
-      showToast("This account record has no user ID.", "error");
-      return;
-    }
-
-    selectedUser = profile;
-    preview.innerHTML = `<strong>${escapeHtml(profile.username || email)}</strong><span>${escapeHtml(email)} · User ID ${escapeHtml(profile.userId)}</span>`;
+    const result = await runAdminFunction({ action: "findUser", email });
+    selectedUser = result.user;
+    preview.innerHTML = `<strong>${escapeHtml(selectedUser.username || email)}</strong><span>${escapeHtml(email)} · User ID ${escapeHtml(selectedUser.userId)}</span>`;
     preview.classList.remove("hidden");
   } catch (err) {
     console.error(err);
@@ -115,36 +103,11 @@ async function activateSubscription(event) {
   btn.textContent = "Updating…";
 
   try {
-    const now = new Date();
-    const expiry = new Date(now);
-    expiry.setDate(expiry.getDate() + plan.days);
-
-    // Retire previous active subscriptions so the new manual payment becomes
-    // the single subscription used by the seller dashboard.
-    const existing = await databases.listDocuments(DB_ID, SUBS, [
-      Query.equal("userId", selectedUser.userId),
-      Query.equal("status", "active"),
-      Query.limit(100)
-    ]);
-
-    for (const sub of existing.documents) {
-      await databases.updateDocument(DB_ID, SUBS, sub.$id, {
-        status: "expired"
-      });
-    }
-
-    const created = await databases.createDocument(DB_ID, SUBS, Appwrite.ID.unique(), {
-      userId: selectedUser.userId,
-      plan: plan.label,
-      durationDay: plan.days,
-      startsAt: now.toISOString(),
-      expiresAt: expiry.toISOString(),
-      status: "active"
-    });
-
-    const result = document.getElementById("adminResult");
-    result.innerHTML = `<strong>Subscription activated</strong>${escapeHtml(selectedUser.email || "Customer")} is now on <b>${escapeHtml(plan.label)}</b> until <b>${escapeHtml(expiry.toLocaleString("en-NG"))}</b>.`;
-    result.classList.remove("hidden");
+    const result = await runAdminFunction({ action: "activate", userId: selectedUser.userId, plan: plan.label, days: plan.days });
+    const expiry = new Date(result.subscription.expiresAt);
+    const resultEl = document.getElementById("adminResult");
+    resultEl.innerHTML = `<strong>Subscription activated</strong>${escapeHtml(result.user.email || selectedUser.email)} is now on <b>${escapeHtml(result.subscription.plan)}</b> until <b>${escapeHtml(expiry.toLocaleString("en-NG"))}</b>.${result.warning ? `<p class="admin-warning">${escapeHtml(result.warning)}</p>` : ""}`;
+    resultEl.classList.remove("hidden");
     showToast("Subscription updated successfully.", "success");
   } catch (err) {
     console.error(err);

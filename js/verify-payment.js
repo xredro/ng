@@ -48,6 +48,7 @@ const Query = Appwrite.Query;
 
     const subRes = await databases.listDocuments(DB_ID, SUBS, [
       Query.equal("userId", user.$id),
+      Query.equal("status", "active"),
       Query.orderDesc("expiresAt"),
       Query.limit(1)
     ]);

@@ -203,7 +203,8 @@ async function requireAuth() {
   try {
     return await account.get();
   } catch {
-    window.location.href = "login.html";
+    window.location.replace("login.html");
+    return null;
   }
 }
 
@@ -280,12 +281,25 @@ function copyFormLink() {
 /* ---------------- ADD MENU ---------------- */
 function toggleAddMenu(btn) {
   const menu = document.getElementById('addMenu');
-  const rect = btn.getBoundingClientRect();
+  if (!menu) return;
+  const opening = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !opening);
+  menu.setAttribute('aria-hidden', String(!opening));
+  if (btn) btn.setAttribute('aria-expanded', String(opening));
+  if (opening) {
+    const firstOption = menu.querySelector('.add-menu-option');
+    if (firstOption) setTimeout(() => firstOption.focus(), 0);
+  }
+}
 
-  menu.style.top = rect.bottom + 6 + "px";
-  menu.style.left = rect.left + "px";
-
-  menu.classList.toggle('hidden');
+function closeAddMenu(event) {
+  if (event && event.target !== event.currentTarget) return;
+  const menu = document.getElementById('addMenu');
+  const btn = document.getElementById('addFieldBtn');
+  if (!menu) return;
+  menu.classList.add('hidden');
+  menu.setAttribute('aria-hidden', 'true');
+  if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.focus(); }
 }
 
 function addField(type) {
@@ -299,6 +313,8 @@ function addField(type) {
 
   fields.push(field);
   document.getElementById('addMenu').classList.add('hidden');
+  document.getElementById('addMenu').setAttribute('aria-hidden', 'true');
+  document.getElementById('addFieldBtn')?.setAttribute('aria-expanded', 'false');
   renderFields();
 }
 
@@ -838,6 +854,7 @@ UI INTERACTION LOGIC
 /* ---------------- INIT ---------------- */
 async function initBuilder() {
   user = await requireAuth();
+  if (!user) return;
   
   res = await databases.listDocuments(DB_ID, USERS, [
     Query.equal("userId", user.$id)
@@ -846,10 +863,17 @@ async function initBuilder() {
   // Quick Subscription Check
   const subRes = await databases.listDocuments(DB_ID, SUBS, [
     Query.equal("userId", user.$id),
+    Query.equal("status", "active"),
     Query.orderDesc("expiresAt"),
     Query.limit(1)
   ]);
   
+  // Existing accounts may not yet have a profile row; avoid crashing on it.
+  if (!res.documents.length) {
+    showToast("Your account setup is incomplete. Please log out and log in again.", "error");
+    return;
+  }
+
   //Theme Application
   profileDocId = res.documents[0].$id;
 
@@ -857,6 +881,10 @@ async function initBuilder() {
   applyTheme(savedTheme);
 
   //Quick Subscription Check
+  if (!subRes.documents.length) {
+    document.getElementById("subscriptionModal").classList.remove("hidden");
+    return;
+  }
   const sub = subRes.documents[0];
   const daysLeft = Math.ceil(
     (new Date(sub.expiresAt) - new Date()) / 86400000
@@ -920,15 +948,10 @@ initBuilder();
 /* =========================
 EVENT LISTENERS / TRIGGERS
 ========================= */
-document.addEventListener("click", (e) => {
-  const menu = document.getElementById("addMenu");
-  const addBtn = document.getElementById("addFieldBtn"); // your + button
-
-  if (!menu || menu.classList.contains("hidden")) return;
-
-  // if click is outside menu AND outside button → close
-  if (!menu.contains(e.target) && !addBtn.contains(e.target)) {
-    menu.classList.add("hidden");
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeAddMenu();
+    closePreview();
   }
 });
 
