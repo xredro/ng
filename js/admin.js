@@ -6,10 +6,10 @@ const account = new Appwrite.Account(client);
 const functions = new Appwrite.Functions(client);
 
 // Replace this with the Function ID created in Appwrite Console.
-const ADMIN_FUNCTION_ID = "REPLACE_WITH_APPWRITE_FUNCTION_ID";
+const ADMIN_FUNCTION_ID = "6aca4fc1003185200a1c";
 // UI convenience gate only. Actual execution access must be restricted to the Appwrite Admins Team.
 const ADMIN_EMAILS = [
-  "REPLACE_WITH_YOUR_ADMIN_EMAIL@example.com"
+  "maxm33020@gmail.com"
 ].filter(v => !v.startsWith("REPLACE_WITH_")).map(v => v.toLowerCase());
 
 async function runAdminFunction(payload) {
