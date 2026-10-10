@@ -14,7 +14,7 @@ This function is the trusted server-side component for `admin.html`. Do not put 
    - `XREDRO_SUBSCRIPTIONS_COLLECTION_ID=subscriptions`
    `APPWRITE_FUNCTION_API_ENDPOINT` and `APPWRITE_FUNCTION_PROJECT_ID` are supplied by the Appwrite Function runtime.
 6. Deploy the Function and copy its Function ID.
-7. In `js/admin.js`, replace `REPLACE_WITH_APPWRITE_FUNCTION_ID` with that Function ID and replace the `ADMIN_EMAILS` placeholder with the exact email address of your admin Appwrite account.
+7. In `js/admin.js`, replace `REPLACE_WITH_APPWRITE_FUNCTION_ID` with that Function ID. The browser no longer uses an email allowlist as an access boundary; the Function Execute permission must be restricted to the `X-Redro Admins` Team. Add your own Appwrite account to that Team.
 8. In the Appwrite project, ensure the website's Web platform includes the production hostname (for this project, `xredro.github.io`).
 9. Test with a non-admin account: it must be unable to execute the Function even if it manually opens `admin.html`. Test `findUser` and subscription activation with the admin account.
 
