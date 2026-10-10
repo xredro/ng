@@ -29,3 +29,5 @@ input:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgb
 .hidden { display:none !important; }
 .admin-loading { color:var(--muted); font-size:14px; }
 @media(max-width:520px) { .search-row { flex-direction:column; } .search-row button { min-height:46px; } .admin-card { border-radius:15px; } }
+
+.admin-warning{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#fff4d6;color:#744c00;font-size:12px;line-height:1.5}

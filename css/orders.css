@@ -649,4 +649,186 @@ body {
     gap: 10px;
   }
 }
-\n\n/* =========================\n   2026 ORDERS UI UPDATES\n   ========================= */\n.logo-wrap {\n  text-decoration: none;\n  cursor: pointer;\n}\n\n.order-summary-line {\n  min-width: 0;\n}\n\n.summary-item {\n  min-width: 0;\n  max-width: min(70%, 620px);\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n\n.delivery-summary-modal {\n  width: min(560px, calc(100vw - 28px));\n  max-height: min(80vh, 700px);\n  overflow: auto;\n}\n\n.delivery-summary-head {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: 16px;\n  margin-bottom: 18px;\n}\n\n.delivery-summary-head h2 {\n  margin: 0;\n  font-size: 20px;\n}\n\n.delivery-summary-head p {\n  margin: 4px 0 0;\n  color: var(--text-secondary);\n  font-size: 13px;\n}\n\n.modal-close-btn {\n  width: 36px;\n  height: 36px;\n  border: 0;\n  border-radius: 50%;\n  background: var(--bg);\n  color: var(--text-primary);\n  font-size: 24px;\n  line-height: 1;\n  cursor: pointer;\n  flex: 0 0 auto;\n}\n\n.delivery-summary-list {\n  display: flex;\n  flex-direction: column;\n  gap: 10px;\n}\n\n.delivery-summary-item {\n  margin: 0;\n}\n\n.delivery-summary-empty {\n  padding: 24px 10px;\n  text-align: center;\n  color: var(--text-secondary);\n}\n\n.orders-top-button {\n  position: fixed;\n  right: clamp(16px, 4vw, 28px);\n  bottom: clamp(16px, 4vw, 28px);\n  width: 46px;\n  height: 46px;\n  border: 1px solid var(--border);\n  border-radius: 50%;\n  background: var(--surface-elevated);\n  color: var(--text-primary);\n  box-shadow: 0 8px 24px rgba(0,0,0,.12);\n  font-size: 22px;\n  cursor: pointer;\n  opacity: 0;\n  pointer-events: none;\n  transform: translateY(10px);\n  transition: opacity .2s ease, transform .2s ease;\n  z-index: 50;\n}\n\n.orders-top-button.visible {\n  opacity: 1;\n  pointer-events: auto;\n  transform: translateY(0);\n}\n\n@media (max-width: 900px) {\n  .orders-header {\n    align-items: flex-start;\n    gap: 12px;\n  }\n  .orders-header .actions {\n    flex: 1;\n    display: flex;\n    justify-content: flex-end;\n    flex-wrap: wrap;\n  }\n  .actions button {\n    padding: 9px clamp(10px, 2vw, 16px);\n    font-size: clamp(11px, 1.7vw, 13px);\n  }\n}\n\n@media (max-width: 600px) {\n  .orders-page h1,\n  .orders-header h1 {\n    font-size: clamp(24px, 7vw, 28px);\n  }\n\n  .orders-header {\n    flex-direction: column;\n    gap: 10px;\n  }\n\n  .orders-header .actions {\n    width: 100%;\n    display: grid;\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n    gap: 8px;\n  }\n\n  .orders-header .actions button {\n    width: 100%;\n    margin: 0;\n    padding: 10px 8px;\n    font-size: 12px;\n    white-space: nowrap;\n  }\n\n  .summary-item {\n    max-width: 100%;\n    width: 100%;\n  }\n\n  .orders-top-button {\n    width: 44px;\n    height: 44px;\n    font-size: 20px;\n  }\n}\n
+
+
+/* =========================
+   2026 ORDERS UI UPDATES
+   ========================= */
+.logo-wrap {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.order-summary-line {
+  min-width: 0;
+}
+
+.summary-item {
+  min-width: 0;
+  max-width: min(70%, 620px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delivery-summary-modal {
+  width: min(560px, calc(100vw - 28px));
+  max-height: min(80vh, 700px);
+  overflow: auto;
+}
+
+.delivery-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.delivery-summary-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.delivery-summary-head p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.modal-close-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.delivery-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.delivery-summary-item {
+  margin: 0;
+}
+
+.delivery-summary-empty {
+  padding: 24px 10px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.orders-top-button {
+  position: fixed;
+  right: clamp(16px, 4vw, 28px);
+  bottom: clamp(16px, 4vw, 28px);
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  font-size: 22px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity .2s ease, transform .2s ease;
+  z-index: 50;
+}
+
+.orders-top-button.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+@media (max-width: 900px) {
+  .orders-header {
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .orders-header .actions {
+    flex: 1;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+  .actions button {
+    padding: 9px clamp(10px, 2vw, 16px);
+    font-size: clamp(11px, 1.7vw, 13px);
+  }
+}
+
+@media (max-width: 600px) {
+  .orders-page h1,
+  .orders-header h1 {
+    font-size: clamp(24px, 7vw, 28px);
+  }
+
+  .orders-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .orders-header .actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .orders-header .actions button {
+    width: 100%;
+    margin: 0;
+    padding: 10px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .summary-item {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .orders-top-button {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+  }
+}
+
+/* Reliable floating back-to-top control */
+.orders-top-button {
+  position: fixed !important;
+  left: auto !important;
+  right: max(18px, env(safe-area-inset-right, 0px)) !important;
+  bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important;
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent, #96d97f);
+  color: #101410;
+  font-size: 28px;
+  font-weight: 800;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0,0,0,.22);
+  z-index: 999;
+}
+.orders-top-button.visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+@media (max-width: 600px) {
+  .orders-top-button { right: max(18px, env(safe-area-inset-right, 0px)) !important; bottom: max(18px, env(safe-area-inset-bottom, 0px)) !important; width: 56px; height: 56px; }
+}

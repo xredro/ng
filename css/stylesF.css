@@ -402,36 +402,37 @@ input {
 }
 
 /* =========================
-   ADD MENU
+   ADD FIELD FULL-SCREEN OVERLAY
 ========================= */
-.add-menu {
-  position: absolute;
-  z-index: 50;
+.add-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(12, 14, 12, .52);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.add-menu-overlay.hidden { display: none; }
+.add-menu-panel {
+  width: min(420px, 100%);
+  max-height: min(82vh, 640px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 18px;
   background: var(--surface-elevated, #fff);
   color: var(--text-primary, #16181A);
-  border-radius: 14px;
-  padding: 8px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
-  min-width: 190px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.24);
 }
-
-.add-menu div {
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 13.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.add-menu div:hover {
-  background: var(--bg, #F0F1EE);
-}
-
-.add-menu hr {
-  border: none;
-  border-top: 1px solid var(--border, #E7E8E6);
-  margin: 4px 0;
-}
+.add-menu-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 12px; }
+.add-menu-heading h3 { margin:0; font-size:17px; }
+.add-menu-close { width:36px; height:36px; border:0; border-radius:50%; background:var(--bg,#f4f4f4); color:inherit; font-size:25px; line-height:1; cursor:pointer; }
+.add-menu-option { display:block; width:100%; padding:13px 12px; margin-top:6px; border:1px solid var(--border,#e5e5e5); border-radius:10px; background:transparent; color:inherit; text-align:left; font-size:14px; font-weight:600; cursor:pointer; }
+.add-menu-option:hover, .add-menu-option:focus-visible { background:var(--bg,#f0f1ee); outline:2px solid var(--accent,#9cff00); outline-offset:1px; }
 
 /* =========================
    PREVIEW OVERLAY
@@ -697,10 +698,6 @@ input {
     width: 42px;
     height: 42px;
     font-size: 20px;
-  }
-
-  .add-menu {
-    width: 220px;
   }
 
   /* ---------- SAVE BUTTON ---------- */
