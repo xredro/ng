@@ -102,28 +102,30 @@ async function signup() {
   if (password.length < 8) { showToast("Password must be at least 8 characters", "warning"); return; }
 
   window.__xredroSignupInFlight = true;
+  let accountCreated = false;
+  let sessionCreated = false;
   if (signupBtn) { signupBtn.disabled = true; signupBtn.dataset.originalText ||= signupBtn.textContent; signupBtn.textContent = "Creating account…"; }
   try {
-    const username = getUsernameFromEmail(email);  
-
-    await account.create(  
-      Appwrite.ID.unique(),  
-      email,  
-      password,  
-      username  
-    );  
-
-    await account.createEmailSession(email, password);  
-
-    await account.createVerification(
-      new URL("verify.html", window.location.href).href
-    );  
-      
-    window.location.href = "verifyInfo.html";  
-
+    const username = getUsernameFromEmail(email);
+    await account.create(Appwrite.ID.unique(), email, password, username);
+    accountCreated = true;
+    await account.createEmailSession(email, password);
+    sessionCreated = true;
+    await account.createVerification(new URL("verify.html", window.location.href).href);
+    window.location.replace("verifyInfo.html");
   } catch (err) {
     console.error("SIGNUP ERROR:", err);
-    showToast(err.message || "Could not create your account. Please try again.", "error");
+    // Account creation and email delivery are separate operations. If the
+    // account/session exists but verification email creation failed, send the
+    // user to the resend-verification screen instead of leaving a dead-end.
+    if (sessionCreated) {
+      showToast("Your account was created, but we couldn't send the verification email. You can request another one on the next screen.", "warning");
+      setTimeout(() => window.location.replace("verifyInfo.html"), 900);
+    } else if (accountCreated) {
+      showToast("Your account was created. Log in to request the verification email again.", "warning");
+    } else {
+      showToast(err.message || "Could not create your account. Please try again.", "error");
+    }
   } finally {
     window.__xredroSignupInFlight = false;
     if (signupBtn) { signupBtn.disabled = false; signupBtn.textContent = signupBtn.dataset.originalText || "Create account"; }
@@ -208,49 +210,89 @@ async function ensureUserProvisioned(user) {
   if (!user || !user.$id || !user.emailVerification) return;
 
   const now = new Date();
-  let profileExists = false;
-  try { await databases.getDocument(DB_ID, USERS, user.$id); profileExists = true; } catch (_) {}
-
-  if (!profileExists) {
+  let profile = null;
+  try {
+    profile = await databases.getDocument(DB_ID, USERS, user.$id);
+  } catch (readError) {
     try {
-      await databases.createDocument(DB_ID, USERS, user.$id, {
-        userId: user.$id, email: user.email, username: user.name || user.email.split("@")[0],
-        theme: "light", accountStatus: "active"
+      profile = await databases.createDocument(DB_ID, USERS, user.$id, {
+        userId: user.$id,
+        email: user.email,
+        username: user.name || user.email.split("@")[0],
+        theme: "light",
+        accountStatus: "active",
+        trialUsed: false
       });
-    } catch (err) {
-      // A parallel login/verification tab may have created it already.
-      try { await databases.getDocument(DB_ID, USERS, user.$id); } catch (_) { throw err; }
+    } catch (createError) {
+      // Handle two tabs completing verification/login at nearly the same time.
+      try { profile = await databases.getDocument(DB_ID, USERS, user.$id); }
+      catch (_) { throw createError; }
     }
   }
 
-  let formExists = false;
-  try { await databases.getDocument(DB_ID, FORMS, user.$id); formExists = true; } catch (_) {}
-  if (!formExists) {
+  // Create a default order form once. An empty product list is safer than
+  // publishing a fake "Sample Product" at a zero price for new sellers.
+  try {
+    await databases.getDocument(DB_ID, FORMS, user.$id);
+  } catch (formReadError) {
     const defaultFields = [
-      { id: crypto.randomUUID(), type: "text", label: "Full Name", options: [], products: [] },
-      { id: crypto.randomUUID(), type: "text", label: "Phone Number", options: [], products: [] },
-      { id: crypto.randomUUID(), type: "textarea", label: "Delivery Address or Drop-Off Point", options: [], products: [] },
-      { id: crypto.randomUUID(), type: "text", label: "City / State", options: [], products: [] },
-      { id: crypto.randomUUID(), type: "textarea", label: "Additional Notes / Requests", options: [], products: [] },
-      { id: crypto.randomUUID(), type: "product", label: "Products", options: [], products: [{ name: "Sample Product", price: "0", imageId: "", imageUrl: "" }] }
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "text", label: "Full Name", options: [], products: [] },
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "text", label: "Phone Number", options: [], products: [] },
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "textarea", label: "Delivery Address or Drop-Off Point", options: [], products: [] },
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "text", label: "City / State", options: [], products: [] },
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "textarea", label: "Additional Notes / Requests", options: [], products: [] },
+      { id: (crypto.randomUUID ? crypto.randomUUID() : Appwrite.ID.unique()), type: "product", label: "Products", options: [], products: [] }
     ];
     try {
       await databases.createDocument(DB_ID, FORMS, user.$id, {
-        userId: user.$id, title: "My Business Name", subtitle: "Welcome to X-Redro, place your order",
-        fields: defaultFields.map(f => JSON.stringify(f)), isActive: true, whatsappNumber: "", whatsappOrderRedirectEnabled: false
+        userId: user.$id,
+        title: "My Business Name",
+        subtitle: "Welcome to X-Redro, place your order",
+        fields: defaultFields.map(f => JSON.stringify(f)),
+        isActive: true,
+        whatsappNumber: "",
+        whatsappOrderRedirectEnabled: false
       });
-    } catch (err) {
-      try { await databases.getDocument(DB_ID, FORMS, user.$id); } catch (_) { throw err; }
+    } catch (createFormError) {
+      // Ignore a duplicate create from another tab, but not a real schema or
+      // permission error. Verify that the document now exists before continuing.
+      try { await databases.getDocument(DB_ID, FORMS, user.$id); }
+      catch (_) { throw createFormError; }
     }
   }
 
-  const subs = await databases.listDocuments(DB_ID, SUBS, [Appwrite.Query.equal("userId", user.$id), Appwrite.Query.limit(100)]);
-  if (!subs.documents.length) {
-    const expiry = new Date(now); expiry.setDate(expiry.getDate() + 7);
-    await databases.createDocument(DB_ID, SUBS, Appwrite.ID.unique(), {
-      userId: user.$id, plan: "trial", durationDay: 7, startsAt: now.toISOString(),
-      expiresAt: expiry.toISOString(), status: "active"
-    });
+  const subs = await databases.listDocuments(DB_ID, SUBS, [
+    Appwrite.Query.equal("userId", user.$id),
+    Appwrite.Query.limit(100)
+  ]);
+
+  const hasTrialRecord = subs.documents.some(s => String(s.plan || "").toLowerCase() === "trial");
+  if (hasTrialRecord && profile.trialUsed !== true) {
+    try { profile = await databases.updateDocument(DB_ID, USERS, user.$id, { trialUsed: true }); }
+    catch (err) { console.warn("Could not synchronize trialUsed flag:", err); }
+  }
+
+  // Never silently grant another trial if the account has already used one.
+  if (!subs.documents.length && profile.trialUsed !== true) {
+    const expiry = new Date(now);
+    expiry.setDate(expiry.getDate() + 7);
+    const trialDocumentId = `trial_${user.$id}`;
+    try {
+      await databases.createDocument(DB_ID, SUBS, trialDocumentId, {
+        userId: user.$id,
+        plan: "trial",
+        durationDay: 7,
+        startsAt: now.toISOString(),
+        expiresAt: expiry.toISOString(),
+        status: "active"
+      });
+    } catch (createTrialError) {
+      // A deterministic ID prevents parallel tabs from creating duplicate trials.
+      try { await databases.getDocument(DB_ID, SUBS, trialDocumentId); }
+      catch (_) { throw createTrialError; }
+    }
+    try { await databases.updateDocument(DB_ID, USERS, user.$id, { trialUsed: true }); }
+    catch (err) { console.warn("Trial was created, but trialUsed could not be updated:", err); }
   }
 }
 

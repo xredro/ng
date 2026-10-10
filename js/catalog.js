@@ -68,8 +68,16 @@ async function loadCatalogProducts() {
       name: safeText(p.name), price: p.price, description: safeText(p.description), imageId: p.imageId || "", imageUrl: p.imageUrl || ""
     })).filter(p => p.name || p.price || p.imageUrl || p.imageId);
     catalogProducts.forEach(product => {
-      if (!product.imageUrl && product.imageId) {
-        try { product.imageUrl = String(catalogStorage.getFileView(CATALOG_BUCKET, product.imageId)); } catch (_) {}
+      // Always rebuild the URL from the persistent Appwrite file ID. Saved
+      // imageUrl values can be stale (for example, blob: preview URLs).
+      if (product.imageId) {
+        try {
+          const view = catalogStorage.getFileView(CATALOG_BUCKET, product.imageId);
+          product.imageUrl = view && view.href ? view.href : String(view);
+        } catch (error) {
+          console.warn("Could not create Appwrite product-image URL:", product.imageId, error);
+          product.imageUrl = "";
+        }
       }
     });
     renderProductChoices();
@@ -102,8 +110,16 @@ function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight, maxLines=2) {
 function loadImage(url) {
   return new Promise(resolve => {
     if (!url) return resolve(null);
-    const img = new Image(); img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = url;
+    const img = new Image();
+    // Keep anonymous CORS enabled: catalogue images are exported from canvas,
+    // and drawing a cross-origin image without CORS would taint the canvas.
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      console.warn("Catalogue could not load a product image. Check Appwrite file read permissions and Web platform CORS:", url);
+      resolve(null);
+    };
+    img.src = url;
   });
 }
 function drawImageCover(ctx, img, x, y, w, h) {

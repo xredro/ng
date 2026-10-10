@@ -638,7 +638,8 @@ async function uploadProductImage(fieldId, index, input) {
   const uploaded = await storage.createFile(
     PRODUCT_IMAGES_BUCKET,
     Appwrite.ID.unique(),
-    file
+    file,
+    [Appwrite.Permission.read(Appwrite.Role.any())]
   );
 
   const previewUrl = storage.getFileView(
