@@ -19,20 +19,20 @@
 
     <div class="field">
       <label>Email</label>
-      <input type="email" id="signupEmail">
+      <input type="email" id="signupEmail" name="email" autocomplete="email" inputmode="email">
     </div>
 
     <div class="field">
       <label>Password</label>
       <div class="input-wrapper">
-        <input type="password" id="signupPassword">
+        <input type="password" id="signupPassword" name="new-password" autocomplete="new-password">
         <div class="toggle-password" onclick="togglePassword('signupPassword', this)">
           <img src="assets/eye.svg">
         </div>
       </div>
     </div>
 
-    <button class="primary-btn" onclick="signup()">Create account</button>
+    <button type="button" class="primary-btn" onclick="signup()">Create account</button>
 
     <div class="divider"><a href="login.html"><span>Already created an account</span></a></div>
 
