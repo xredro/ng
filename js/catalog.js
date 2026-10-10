@@ -8,6 +8,7 @@ const catalogDb = new Appwrite.Databases(catalogClient);
 const catalogStorage = new Appwrite.Storage(catalogClient);
 let catalogProducts = [];
 let generatedCatalogs = [];
+let catalogImageFailures = 0;
 
 const byId = id => document.getElementById(id);
 function formatNairaCatalog(value) {
@@ -15,6 +16,9 @@ function formatNairaCatalog(value) {
   return Number.isFinite(amount) ? `₦${amount.toLocaleString("en-NG")}` : String(value || "");
 }
 function safeText(value) { return String(value ?? "").trim(); }
+function appwriteProductImageUrl(fileId) {
+  return `https://nyc.cloud.appwrite.io/v1/storage/buckets/${CATALOG_BUCKET}/files/${encodeURIComponent(fileId)}/view?project=695981480033c7a4eb0d`;
+}
 function showCatalogMessage(message, isError=false) {
   const state = byId("productState");
   state.textContent = message;
@@ -44,7 +48,7 @@ function renderProductChoices() {
     checkbox.addEventListener("change", () => { label.classList.toggle("selected", checkbox.checked); updateSelectionCount(); });
     let imageNode;
     if (product.imageUrl) {
-      imageNode = document.createElement("img"); imageNode.src = product.imageUrl; imageNode.alt = ""; imageNode.loading = "lazy";
+      imageNode = document.createElement("img"); imageNode.crossOrigin = "anonymous"; imageNode.src = product.imageUrl; imageNode.alt = product.name || "Product photo"; imageNode.loading = "lazy";
       imageNode.onerror = () => { const placeholder = document.createElement("span"); placeholder.className = "catalog-thumb-placeholder"; placeholder.textContent = "□"; imageNode.replaceWith(placeholder); };
     } else {
       imageNode = document.createElement("span"); imageNode.className = "catalog-thumb-placeholder"; imageNode.textContent = "□";
@@ -65,19 +69,19 @@ async function loadCatalogProducts() {
     const form = await catalogDb.getDocument(CATALOG_DB_ID, CATALOG_FORMS, user.$id);
     const fields = Array.isArray(form.fields) ? form.fields.map(item => { try { return typeof item === "string" ? JSON.parse(item) : item; } catch (_) { return null; } }).filter(Boolean) : [];
     catalogProducts = fields.filter(f => f.type === "product" && Array.isArray(f.products)).flatMap(f => f.products).map(p => ({
-      name: safeText(p.name), price: p.price, description: safeText(p.description), imageId: p.imageId || "", imageUrl: p.imageUrl || ""
+      name: safeText(p.name), price: p.price, description: safeText(p.description),
+      imageId: p.imageId || p.imageID || p.fileId || "", imageUrl: safeText(p.imageUrl || p.imageURL || "")
     })).filter(p => p.name || p.price || p.imageUrl || p.imageId);
     catalogProducts.forEach(product => {
-      // Always rebuild the URL from the persistent Appwrite file ID. Saved
-      // imageUrl values can be stale (for example, blob: preview URLs).
-      if (product.imageId) {
-        try {
-          const view = catalogStorage.getFileView(CATALOG_BUCKET, product.imageId);
-          product.imageUrl = view && view.href ? view.href : String(view);
-        } catch (error) {
-          console.warn("Could not create Appwrite product-image URL:", product.imageId, error);
-          product.imageUrl = "";
-        }
+      // The customer form uses the saved imageUrl directly. Preserve that same
+      // URL when valid; replace only temporary blob/data URLs with the durable
+      // Appwrite file-view URL built from the saved file ID.
+      const temporaryUrl = /^(blob:|data:)/i.test(product.imageUrl);
+      if ((!product.imageUrl || temporaryUrl) && product.imageId) {
+        product.imageUrl = appwriteProductImageUrl(product.imageId);
+      }
+      if (product.imageUrl && !/^https?:\/\//i.test(product.imageUrl) && product.imageId) {
+        product.imageUrl = appwriteProductImageUrl(product.imageId);
       }
     });
     renderProductChoices();
@@ -116,7 +120,8 @@ function loadImage(url) {
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = () => {
-      console.warn("Catalogue could not load a product image. Check Appwrite file read permissions and Web platform CORS:", url);
+      catalogImageFailures++;
+      console.warn("Catalogue could not load a product image. Verify that the Appwrite file has read permission for Any, and that xredro.github.io is registered as a Web platform:", url);
       resolve(null);
     };
     img.src = url;
@@ -168,6 +173,7 @@ async function generateCatalog() {
     const perImage=Number(byId("perImage").value); const format=byId("catalogFormat").value;
     const totalPages=Math.ceil(products.length/perImage); const shop=safeText(byId("shopName").value)||"My Shop"; const title=safeText(byId("catalogTitle").value)||"Available Products";
     generatedCatalogs=[];
+    catalogImageFailures = 0;
     for(let page=0;page<totalPages;page++){
       const batch=products.slice(page*perImage,(page+1)*perImage);
       const rendered=await renderCatalogPage(batch,page+1,totalPages,format,shop,title);
@@ -176,6 +182,9 @@ async function generateCatalog() {
     renderGeneratedResults(format);
     byId("resultsDescription").textContent=`${products.length} products · ${generatedCatalogs.length} image${generatedCatalogs.length===1?"":"s"}`;
     byId("resultsSection").classList.remove("hidden");
+    if (catalogImageFailures > 0) {
+      showToast(`${catalogImageFailures} product photo(s) could not be embedded. Check Appwrite file read permissions and add xredro.github.io under Appwrite Settings → Platforms.`, "warning");
+    }
     byId("resultsSection").scrollIntoView({behavior:"smooth",block:"start"});
   } catch(err) { console.error(err); showToast(err.message||"Catalogue generation failed. Try fewer products or another format.","error"); }
   finally { btn.disabled=false; btn.textContent="Generate catalogue images"; }

@@ -7,10 +7,8 @@ const functions = new Appwrite.Functions(client);
 
 // Replace this with the Function ID created in Appwrite Console.
 const ADMIN_FUNCTION_ID = "REPLACE_WITH_APPWRITE_FUNCTION_ID";
-// UI convenience gate only. Actual execution access must be restricted to the Appwrite Admins Team.
-const ADMIN_EMAILS = [
-  "REPLACE_WITH_YOUR_ADMIN_EMAIL@example.com"
-].filter(v => !v.startsWith("REPLACE_WITH_")).map(v => v.toLowerCase());
+// Authorization is enforced by Appwrite Function Execute permissions (X-Redro Admins Team),
+// not by a client-side email allowlist that can be edited in the browser.
 
 async function runAdminFunction(payload) {
   if (!ADMIN_FUNCTION_ID || ADMIN_FUNCTION_ID.startsWith("REPLACE_WITH_")) {
@@ -40,13 +38,11 @@ async function initAdmin() {
     return;
   }
 
-  const allowed = ADMIN_EMAILS.includes(String(currentAdmin.email || "").toLowerCase());
-  if (!allowed) {
-    state.innerHTML = `<strong>Access denied</strong><p>This account is not authorised to use subscription administration.</p>`;
-    return;
-  }
-
-  state.classList.add("hidden");
+  // Show the admin UI to a signed-in user; the Appwrite Function itself must
+  // be configured to allow execution only by the X-Redro Admins Team. This avoids
+  // the previous placeholder email allowlist making every real admin see Access denied.
+  state.innerHTML = `<strong>Signed in as ${escapeHtml(currentAdmin.email || "your Appwrite account")}</strong><p>Admin actions are protected by Appwrite Function permissions. Only accounts in the <b>X-Redro Admins</b> Team should be allowed to complete operations.</p>`;
+  state.classList.remove("hidden");
   document.getElementById("adminPanel").classList.remove("hidden");
 }
 
