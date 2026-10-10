@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Catalogue | X-Redro</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/gomart-visual.css">
+  <link rel="stylesheet" href="css/catalog.css">
+  <link rel="stylesheet" href="css/alert.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+</head>
+<body>
+<script>if (localStorage.getItem("theme")) document.body.dataset.theme = localStorage.getItem("theme");</script>
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo-wrap" href="index.html" aria-label="X-Redro home"><img src="assets/logo-light.png" class="logo-img logo-light" alt="X-Redro"><img src="assets/logo-dark.png" class="logo-img logo-dark" alt="X-Redro"></a>
+    <div class="nav-links desktop-only">
+      <a href="dashboard.html">Dashboard</a><a href="orders.html">Orders</a><a class="active" href="catalog.html">Catalogue</a><a href="indexF.html">Form Builder</a><a href="settings.html">Settings</a>
+    </div>
+    <button class="burger" type="button" aria-label="Open menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </div>
+  <div class="mobile-menu"><a href="dashboard.html">Dashboard</a><a href="orders.html">Orders</a><a class="active" href="catalog.html">Catalogue</a><a href="indexF.html">Form Builder</a><a href="settings.html">Settings</a></div>
+</nav>
+<main class="catalog-page">
+  <header class="catalog-heading">
+    <div><p class="eyebrow">PRODUCT TO IMAGE</p><h1>Create a catalogue</h1><p class="catalog-intro">Turn your saved products into clean catalogue images you can upload to WhatsApp or social media.</p></div>
+    <a class="secondary-link" href="indexF.html">Manage products ↗</a>
+  </header>
+
+  <section class="catalog-panel">
+    <div class="panel-heading"><div><h2>1. Choose products</h2><p>Select the products you want customers to see.</p></div><div class="selection-actions"><button type="button" id="selectAllBtn" class="text-button">Select all</button><span id="selectedCount">0 selected</span></div></div>
+    <div id="productState" class="product-state">Loading your products…</div>
+    <div id="productGrid" class="catalog-product-grid"></div>
+  </section>
+
+  <section class="catalog-panel options-panel">
+    <div class="panel-heading"><div><h2>2. Catalogue settings</h2><p>Keep it simple and readable on a phone.</p></div></div>
+    <div class="catalog-settings-grid">
+      <label>Shop name<input id="shopName" type="text" maxlength="70" placeholder="Your shop name"></label>
+      <label>Catalogue heading<input id="catalogTitle" type="text" maxlength="70" value="Available Products" placeholder="e.g. October Pre-order"></label>
+      <label>Image format<select id="catalogFormat"><option value="status">WhatsApp Status · Portrait</option><option value="feed">Social post · Portrait</option><option value="square">Square image</option></select></label>
+      <label>Products per image<select id="perImage"><option value="4">4 products · larger cards</option><option value="6" selected>6 products · balanced</option><option value="9">9 products · compact</option></select></label>
+    </div>
+    <div class="catalog-actions"><button type="button" id="generateBtn" class="primary-action">Generate catalogue images</button><span class="action-hint">Large catalogues are split into numbered images automatically.</span></div>
+  </section>
+
+  <section id="resultsSection" class="catalog-panel results-panel hidden">
+    <div class="panel-heading"><div><h2>3. Your catalogue</h2><p id="resultsDescription">Preview and download the generated images.</p></div><button id="downloadAllBtn" class="primary-action" type="button">Download all (.zip)</button></div>
+    <div id="catalogResults" class="catalog-results"></div>
+  </section>
+</main>
+<div id="toast-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="js/catalog.js"></script>
+<script src="js/alert.js"></script>
+</body>
+</html>
