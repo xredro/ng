@@ -6,20 +6,110 @@ const account = new Appwrite.Account(client);
 const functions = new Appwrite.Functions(client);
 
 // Replace this with the Function ID created in Appwrite Console.
-const ADMIN_FUNCTION_ID = "6aca4fc1003185200a1c";
+const ADMIN_FUNCTION_ID = "REPLACE_WITH_APPWRITE_FUNCTION_ID";
 // Authorization is enforced by Appwrite Function Execute permissions (X-Redro Admins Team),
 // not by a client-side email allowlist that can be edited in the browser.
 
+function makeAdminError(message, diagnostics = {}) {
+  const err = new Error(message);
+  err.adminDiagnostics = diagnostics;
+  return err;
+}
+
+function getAppwriteErrorDetails(err) {
+  return {
+    errorType: err?.type || err?.name || "UnknownError",
+    errorCode: err?.code ?? null,
+    message: err?.message || String(err),
+    response: typeof err?.response === "string" ? err.response : undefined
+  };
+}
+
 async function runAdminFunction(payload) {
+  const action = String(payload?.action || "unknown");
   if (!ADMIN_FUNCTION_ID || ADMIN_FUNCTION_ID.startsWith("REPLACE_WITH_")) {
-    throw new Error("Admin setup is incomplete: add your Appwrite Function ID in js/admin.js.");
+    throw makeAdminError("Admin Function ID has not been configured.", {
+      stage: "Website configuration",
+      action,
+      likelyCause: "js/admin.js still contains the placeholder Function ID.",
+      fix: "Open Appwrite Console → Functions → subscription-admin, copy its Function ID, and replace ADMIN_FUNCTION_ID in js/admin.js.",
+      functionIdConfigured: false
+    });
   }
-  const execution = await functions.createExecution(ADMIN_FUNCTION_ID, JSON.stringify(payload), false, "/", "POST");
+
+  let execution;
+  try {
+    execution = await functions.createExecution(ADMIN_FUNCTION_ID, JSON.stringify(payload), false, "/", "POST");
+  } catch (err) {
+    const appwrite = getAppwriteErrorDetails(err);
+    throw makeAdminError("Appwrite rejected the Function execution request.", {
+      stage: "Calling Appwrite Function",
+      action,
+      functionId: ADMIN_FUNCTION_ID,
+      likelyCause: "Check the Function ID, signed-in session, Function Execute permissions, deployment status, and Appwrite connectivity.",
+      ...appwrite
+    });
+  }
+
+  const statusCode = execution.responseStatusCode ?? execution.statusCode ?? null;
+  const executionId = execution.$id || execution.id || null;
   let result;
-  try { result = JSON.parse(execution.responseBody || "{}"); }
-  catch (_) { throw new Error("The admin function returned an unreadable response. Check its Appwrite logs."); }
-  if (!result.ok) throw new Error(result.message || "Admin operation failed.");
+  try {
+    result = JSON.parse(execution.responseBody || "{}");
+  } catch (_) {
+    throw makeAdminError("The Function returned a response that was not valid JSON.", {
+      stage: "Reading Function response",
+      action,
+      functionId: ADMIN_FUNCTION_ID,
+      executionId,
+      statusCode,
+      executionStatus: execution.status || null,
+      responseBody: String(execution.responseBody || "(empty response)").slice(0, 5000),
+      likelyCause: "The Function may have crashed, returned a non-JSON response, or failed before its response handler completed. Check this execution in Appwrite Function logs."
+    });
+  }
+
+  if (!result.ok || (statusCode !== null && Number(statusCode) >= 400)) {
+    const serverDiag = result.diagnostic && typeof result.diagnostic === "object" ? result.diagnostic : {};
+    throw makeAdminError(result.message || `The Function returned HTTP ${statusCode || "error"}.`, {
+      stage: serverDiag.stage || "Appwrite Function response",
+      action,
+      functionId: ADMIN_FUNCTION_ID,
+      executionId,
+      statusCode,
+      executionStatus: execution.status || null,
+      serverDiagnostic: serverDiag,
+      responseBody: JSON.stringify(result, null, 2).slice(0, 5000),
+      likelyCause: serverDiag.likelyCause || "Use the stage and diagnostic information above, then inspect this execution's logs in Appwrite."
+    });
+  }
   return result;
+}
+
+function showAdminError(title, err, action) {
+  console.error("X-Redro admin operation failed", { action, error: err, diagnostics: err?.adminDiagnostics });
+  const modal = document.getElementById("adminErrorModal");
+  if (!modal) {
+    showToast(`${title}: ${err?.message || "Unknown error"}`, "error");
+    return;
+  }
+  const diagnostics = err?.adminDiagnostics || {
+    stage: "Browser-side operation",
+    action,
+    errorType: err?.name || "Error",
+    message: err?.message || String(err),
+    likelyCause: "Open the browser developer console and Appwrite Function execution logs for more information."
+  };
+  document.getElementById("adminErrorTitle").textContent = title;
+  document.getElementById("adminErrorSummary").textContent = err?.message || "Unknown error";
+  document.getElementById("adminErrorDetails").textContent = JSON.stringify({
+    action,
+    timestamp: new Date().toISOString(),
+    page: window.location.href,
+    ...diagnostics
+  }, null, 2);
+  modal.classList.remove("hidden");
+  document.getElementById("closeAdminError").focus();
 }
 
 let currentAdmin = null;
@@ -63,8 +153,7 @@ async function findUser() {
     preview.innerHTML = `<strong>${escapeHtml(selectedUser.username || email)}</strong><span>${escapeHtml(email)} · User ID ${escapeHtml(selectedUser.userId)}</span>`;
     preview.classList.remove("hidden");
   } catch (err) {
-    console.error(err);
-    showToast(err.message || "Could not find that account.", "error");
+    showAdminError("Could not find customer account", err, "findUser");
   } finally {
     btn.disabled = false;
     btn.textContent = "Find account";
@@ -106,8 +195,7 @@ async function activateSubscription(event) {
     resultEl.classList.remove("hidden");
     showToast("Subscription updated successfully.", "success");
   } catch (err) {
-    console.error(err);
-    showToast(err.message || "Subscription update failed.", "error");
+    showAdminError("Subscription activation failed", err, "activate");
   } finally {
     btn.disabled = false;
     btn.textContent = "Activate subscription";
@@ -122,3 +210,28 @@ document.getElementById("planSelect").addEventListener("change", e => {
 document.getElementById("subscriptionForm").addEventListener("submit", activateSubscription);
 
 initAdmin();
+
+// Detailed diagnostic popup helpers.
+function closeAdminErrorModal() { document.getElementById("adminErrorModal").classList.add("hidden"); }
+document.getElementById("closeAdminError").addEventListener("click", closeAdminErrorModal);
+document.getElementById("closeAdminErrorBottom").addEventListener("click", closeAdminErrorModal);
+document.getElementById("copyAdminError").addEventListener("click", async () => {
+  const text = document.getElementById("adminErrorDetails").textContent;
+  const button = document.getElementById("copyAdminError");
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+  } catch (_) {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById("adminErrorDetails"));
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    button.textContent = "Select and copy";
+  }
+  setTimeout(() => { button.textContent = "Copy diagnostics"; }, 1800);
+});
+document.getElementById("adminErrorModal").addEventListener("click", event => {
+  if (event.target.id === "adminErrorModal") event.currentTarget.classList.add("hidden");
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") document.getElementById("adminErrorModal").classList.add("hidden");
+});
