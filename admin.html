@@ -62,6 +62,16 @@
   </main>
 
   <div id="toast-container"></div>
+
+  <div id="adminErrorModal" class="admin-error-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="adminErrorTitle">
+    <section class="admin-error-dialog">
+      <div class="admin-error-heading"><div><p class="eyebrow">TECHNICAL DIAGNOSTICS</p><h2 id="adminErrorTitle">Admin operation failed</h2></div><button type="button" id="closeAdminError" class="admin-error-close" aria-label="Close">×</button></div>
+      <p id="adminErrorSummary" class="admin-error-summary">The operation could not be completed.</p>
+      <p class="admin-error-help">The details below identify the stage that failed. Copy them and share them for troubleshooting. Secret keys and their values are never included.</p>
+      <pre id="adminErrorDetails" class="admin-error-details"></pre>
+      <div class="admin-error-actions"><button type="button" id="copyAdminError" class="admin-error-copy">Copy diagnostics</button><button type="button" id="closeAdminErrorBottom" class="admin-error-dismiss">Close</button></div>
+    </section>
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
   <script src="js/admin.js"></script>
   <script src="js/alert.js"></script>
