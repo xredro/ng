@@ -9,9 +9,22 @@ module.exports = async ({ req, res, log, error }) => {
     const usersCollectionId = process.env.XREDRO_USERS_COLLECTION_ID || '695c501b001d24549b03';
     const subscriptionsCollectionId = process.env.XREDRO_SUBSCRIPTIONS_COLLECTION_ID || 'subscriptions';
 
-    if (!endpoint || !projectId || !apiKey) {
-      error('Missing required Appwrite Function environment configuration.');
-      return res.json({ ok: false, message: 'Admin function is not configured. Contact the administrator.' }, 500);
+    const missingVariables = [];
+    if (!endpoint) missingVariables.push('APPWRITE_FUNCTION_API_ENDPOINT');
+    if (!projectId) missingVariables.push('APPWRITE_FUNCTION_PROJECT_ID');
+    if (!apiKey) missingVariables.push('XREDRO_ADMIN_API_KEY');
+    if (missingVariables.length) {
+      error(`Missing required environment variables: ${missingVariables.join(', ')}`);
+      return res.json({
+        ok: false,
+        message: `Required environment variables are missing: ${missingVariables.join(', ')}.`,
+        diagnostic: {
+          stage: 'Function environment configuration',
+          missingVariables,
+          likelyCause: 'One or more required variables are not available to this deployed Function. Add the missing variables in the Function Settings → Environment variables, then create a new deployment. Appwrite normally provides APPWRITE_FUNCTION_API_ENDPOINT and APPWRITE_FUNCTION_PROJECT_ID automatically; XREDRO_ADMIN_API_KEY must be added manually.',
+          fix: 'Do not share the API key value. Confirm only the variable names and redeploy the Function.'
+        }
+      }, 500);
     }
 
     const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
@@ -82,7 +95,21 @@ module.exports = async ({ req, res, log, error }) => {
 
     return res.json({ ok: false, message: 'Unknown admin action.' }, 400);
   } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    const type = err && err.type ? err.type : (err && err.name ? err.name : 'Error');
+    const code = err && err.code !== undefined ? err.code : null;
     error(err && err.stack ? err.stack : String(err));
-    return res.json({ ok: false, message: 'The admin operation failed. Check the Appwrite Function logs and permissions.' }, 500);
+    return res.json({
+      ok: false,
+      message: `The Function failed during a database or server operation: ${message}`,
+      diagnostic: {
+        stage: 'Function server/database operation',
+        errorType: type,
+        errorCode: code,
+        message,
+        likelyCause: 'Check the API key scopes, database and collection IDs, collection permissions, document attributes, and the Function execution log for this request.',
+        executionLog: 'Appwrite Console → Functions → subscription-admin → Executions → select the matching execution.'
+      }
+    }, 500);
   }
 };
