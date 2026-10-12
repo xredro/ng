@@ -717,3 +717,68 @@
   .verify-live-candidate small,
   .verify-live-candidate em { grid-column: auto; grid-row: auto; }
 }
+
+
+/* Manual PDF-first payment verification workspace */
+.verify-workspace-panel { width:96vw; max-width:1400px; height:94vh; max-height:94vh; padding:18px; overflow:hidden; display:flex; flex-direction:column; box-sizing:border-box; }
+#verifyBody { min-height:0; height:100%; display:flex; flex-direction:column; gap:10px; overflow:hidden; color:var(--text-primary); }
+.verify-start-screen { max-width:760px; width:100%; margin:auto; }
+.verify-privacy-note,.verify-workspace-footnote { font-size:11px; color:var(--text-secondary); line-height:1.45; }
+.verify-loader { width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--text-primary); border-radius:50%; animation:verifySpin .8s linear infinite; margin:24px auto; }
+@keyframes verifySpin { to { transform:rotate(360deg); } }
+.verify-workspace-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding-right:30px; }
+.verify-workspace-head h2 { margin:0 0 3px; }
+.verify-workspace-head p { margin:0; font-size:12px; color:var(--text-secondary); }
+.verify-progress-track { flex:1 1 100%; height:6px; border-radius:99px; overflow:hidden; background:var(--border); }
+.verify-progress-track span { display:block; height:100%; background:#238653; transition:width .2s; }
+.verify-order-summary { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--bg); }
+.verify-order-summary > div { min-width:90px; flex:1 1 auto; }
+.verify-order-summary small,.verify-order-summary strong { display:block; }
+.verify-order-summary small { font-size:10px; color:var(--text-secondary); margin-bottom:3px; }
+.verify-order-summary strong { font-size:12px; overflow-wrap:anywhere; }
+.verify-date-window { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--text-secondary); }
+.verify-date-window select { border:1px solid var(--border); border-radius:8px; padding:7px; background:var(--surface-elevated); color:var(--text-primary); }
+.verify-match-status { padding:8px 11px; border-radius:9px; background:rgba(35,134,83,.11); color:var(--text-primary); font-size:12px; font-weight:700; }
+.verify-match-status.no-match { background:rgba(204,125,27,.13); }
+.verify-pdf-toolbar { display:flex; align-items:center; justify-content:center; gap:7px; flex-wrap:wrap; }
+.verify-pdf-toolbar button { border:1px solid var(--border); border-radius:8px; padding:7px 10px; background:var(--surface-elevated); color:var(--text-primary); font-size:11px; cursor:pointer; }
+.verify-pdf-toolbar button:disabled { opacity:.4; cursor:not-allowed; }
+.verify-pdf-toolbar span { font-size:11px; color:var(--text-secondary); }
+.verify-pdf-shell { flex:1 1 auto; min-height:140px; overflow:auto; border:1px solid var(--border); border-radius:10px; background:#52565a; overscroll-behavior:contain; }
+.verify-pdf-page { position:relative; margin:12px auto; background:#fff; box-shadow:0 3px 18px rgba(0,0,0,.25); }
+.verify-pdf-canvas { display:block; max-width:none; }
+.verify-pdf-highlights { position:absolute; inset:0; pointer-events:none; }
+.verify-pdf-highlight { position:absolute; background:rgba(255,214,0,.36); outline:1.5px solid rgba(210,137,0,.9); border-radius:2px; box-sizing:border-box; }
+.verify-proof-float { position:fixed; right:26px; bottom:112px; z-index:1010; border:0; border-radius:999px; padding:12px 17px; background:#16181a; color:white; box-shadow:0 5px 22px rgba(0,0,0,.25); font-size:12px; font-weight:800; cursor:pointer; }
+.verify-proof-overlay { position:fixed; inset:0; z-index:1100; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.72); padding:16px; box-sizing:border-box; }
+.verify-proof-overlay.hidden { display:none; }
+.verify-proof-card { position:relative; width:min(620px,94vw); max-height:88vh; overflow:auto; border-radius:16px; padding:18px; background:var(--surface-elevated,#fff); color:var(--text-primary,#222); box-sizing:border-box; text-align:center; }
+.verify-proof-card h3 { margin:2px 30px 12px; font-size:16px; }
+.verify-proof-card img { display:block; max-width:100%; max-height:66vh; object-fit:contain; margin:0 auto; border-radius:8px; background:#f4f4f4; }
+.verify-proof-card p { font-size:11px; color:var(--text-secondary); }
+.verify-proof-close { position:absolute; right:10px; top:10px; border:0; width:30px; height:30px; border-radius:50%; background:var(--bg); color:var(--text-primary); font-size:22px; cursor:pointer; }
+.verify-workspace-actions { display:flex; gap:9px; align-items:center; padding-top:4px; }
+.verify-action-primary,.verify-action-secondary { border:0; border-radius:10px; padding:12px 15px; font-size:12px; font-weight:800; cursor:pointer; }
+.verify-action-primary { flex:1 1 auto; background:#167447; color:#fff; }
+.verify-action-secondary { background:var(--bg); color:var(--text-primary); border:1px solid var(--border); }
+.verify-action-primary:disabled { opacity:.45; cursor:not-allowed; }
+.verify-workspace-footnote { margin:0; text-align:center; }
+.verify-complete { max-width:700px; width:100%; margin:auto; }
+.verify-complete .verify-count-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:20px 0; }
+.verify-complete .verify-count-grid > div { background:var(--bg); padding:15px 8px; border-radius:10px; text-align:center; }
+.verify-complete .verify-count-grid strong,.verify-complete .verify-count-grid span { display:block; }
+.verify-complete .verify-count-grid strong { font-size:24px; }
+.verify-complete .verify-count-grid span { font-size:11px; color:var(--text-secondary); }
+@media(max-width:700px) {
+  .verify-workspace-panel { width:100vw; height:100dvh; max-height:100dvh; border-radius:0; padding:12px 10px 10px; }
+  .verify-order-summary { gap:8px; padding:9px; }
+  .verify-order-summary > div { min-width:calc(50% - 10px); }
+  .verify-pdf-shell { min-height:120px; }
+  .verify-pdf-page { margin:7px; }
+  .verify-pdf-toolbar { gap:5px; }
+  .verify-pdf-toolbar button { padding:7px 8px; }
+  .verify-proof-float { right:15px; bottom:110px; padding:11px 14px; }
+  .verify-workspace-actions { position:sticky; bottom:0; padding:8px 0 0; background:var(--surface-elevated); }
+  .verify-action-primary,.verify-action-secondary { padding:11px 9px; font-size:11px; }
+  .verify-workspace-footnote { font-size:10px; }
+}

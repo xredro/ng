@@ -799,3 +799,16 @@ body {
     width: 100%;
   }
 }
+
+
+/* Required payment verification details on customer checkout */
+.payment-details-fields { margin: 0 0 var(--space-4); }
+.payment-meta-group { margin: 0 0 14px; text-align: left; }
+.payment-meta-group label { display:block; margin-bottom:6px; font-size:13px; font-weight:700; }
+.payment-meta-group input { box-sizing:border-box; width:100%; min-height:44px; padding:11px 12px; border:1px solid var(--border, #d8dce2); border-radius:10px; background:var(--surface, #fff); color:var(--text, #20242a); font:inherit; }
+.payment-meta-group small { display:block; margin-top:5px; font-size:11px; line-height:1.45; opacity:.72; }
+.required-mark { color:#c62828; }
+.payment-proof-preview { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+.payment-proof-preview:empty { display:none; }
+.payment-proof-preview-image { display:block; max-width:160px; max-height:190px; width:auto; height:auto; object-fit:contain; border-radius:10px; border:1px solid rgba(120,120,120,.25); background:#fff; box-shadow:0 3px 12px rgba(0,0,0,.08); }
+.payment-proof-selected-label { font-size:12px; font-weight:700; opacity:.8; }
