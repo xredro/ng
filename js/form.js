@@ -92,10 +92,39 @@ function buildRawFormData() {
     }
   });
 
+  const paymentAccountName = document.getElementById("paymentAccountName");
+  const datePaid = document.getElementById("datePaid");
+  if (paymentAccountName && paymentAccountName.value.trim()) {
+    data.push({ label: "Name on payment", type: "payment_account_name", value: paymentAccountName.value.trim() });
+  }
+  if (datePaid && datePaid.value) {
+    data.push({ label: "Date paid", type: "payment_date", value: datePaid.value });
+  }
+
   return data;
 }
 
 function validateFormInputs() {
+  const paymentAccountName = document.getElementById("paymentAccountName");
+  if (paymentAccountName && !paymentAccountName.value.trim()) {
+    showToast("Please enter the name shown on the payment", "warning");
+    paymentAccountName.focus();
+    return false;
+  }
+  const datePaid = document.getElementById("datePaid");
+  if (datePaid && !datePaid.value) {
+    showToast("Please select the date you paid", "warning");
+    datePaid.focus();
+    return false;
+  }
+  const today = new Date();
+  const todayLocal = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  if (datePaid && datePaid.value > todayLocal) {
+    showToast("Date paid cannot be in the future", "warning");
+    datePaid.focus();
+    return false;
+  }
+
   for (const field of fields) {
     if (field.type === "product") continue;
 
@@ -415,8 +444,33 @@ EVENT LISTENERS / TRIGGERS
 document.addEventListener("change", e => {
   if (e.target.id === "paymentProof") {
     const text = document.querySelector(".upload-text");
-    if (e.target.files.length) {
-      text.innerText = e.target.files[0].name;
+    const preview = document.getElementById("paymentProofPreview");
+    if (preview) {
+      preview.innerHTML = "";
+      if (e.target.files && e.target.files.length) {
+        const file = e.target.files[0];
+        if (file.type && !file.type.startsWith("image/")) {
+          showToast("Please choose an image file for payment proof", "warning");
+          e.target.value = "";
+          if (text) text.innerText = "Upload payment proof";
+          return;
+        }
+        const image = document.createElement("img");
+        image.className = "payment-proof-preview-image";
+        image.alt = "Selected payment proof preview";
+        image.src = URL.createObjectURL(file);
+        image.onload = () => URL.revokeObjectURL(image.src);
+        preview.appendChild(image);
+        const status = document.createElement("span");
+        status.className = "payment-proof-selected-label";
+        status.textContent = "Payment image selected";
+        preview.appendChild(status);
+        if (text) text.innerText = "Change payment image";
+      } else if (text) {
+        text.innerText = "Upload payment proof";
+      }
+    } else if (text && e.target.files.length) {
+      text.innerText = "Payment image selected";
     }
   }
 });

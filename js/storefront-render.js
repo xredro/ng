@@ -232,6 +232,26 @@ function storefrontField(field, opts) {
   return html;
 }
 
+/* ---------------- built-in payment verification details ---------------- */
+function storefrontPaymentDetails(opts) {
+  if (!opts.live) return "";
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  return `
+    <div class="payment-details-fields">
+      <div class="form-group payment-meta-group">
+        <label for="paymentAccountName">Name on payment <span class="required-mark">*</span></label>
+        <input id="paymentAccountName" type="text" autocomplete="name" placeholder="Name shown on your bank transfer" required>
+        <small>Enter the sender/account name shown on the payment receipt or transfer.</small>
+      </div>
+      <div class="form-group payment-meta-group">
+        <label for="datePaid">Date paid <span class="required-mark">*</span></label>
+        <input id="datePaid" type="date" max="${today}" required>
+        <small>Select the date you made the transfer.</small>
+      </div>
+    </div>`;
+}
+
 /* ---------------- full page/preview builder ---------------- */
 
 /**
@@ -271,15 +291,17 @@ function buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass, opts
             <div id="additionalFeeBox" style="display:none;"></div>
             <div>Total Cost <span id="totalCost">₦0</span></div>
           </div>
+          ${storefrontPaymentDetails(opts)}
           <div class="payment-proof">
             <label>Payment Proof Image</label>
             <label class="upload-proof">
-              <input type="file" id="paymentProof" hidden ${opts.live ? "" : "disabled"}>
+              <input type="file" id="paymentProof" accept="image/*" hidden ${opts.live ? "" : "disabled"}>
               <div class="upload-ui">
                 <span class="upload-icon">&#8593;</span>
                 <span class="upload-text">Upload payment proof</span>
               </div>
             </label>
+            <div class="payment-proof-preview" id="paymentProofPreview" aria-live="polite"></div>
           </div>
           ${sendBtn}
           <p class="powered">powered by X Redro</p>
@@ -329,15 +351,17 @@ function buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass, opts
             <div>Total Cost <span id="totalCost">₦0</span></div>
           </div>
 
+          ${storefrontPaymentDetails(opts)}
           <div class="payment-proof">
             <label>Payment Proof Image</label>
             <label class="upload-proof">
-              <input type="file" id="paymentProof" hidden ${opts.live ? "" : "disabled"}>
+              <input type="file" id="paymentProof" accept="image/*" hidden ${opts.live ? "" : "disabled"}>
               <div class="upload-ui">
                 <span class="upload-icon">&#8593;</span>
                 <span class="upload-text">Upload payment proof</span>
               </div>
             </label>
+            <div class="payment-proof-preview" id="paymentProofPreview" aria-live="polite"></div>
           </div>
 
           ${sendBtn}
