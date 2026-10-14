@@ -45,6 +45,23 @@ const CLOSE_EXPAND = `
 /* =========================
 UTILITY / HELPER FUNCTIONS
 ========================= */
+// Keep all text inserted into HTML safe and available on this page.
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function normalizedStatus(order) {
+  const value = String(order?.status ?? "").trim().toLowerCase();
+  // Older records may store the display label rather than the internal value.
+  if (value === "unpaid") return "pending";
+  return value;
+}
 /* =========================================================
    PAYMENT SYSTEM DISABLED — kept for reference, not deleted.
    The Selar-based buySubscription() flow below is commented
@@ -169,8 +186,9 @@ function getProductSummary(rawFormData, maxItems = 3) {
   const products = [];
 
   formData.forEach(f => {
-    if (f.type === "product" && Array.isArray(f.value)) {
+    if (f && f.type === "product" && Array.isArray(f.value)) {
       f.value.forEach(p => {
+        if (!p || typeof p !== "object") return;
         const name = String(p.name || "Product").trim();
         if (name) products.push(name);
       });
@@ -313,47 +331,39 @@ async function fetchOrders() {
 }
 
 function applyFilter() {
-  let result = [];
-
-  // Filter by status first
-  if (activeFilter === "all") {
-    result = allOrders;
-  } else {
-    result = allOrders.filter(o => o.status === activeFilter);
-  }
-
-  // Filter by search input (partial, case-insensitive)
-  const query = searchInput.value.trim().toLowerCase();
-  if (query) {
-    result = result.filter(order => {
-      const formData = parseFormData(order.formData);
-
-      return formData.some(f => {
-        if (f.type === "product" && Array.isArray(f.value)) {
-          return f.value.some(p => p.name.toLowerCase().includes(query));
-        } else if (typeof f.value === "string") {
-          return f.value.toLowerCase().includes(query);
-        }
-        return false;
-      });
-    });
-  }
-
-  renderOrders(result);
-
-  // Update active button highlight + live counts, matching the
-  // finalized mockup's "Unpaid 12 / Paid 7 / Delivered 5" style
+  // Update counts first so a malformed order/card cannot prevent the filters
+  // from displaying the real counts.
   const countAll = allOrders.length;
-  const countPending = allOrders.filter(o => o.status === "pending").length;
-  const countPaid = allOrders.filter(o => o.status === "paid").length;
-  const countDelivered = allOrders.filter(o => o.status === "delivered").length;
+  const countPending = allOrders.filter(o => normalizedStatus(o) === "pending").length;
+  const countPaid = allOrders.filter(o => normalizedStatus(o) === "paid").length;
+  const countDelivered = allOrders.filter(o => normalizedStatus(o) === "delivered").length;
 
   document.querySelectorAll(".filters button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.filter === activeFilter);
     const base = { all: "All", pending: "Unpaid", paid: "Paid", delivered: "Delivered" }[btn.dataset.filter];
     const count = { all: countAll, pending: countPending, paid: countPaid, delivered: countDelivered }[btn.dataset.filter];
-    btn.textContent = `${base} ${count}`;
+    if (base) btn.textContent = `${base} ${count ?? 0}`;
   });
+
+  let result = activeFilter === "all"
+    ? [...allOrders]
+    : allOrders.filter(o => normalizedStatus(o) === activeFilter);
+
+  const query = String(searchInput?.value || "").trim().toLowerCase();
+  if (query) {
+    result = result.filter(order => {
+      const formData = parseFormData(order?.formData);
+      return formData.some(f => {
+        if (!f) return false;
+        if (f.type === "product" && Array.isArray(f.value)) {
+          return f.value.some(p => String(p?.name || "").toLowerCase().includes(query));
+        }
+        return typeof f.value === "string" && f.value.toLowerCase().includes(query);
+      });
+    });
+  }
+
+  renderOrders(result);
 }
 
 async function updateStatus(id, status) {
@@ -482,6 +492,7 @@ function getPaidProductTotals() {
       parseFormData(order.formData).forEach(field => {
         if (field.type !== "product" || !Array.isArray(field.value)) return;
         field.value.forEach(product => {
+          if (!product || typeof product !== "object") return;
           const name = String(product.name || "Product").trim();
           const qty = Number(product.qty || 0);
           if (!name || !Number.isFinite(qty) || qty <= 0) return;
@@ -533,8 +544,11 @@ function renderOrders(orders) {
   }
 
   orders.forEach(order => {
+    try {
+    if (!order || typeof order !== "object") return;
     const card = document.createElement("div");
     card.className = "order-card";
+    const status = normalizedStatus(order) || "pending";
 
     const summary = getProductSummary(order.formData);
 
@@ -548,9 +562,8 @@ function renderOrders(orders) {
 
     card.innerHTML = `
       <div class="card-header">
-        <h3>${getCardTitle(order)}</h3>
-
-        <span class="status-tag status-${order.status}">${order.status}</span>
+        <h3>${escapeHtml(getCardTitle(order))}</h3>
+        <span class="status-tag status-${escapeHtml(status)}">${escapeHtml(status)}</span>
       </div>
       
       <div class="order-summary-line">
@@ -574,7 +587,7 @@ function renderOrders(orders) {
                 <div class="order-field order-field-wide">
                   <strong>${escapeHtml(f.label || "Products")}:</strong>
                   <div class="order-products-detail">
-                    ${f.value.map(p => {
+                    ${f.value.filter(p => p && typeof p === "object").map(p => {
                       const desc = String(p.description || "").trim();
                       const price = Number(p.price || 0);
                       return `<div class="order-product-detail">
@@ -599,7 +612,7 @@ function renderOrders(orders) {
 
         <div class="order-field">
           <strong>Payment:</strong>
-          ${order.status === "pending"
+          ${status === "pending"
             ? (order.paymentProof
                 ? `<button class="view-payment-btn" onclick="viewImage('${order.paymentProof}')">View payment image</button>`
                 : `<span class="no-proof">No payment proof uploaded</span>`)
@@ -610,19 +623,19 @@ function renderOrders(orders) {
         <div class="status-progress-wrap">
           <p class="status-progress-label">Status</p>
           <div class="status-progress">
-            <span class="pstep ${order.status === "pending" ? "current" : "done"}"
+            <span class="pstep ${status === "pending" ? "current" : "done"}"
               onclick="updateStatus('${order.$id}', 'pending')">
-              <i>${order.status === "pending" ? "&#9679;" : "&#10003;"}</i>Pending
+              <i>${status === "pending" ? "&#9679;" : "&#10003;"}</i>Pending
             </span>
-            <span class="pline ${order.status === "pending" ? "" : "done"}"></span>
-            <span class="pstep ${order.status === "paid" ? "current" : (order.status === "delivered" ? "done" : "todo")}"
+            <span class="pline ${status === "pending" ? "" : "done"}"></span>
+            <span class="pstep ${status === "paid" ? "current" : (status === "delivered" ? "done" : "todo")}"
               onclick="updateStatus('${order.$id}', 'paid')">
-              <i>${order.status === "delivered" ? "&#10003;" : (order.status === "paid" ? "&#9679;" : "&#9675;")}</i>Paid
+              <i>${status === "delivered" ? "&#10003;" : (status === "paid" ? "&#9679;" : "&#9675;")}</i>Paid
             </span>
-            <span class="pline ${order.status === "delivered" ? "done" : ""}"></span>
-            <span class="pstep ${order.status === "delivered" ? "current" : "todo"}"
+            <span class="pline ${status === "delivered" ? "done" : ""}"></span>
+            <span class="pstep ${status === "delivered" ? "current" : "todo"}"
               onclick="updateStatus('${order.$id}', 'delivered')">
-              <i>${order.status === "delivered" ? "&#9679;" : "&#9675;"}</i>Delivered
+              <i>${status === "delivered" ? "&#9679;" : "&#9675;"}</i>Delivered
             </span>
           </div>
         </div>
@@ -630,6 +643,10 @@ function renderOrders(orders) {
     `;
 
     ordersList.appendChild(card);
+    } catch (error) {
+      console.error("Could not render an order card:", order?.$id, error);
+      // Continue rendering other orders instead of breaking the whole filter.
+    }
   });
 }
 
