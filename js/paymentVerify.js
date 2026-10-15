@@ -10,7 +10,7 @@ let verifyWorkspace = null;
 function createVerifyWorkspaceState() {
   return { pdf:null, fileBuffer:null, pages:[], orders:[], currentIndex:0, currentCandidateIndex:0, viewPage:1, manualCandidate:null, manualOrderId:null,
     candidatesByOrder:new Map(), reviewed:new Set(), skipped:new Set(), usedTransactions:new Set(),
-    sellerId:null, zoom:1.15, renderToken:0, proofOpen:false, dateWindow:2, busy:false };
+    sellerId:null, zoom:1, baseFitScale:1, renderToken:0, proofOpen:false, dateWindow:2, busy:false, resizeTimer:null };
 }
 function ensureVerifyOverlay() {
   if (document.getElementById('verifyOverlay')) return;
@@ -194,17 +194,19 @@ function renderVerifyViewer() {
   state.viewPage=candidate?.pageNo||state.viewPage||1;
   const fields=verifyPaymentFields(order); const reviewed=state.reviewed.size+state.skipped.size; const amount=verifyMoney(order.totalAmount);
   const pageNo=candidate?.pageNo||1;
-  body.innerHTML=`<div class="verify-workspace-head"><div><h2>Verify Payments</h2><p>Reviewed ${reviewed} of ${state.orders.length} orders</p></div><div class="verify-progress-track"><span style="width:${Math.min(100,reviewed/Math.max(1,state.orders.length)*100)}%"></span></div></div>
-    <div class="verify-order-summary"><div><small>Current order</small><strong>${verifyEscape(order.$id)}</strong></div><div><small>Customer</small><strong>${verifyEscape(verifyCustomerName(order))}</strong></div><div><small>Expected amount</small><strong>${amount===null?'Not available':'₦'+amount.toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div><div><small>Name on payment</small><strong>${verifyEscape(fields.name||'Not provided')}</strong></div><div><small>Date paid</small><strong>${verifyEscape(fields.date||'Not provided')}</strong></div>
-    <label class="verify-date-window">Date range <select id="verifyDateWindow" onchange="changeVerifyDateWindow(this.value)"><option value="0" ${state.dateWindow===0?'selected':''}>Same day</option><option value="1" ${state.dateWindow===1?'selected':''}>± 24 hours</option><option value="2" ${state.dateWindow===2?'selected':''}>± 2 days</option><option value="3" ${state.dateWindow===3?'selected':''}>± 3 days</option><option value="7" ${state.dateWindow===7?'selected':''}>± 7 days</option><option value="99" ${state.dateWindow===99?'selected':''}>Any date</option></select></label></div>
-    <div id="verifyMatchStatus" class="verify-match-status ${candidate?'':'no-match'}">${candidate?(candidate.manual?`Manual location selected · Page ${candidate.pageNo}`:`Suggested transaction ${state.currentCandidateIndex+1} of ${candidates.length} · Page ${candidate.pageNo} of ${state.pdf.numPages}`):'No likely transaction found. Browse the PDF manually or widen the date range. Click the transaction line in the PDF to select it manually.'}</div>
-    <div class="verify-pdf-toolbar"><button type="button" onclick="verifyPrevPage()">‹ Page</button><span id="verifyPageLabel">Page ${pageNo} / ${state.pdf.numPages}</span><button type="button" onclick="verifyNextPage()">Page ›</button><button type="button" onclick="changeVerifyZoom(-0.15)" aria-label="Zoom out">−</button><span>${Math.round(state.zoom*100)}%</span><button type="button" onclick="changeVerifyZoom(0.15)" aria-label="Zoom in">+</button><button type="button" onclick="verifyNextSuggestion()" ${candidates.length<2?'disabled':''}>Next suggestion</button></div>
-    <div class="verify-pdf-shell"><div id="verifyPdfPage" class="verify-pdf-page"><div class="verify-loader"></div></div></div>
-    <button class="verify-proof-float" type="button" onclick="toggleVerifyProof()">▣ View payment proof</button>
+  body.innerHTML=`<div class="verify-workspace-head"><div class="verify-title-row"><h2>Payment verification</h2><p>Reviewed ${reviewed} of ${state.orders.length}</p></div><div class="verify-progress-track"><span style="width:${Math.min(100,reviewed/Math.max(1,state.orders.length)*100)}%"></span></div></div>
+    <div class="verify-order-compact"><div><small>Order</small><strong>${verifyEscape(order.$id)}</strong></div><div><small>Customer</small><strong>${verifyEscape(verifyCustomerName(order))}</strong></div><div><small>Amount</small><strong>${amount===null?'—':'₦'+amount.toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div><button type="button" class="verify-details-toggle" onclick="toggleVerifyDetails()" aria-expanded="false" id="verifyDetailsToggle">Details ▾</button></div>
+    <div class="verify-order-details hidden" id="verifyOrderDetails"><div><small>Name on payment</small><strong>${verifyEscape(fields.name||'Not provided')}</strong></div><div><small>Date paid</small><strong>${verifyEscape(fields.date||'Not provided')}</strong></div><label class="verify-date-window">Date range <select id="verifyDateWindow" onchange="changeVerifyDateWindow(this.value)"><option value="0" ${state.dateWindow===0?'selected':''}>Same day</option><option value="1" ${state.dateWindow===1?'selected':''}>± 24 hours</option><option value="2" ${state.dateWindow===2?'selected':''}>± 2 days</option><option value="3" ${state.dateWindow===3?'selected':''}>± 3 days</option><option value="7" ${state.dateWindow===7?'selected':''}>± 7 days</option><option value="99" ${state.dateWindow===99?'selected':''}>Any date</option></select></label></div>
+    <div id="verifyMatchStatus" class="verify-match-status ${candidate?'':'no-match'}">${candidate?(candidate.manual?`Manual location selected · Page ${candidate.pageNo}`:`Suggested transaction ${state.currentCandidateIndex+1} of ${candidates.length} · Page ${candidate.pageNo} of ${state.pdf.numPages}`):'No likely transaction found. Scroll the statement and tap a transaction line to select it manually, or widen the date range in Details.'}</div>
+    <div class="verify-pdf-toolbar"><div class="verify-pdf-file-label">Bank statement · ${state.pdf.numPages} pages</div><div class="verify-pdf-controls"><button type="button" onclick="verifyPrevPage()" aria-label="Previous page">‹</button><span id="verifyPageLabel">Page ${pageNo} / ${state.pdf.numPages}</span><button type="button" onclick="verifyNextPage()" aria-label="Next page">›</button><span class="verify-toolbar-divider"></span><button type="button" onclick="changeVerifyZoom(-0.15)" aria-label="Zoom out">−</button><span id="verifyZoomLabel">Fit width</span><button type="button" onclick="changeVerifyZoom(0.15)" aria-label="Zoom in">+</button><button type="button" class="verify-fit-button" onclick="fitVerifyPdfWidth()">Fit width</button><button type="button" onclick="verifyNextSuggestion()" ${candidates.length<2?'disabled':''}>Next match</button></div></div>
+    <div class="verify-pdf-shell" id="verifyPdfShell"><div id="verifyPdfPage" class="verify-pdf-stack"><div class="verify-loader"></div></div></div>
+    <div class="verify-bottom-bar"><button class="verify-proof-float" type="button" onclick="toggleVerifyProof()">▣ Payment proof</button><div class="verify-workspace-actions"><button class="verify-action-secondary" onclick="skipVerifyOrder()">Skip</button><button class="verify-action-secondary" onclick="markVerifyNoMatch()">No match</button><button class="verify-action-primary" onclick="confirmVerifyPayment()" ${(!candidate||state.busy)?'disabled':''}>Confirm &amp; next</button></div></div>
     <div class="verify-proof-overlay hidden" id="verifyProofOverlay" onclick="if(event.target===this)toggleVerifyProof(false)"><div class="verify-proof-card"><button class="verify-proof-close" onclick="toggleVerifyProof(false)">×</button><h3>Customer payment proof</h3><img src="${verifyEscape(verifyPaymentImageUrl(order.paymentProof))}" alt="Customer payment proof"><p>Compare the receipt with the bank statement before confirming.</p></div></div>
-    <div class="verify-workspace-actions"><button class="verify-action-secondary" onclick="skipVerifyOrder()">Skip / review later</button><button class="verify-action-secondary" onclick="markVerifyNoMatch()">No match found</button><button class="verify-action-primary" onclick="confirmVerifyPayment()" ${(!candidate||state.busy)?'disabled':''}>Confirm payment &amp; next</button></div>
-    <p class="verify-workspace-footnote">Search suggestions are not proof of payment. Confirm only after checking the statement transaction and receipt.</p>`;
+    <p class="verify-workspace-footnote">Suggestions are not proof of payment. Confirm only after checking the statement transaction and receipt.</p>`;
   renderVerifyPdfPage(pageNo,candidate);
+  const shell=document.getElementById('verifyPdfShell');
+  if(shell) shell.addEventListener('scroll',handleVerifyPdfScroll,{passive:true});
+  if(!window.__xredroVerifyResizeBound){window.addEventListener('resize',scheduleVerifyPdfResize,{passive:true});window.__xredroVerifyResizeBound=true;}
 }
 function verifyCustomerName(order) {
   const data=verifyParseFormData(order.formData); const f=data.find(x=>x.type!=='product'&&x.type!=='payment_account_name'&&x.type!=='payment_date'&&typeof x.value==='string'&&x.value.trim());
@@ -212,47 +214,81 @@ function verifyCustomerName(order) {
 }
 function verifyPaymentImageUrl(id){return `https://nyc.cloud.appwrite.io/v1/storage/buckets/${VERIFY_BUCKET}/files/${encodeURIComponent(id)}/view?project=${VERIFY_PROJECT}`;}
 async function renderVerifyPdfPage(pageNo,candidate) {
-  const state=verifyWorkspace, host=document.getElementById('verifyPdfPage'); if(!host||!state?.pdf)return;
-  state.viewPage=pageNo;
+  const state=verifyWorkspace, shell=document.getElementById('verifyPdfShell'), stack=document.getElementById('verifyPdfPage');
+  if(!stack||!shell||!state?.pdf)return;
+  state.viewPage=Math.min(state.pdf.numPages,Math.max(1,pageNo||1));
   const token=++state.renderToken;
-  try{
-    const pg=state.pages[pageNo-1]; const viewport=pg.page.getViewport({scale:state.zoom});
-    const canvas=document.createElement('canvas'); canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height); canvas.className='verify-pdf-canvas';
-    const ctx=canvas.getContext('2d'); host.innerHTML=''; host.style.width=`${viewport.width}px`; host.style.minWidth=`${viewport.width}px`; host.appendChild(canvas);
-    canvas.addEventListener('click',ev=>{
-      const rect=canvas.getBoundingClientRect(); const px=(ev.clientX-rect.left)*(canvas.width/rect.width); const py=(ev.clientY-rect.top)*(canvas.height/rect.height);
-      const point=viewport.convertToPdfPoint(px,py); const nearest=pg.lines.reduce((best,line)=>!best||Math.abs(line.y-point[1])<Math.abs(best.y-point[1])?line:best,null);
-      if(!nearest)return; const activeOrder=state.orders[state.currentIndex]; const amount=verifyMoney(activeOrder?.totalAmount);
-      const manual={manual:true,pageNo,y:nearest.y,lineText:nearest.text,context:nearest.text,amount,score:0,fingerprint:['manual',pageNo,Math.round(nearest.y),verifyNormText(nearest.text)].join('|')};
-      state.manualCandidate=manual;state.manualOrderId=activeOrder?.$id||null;
-      const status=document.getElementById('verifyMatchStatus');if(status){status.classList.remove('no-match');status.textContent=`Manual location selected · Page ${pageNo}. Check this line and the receipt before confirming.`;}
-      const confirmBtn=document.querySelector('.verify-action-primary');if(confirmBtn)confirmBtn.disabled=false;
-      renderVerifyPdfPage(pageNo,manual);
-    });
-    await pg.page.render({canvasContext:ctx,viewport}).promise; if(token!==state.renderToken)return;
-    const highlights=document.createElement('div'); highlights.className='verify-pdf-highlights'; highlights.style.width=`${viewport.width}px`; highlights.style.height=`${viewport.height}px`; host.appendChild(highlights);
-    if(candidate&&candidate.pageNo===pageNo){
-      const targetY=candidate.y;
-      pg.items.forEach(item=>{
-        if(Math.abs(item.y-targetY)>5.5)return;
-        const r=viewport.convertToViewportRectangle([item.x,item.y,item.x+Math.max(item.width,3),item.y+Math.max(item.height,7)]);
-        const left=Math.min(r[0],r[2]),top=Math.min(r[1],r[3]),width=Math.max(4,Math.abs(r[2]-r[0])),height=Math.max(8,Math.abs(r[3]-r[1]));
-        const mark=document.createElement('span');mark.className='verify-pdf-highlight';Object.assign(mark.style,{left:`${left}px`,top:`${top}px`,width:`${width}px`,height:`${height}px`});highlights.appendChild(mark);
+  try {
+    stack.innerHTML='';
+    const firstPage=state.pages[0];
+    const baseViewport=firstPage.page.getViewport({scale:1});
+    const availableWidth=Math.max(220,shell.clientWidth-24);
+    state.baseFitScale=availableWidth/baseViewport.width;
+    const scale=state.baseFitScale*state.zoom;
+    const zoomLabel=document.getElementById('verifyZoomLabel');
+    if(zoomLabel)zoomLabel.textContent=state.zoom===1?'Fit width':`${Math.round(state.zoom*100)}%`;
+    for(let pageNo=1;pageNo<=state.pdf.numPages;pageNo++) {
+      if(token!==state.renderToken)return;
+      const pg=state.pages[pageNo-1];
+      const viewport=pg.page.getViewport({scale});
+      const pageHost=document.createElement('div');pageHost.className='verify-pdf-page';pageHost.dataset.page=String(pageNo);pageHost.style.width=`${viewport.width}px`;pageHost.style.height=`${viewport.height}px`;
+      const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);canvas.className='verify-pdf-canvas';pageHost.appendChild(canvas);
+      const highlights=document.createElement('div');highlights.className='verify-pdf-highlights';highlights.style.width=`${viewport.width}px`;highlights.style.height=`${viewport.height}px`;pageHost.appendChild(highlights);stack.appendChild(pageHost);
+      canvas.addEventListener('click',ev=>{
+        const rect=canvas.getBoundingClientRect();const px=(ev.clientX-rect.left)*(canvas.width/rect.width);const py=(ev.clientY-rect.top)*(canvas.height/rect.height);
+        const point=viewport.convertToPdfPoint(px,py);const nearest=pg.lines.reduce((best,line)=>!best||Math.abs(line.y-point[1])<Math.abs(best.y-point[1])?line:best,null);
+        if(!nearest)return;
+        const activeOrder=state.orders[state.currentIndex];const amount=verifyMoney(activeOrder?.totalAmount);
+        const manual={manual:true,pageNo,y:nearest.y,lineText:nearest.text,context:nearest.text,amount,score:0,fingerprint:['manual',pageNo,Math.round(nearest.y),verifyNormText(nearest.text)].join('|')};
+        state.manualCandidate=manual;state.manualOrderId=activeOrder?.$id||null;state.viewPage=pageNo;
+        const status=document.getElementById('verifyMatchStatus');if(status){status.classList.remove('no-match');status.textContent=`Manual line selected · Page ${pageNo}. Check the transaction and receipt before confirming.`;}
+        const confirmBtn=document.querySelector('.verify-action-primary');if(confirmBtn)confirmBtn.disabled=!!state.busy;
+        document.querySelectorAll('.verify-pdf-highlight').forEach(el=>el.classList.remove('verify-pdf-highlight-active'));
+        const activeHighlight=pageHost.querySelector('.verify-pdf-highlights');if(activeHighlight)activeHighlight.classList.add('verify-pdf-highlight-active');
+        const pageLabel=document.getElementById('verifyPageLabel');if(pageLabel)pageLabel.textContent=`Page ${pageNo} / ${state.pdf.numPages}`;
       });
-      const scroll=document.querySelector('.verify-pdf-shell'); if(scroll){const scaledY=viewport.height-(targetY*state.zoom);scroll.scrollTop=Math.max(0,scaledY-scroll.clientHeight*0.45);}
+      await pg.page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      if(token!==state.renderToken)return;
+      const activeOrder=state.orders[state.currentIndex];
+      const activeCandidate=state.manualOrderId===activeOrder?.$id&&state.manualCandidate?state.manualCandidate:candidate;
+      if(activeCandidate&&activeCandidate.pageNo===pageNo) {
+        pg.items.forEach(item=>{
+          if(Math.abs(item.y-activeCandidate.y)>5.5)return;
+          const r=viewport.convertToViewportRectangle([item.x,item.y,item.x+Math.max(item.width,3),item.y+Math.max(item.height,7)]);
+          const left=Math.min(r[0],r[2]),top=Math.min(r[1],r[3]),width=Math.max(4,Math.abs(r[2]-r[0])),height=Math.max(8,Math.abs(r[3]-r[1]));
+          const mark=document.createElement('span');mark.className='verify-pdf-highlight';Object.assign(mark.style,{left:`${left}px`,top:`${top}px`,width:`${width}px`,height:`${height}px`});highlights.appendChild(mark);
+        });
+      }
     }
-    const label=document.getElementById('verifyPageLabel');if(label)label.textContent=`Page ${pageNo} / ${state.pdf.numPages}`;
-    const activeOrder=state.orders[state.currentIndex];
-    const activeCandidate=state.manualOrderId===activeOrder?.$id&&state.manualCandidate?state.manualCandidate:(state.candidatesByOrder.get(activeOrder?.$id)||[])[state.currentCandidateIndex]||null;
-    const confirmBtn=document.querySelector('.verify-action-primary');
-    if(confirmBtn)confirmBtn.disabled=!!state.busy||!activeCandidate||activeCandidate.pageNo!==pageNo;
-    const status=document.getElementById('verifyMatchStatus');
-    if(status && activeCandidate && activeCandidate.pageNo!==pageNo){status.classList.add('no-match');status.textContent=`Browsing page ${pageNo}. Return to the suggested transaction or click a transaction line here to select it manually.`;}
-  }catch(err){console.error(err);host.innerHTML='<p class="verify-error">This page could not be rendered. Try another page or zoom level.</p>';}
+    const target=stack.querySelector(`[data-page="${state.viewPage}"]`);
+    if(target) {
+      const candidateY=candidate&&candidate.pageNo===state.viewPage?candidate.y:null;
+      if(candidateY!==null) {
+        const pg=state.pages[state.viewPage-1];const viewport=pg.page.getViewport({scale});
+        const scaledY=viewport.height-(candidateY*scale);
+        shell.scrollTop=Math.max(0,target.offsetTop+scaledY-shell.clientHeight*.38);
+      } else shell.scrollTop=Math.max(0,target.offsetTop-8);
+    }
+    updateVerifyVisiblePage();
+  } catch(err) { console.error('Could not render statement PDF:',err);stack.innerHTML='<p class="verify-error">This statement page could not be rendered. Try Fit width or adjust zoom.</p>'; }
 }
-function verifyPrevPage(){const s=verifyWorkspace;const p=Math.max(1,(s.viewPage||1)-1);renderVerifyPdfPage(p,null);}
-function verifyNextPage(){const s=verifyWorkspace;const p=Math.min(s.pdf.numPages,(s.viewPage||1)+1);renderVerifyPdfPage(p,null);}
-function changeVerifyZoom(delta){const s=verifyWorkspace;s.zoom=Math.min(2.1,Math.max(.65,s.zoom+delta));const order=s.orders[s.currentIndex];const c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;renderVerifyPdfPage(s.viewPage||c?.pageNo||1,c&&c.pageNo===(s.viewPage||c.pageNo)?c:null);}
+function updateVerifyVisiblePage(){
+  const state=verifyWorkspace,shell=document.getElementById('verifyPdfShell'),stack=document.getElementById('verifyPdfPage');if(!state||!shell||!stack)return;
+  const pages=[...stack.querySelectorAll('.verify-pdf-page')];if(!pages.length)return;
+  const middle=shell.getBoundingClientRect().top+Math.min(shell.clientHeight*.35,140);let best=pages[0],distance=Infinity;
+  pages.forEach(p=>{const r=p.getBoundingClientRect();const d=Math.abs(r.top-middle);if(d<distance){distance=d;best=p;}});
+  const visible=Number(best.dataset.page)||1;state.viewPage=visible;
+  const label=document.getElementById('verifyPageLabel');if(label)label.textContent=`Page ${visible} / ${state.pdf.numPages}`;
+  const order=state.orders[state.currentIndex];const c=state.manualOrderId===order?.$id&&state.manualCandidate?state.manualCandidate:(state.candidatesByOrder.get(order?.$id)||[])[state.currentCandidateIndex]||null;
+  const btn=document.querySelector('.verify-action-primary');if(btn)btn.disabled=!!state.busy||!c||c.pageNo!==visible;
+}
+function handleVerifyPdfScroll(){if(verifyWorkspace?.scrollFrame)return; if(verifyWorkspace)verifyWorkspace.scrollFrame=requestAnimationFrame(()=>{if(verifyWorkspace)verifyWorkspace.scrollFrame=null;updateVerifyVisiblePage();});}
+function scheduleVerifyPdfResize(){if(!verifyWorkspace?.pdf)return;clearTimeout(verifyWorkspace.resizeTimer);verifyWorkspace.resizeTimer=setTimeout(()=>{const s=verifyWorkspace,order=s.orders[s.currentIndex],c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;renderVerifyPdfPage(s.viewPage||1,c);},180);}
+function fitVerifyPdfWidth(){if(!verifyWorkspace)return;verifyWorkspace.zoom=1;const s=verifyWorkspace,order=s.orders[s.currentIndex],c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;renderVerifyPdfPage(s.viewPage||1,c);}
+function toggleVerifyDetails(){const details=document.getElementById('verifyOrderDetails'),btn=document.getElementById('verifyDetailsToggle');if(!details||!btn)return;const opening=details.classList.contains('hidden');details.classList.toggle('hidden',!opening);btn.setAttribute('aria-expanded',String(opening));btn.textContent=opening?'Details ▴':'Details ▾';}
+function verifyPrevPage(){const s=verifyWorkspace;const p=Math.max(1,(s.viewPage||1)-1);const order=s.orders[s.currentIndex];const c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;const target=document.querySelector(`.verify-pdf-page[data-page="${p}"]`);if(target){document.getElementById('verifyPdfShell').scrollTop=target.offsetTop-8;}else renderVerifyPdfPage(p,c);}
+function verifyNextPage(){const s=verifyWorkspace;const p=Math.min(s.pdf.numPages,(s.viewPage||1)+1);const order=s.orders[s.currentIndex];const c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;const target=document.querySelector(`.verify-pdf-page[data-page="${p}"]`);if(target){document.getElementById('verifyPdfShell').scrollTop=target.offsetTop-8;}else renderVerifyPdfPage(p,c);}
+function changeVerifyZoom(delta){const s=verifyWorkspace;s.zoom=Math.min(2.1,Math.max(.65,s.zoom+delta));const order=s.orders[s.currentIndex];const c=s.manualOrderId===order?.$id&&s.manualCandidate?s.manualCandidate:(s.candidatesByOrder.get(order?.$id)||[])[s.currentCandidateIndex]||null;renderVerifyPdfPage(s.viewPage||c?.pageNo||1,c);}
 function verifyNextSuggestion(){const s=verifyWorkspace,c=s.candidatesByOrder.get(s.orders[s.currentIndex]?.$id)||[];if(s.currentCandidateIndex<c.length-1){s.currentCandidateIndex++;s.manualCandidate=null;s.manualOrderId=null;renderVerifyViewer();}}
 function changeVerifyDateWindow(value){verifyWorkspace.dateWindow=Number(value);buildVerifySuggestions();verifyWorkspace.currentCandidateIndex=0;verifyWorkspace.manualCandidate=null;verifyWorkspace.manualOrderId=null;renderVerifyViewer();}
 function toggleVerifyProof(force){const el=document.getElementById('verifyProofOverlay');if(!el)return;const show=typeof force==='boolean'?force:el.classList.contains('hidden');el.classList.toggle('hidden',!show);}
