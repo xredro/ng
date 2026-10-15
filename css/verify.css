@@ -817,7 +817,11 @@
 .verify-pdf-toolbar span { font-size:10px; white-space:nowrap; }
 .verify-toolbar-divider { width:1px; height:18px; background:var(--border); margin:0 3px; }
 .verify-pdf-shell { flex:1 1 auto; min-height:0; width:100%; overflow:auto; border:0; border-radius:5px; background:#52565a; overscroll-behavior:contain; scrollbar-gutter:stable; }
-.verify-pdf-stack { display:flex; flex-direction:column; align-items:center; gap:8px; min-width:100%; padding:8px 0 12px; box-sizing:border-box; }
+/* Keep the horizontal scroll origin at the document's true left edge when zoomed in.
+   A centered flex child wider than its container can overflow on the left, where
+   scroll containers cannot scroll to negative scrollLeft values. */
+.verify-pdf-stack { display:flex; flex-direction:column; align-items:stretch; gap:8px; width:max-content; min-width:100%; padding:8px 0 12px; box-sizing:border-box; }
+.verify-pdf-stack > .verify-pdf-page { margin-left:auto; margin-right:auto; }
 .verify-pdf-page { position:relative; flex:0 0 auto; margin:0; background:#fff; box-shadow:0 2px 9px rgba(0,0,0,.24); overflow:hidden; }
 .verify-pdf-canvas { display:block; width:100%; height:auto; max-width:none; }
 .verify-pdf-highlights { position:absolute; left:0; top:0; pointer-events:none; }
