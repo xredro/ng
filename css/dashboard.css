@@ -645,3 +645,9 @@ body {
   .order-date { margin-left: 0; }
   .card-header h3 { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 }
+
+
+/* Form link actions: wrap on narrow screens instead of overflowing. */
+.form-link-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.form-link-actions .copybtn { min-height:40px; }
+@media (max-width:520px) { .form-link-actions { width:100%; } .form-link-actions .copybtn { flex:1 1 130px; } }
