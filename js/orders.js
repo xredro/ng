@@ -376,25 +376,44 @@ async function updateStatus(id, status) {
   fetchOrders();
 }
 
-async function deleteOrder(id) {
-  const order = allOrders.find(o => o.$id === id);
-  if (!order) return;
+const deletingOrderIds = new Set();
 
+async function deleteOrder(id, clickEvent) {
+  // Prevent a mobile tap from bubbling into a card/parent interaction.
+  if (clickEvent) {
+    clickEvent.preventDefault();
+    clickEvent.stopPropagation();
+  }
+  if (!id || deletingOrderIds.has(id)) return;
+  const order = allOrders.find(o => o.$id === id);
+  if (!order) {
+    showToast("This order is no longer in the list. Refresh and try again.", "info");
+    return;
+  }
   if (!confirm("Are you sure you want to delete this order?")) return;
 
-  // Delete payment proof if it exists
-  if (order.paymentProof) {
-    try {
-      await client.storage.deleteFile(PRODUCT_IMAGES_BUCKET, order.paymentProof);
-    } catch (e) {
-      console.warn("Failed to delete image:", e);
+  deletingOrderIds.add(id);
+  try {
+    // Delete the order document first so a storage-file failure cannot block
+    // deleting the order itself (common when a proof file was already removed).
+    await databases.deleteDocument(DB_ID, ORDERS, id);
+    allOrders = allOrders.filter(item => item.$id !== id);
+    applyFilter();
+
+    if (order.paymentProof) {
+      try {
+        await client.storage.deleteFile(PRODUCT_IMAGES_BUCKET, order.paymentProof);
+      } catch (e) {
+        console.warn("Order deleted, but its payment image could not be removed:", e);
+      }
     }
+    showToast("Order deleted successfully.", "success");
+  } catch (e) {
+    console.error("Failed to delete order:", e);
+    showToast(e?.message ? `Could not delete order: ${e.message}` : "Could not delete this order. Please try again.", "error");
+  } finally {
+    deletingOrderIds.delete(id);
   }
-
-  // Delete the order document
-  await databases.deleteDocument(DB_ID, ORDERS, id);
-
-  fetchOrders();
 }
 
 async function deleteAllOrders() {
@@ -575,7 +594,7 @@ function renderOrders(orders) {
         <span>₦${amounts.toLocaleString()}</span>
         <div>
           <button class="expand-btn" onclick="toggleExpand(this)"> <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#999999"> ${EXPAND_DOWN} </svg></button>
-          <button onclick="deleteOrder('${order.$id}')"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#999999"><path d="m376-300 104-104 104 104 56-56-104-104 104-104-56-56-104 104-104-104-56 56 104 104-104 104 56 56Zm-96 180q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520Zm-400 0v520-520Z"/></svg></button>
+          <button type="button" class="delete-order-btn" aria-label="Delete this order" title="Delete order" onclick="deleteOrder('${order.$id}', event)"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" aria-hidden="true"><path d="m376-300 104-104 104 104 56-56-104-104 104-104-56-56-104 104-104-104-56 56 104 104-104 104 56 56Zm-96 180q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520Zm-400 0v520-520Z"/></svg></button>
         </div>
       </div>
 

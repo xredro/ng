@@ -220,18 +220,28 @@ async function renderVerifyPdfPage(pageNo,candidate) {
   const token=++state.renderToken;
   try {
     stack.innerHTML='';
-    const firstPage=state.pages[0];
-    const baseViewport=firstPage.page.getViewport({scale:1});
-    const availableWidth=Math.max(220,shell.clientWidth-24);
-    state.baseFitScale=availableWidth/baseViewport.width;
-    const scale=state.baseFitScale*state.zoom;
+    const availableWidth=Math.max(220,shell.clientWidth-12);
+    // PDFs can contain pages with different dimensions. Fit each page to the
+    // viewer width independently, then apply the same zoom multiplier. This
+    // prevents smaller pages from appearing disproportionately tiny and makes
+    // horizontal scrolling work at every zoom level on every page.
+    const pageScales=state.pages.map(pg=>availableWidth/pg.page.getViewport({scale:1}).width*state.zoom);
+    const pageWidths=state.pages.map((pg,i)=>pg.page.getViewport({scale:pageScales[i]}).width);
+    const stackWidth=Math.max(shell.clientWidth,Math.ceil(Math.max(...pageWidths))+2);
+    stack.style.width=`${stackWidth}px`;
+    stack.style.minWidth=`${shell.clientWidth}px`;
     const zoomLabel=document.getElementById('verifyZoomLabel');
     if(zoomLabel)zoomLabel.textContent=state.zoom===1?'Fit width':`${Math.round(state.zoom*100)}%`;
     for(let pageNo=1;pageNo<=state.pdf.numPages;pageNo++) {
       if(token!==state.renderToken)return;
       const pg=state.pages[pageNo-1];
+      const scale=pageScales[pageNo-1];
       const viewport=pg.page.getViewport({scale});
       const pageHost=document.createElement('div');pageHost.className='verify-pdf-page';pageHost.dataset.page=String(pageNo);pageHost.style.width=`${viewport.width}px`;pageHost.style.height=`${viewport.height}px`;
+      // Center pages that fit; anchor oversized pages to the true left edge so
+      // scrollLeft=0 always exposes the document's first column.
+      pageHost.style.marginLeft=viewport.width<stackWidth?`${Math.floor((stackWidth-viewport.width)/2)}px`:'0px';
+      pageHost.style.marginRight='0px';
       const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);canvas.className='verify-pdf-canvas';pageHost.appendChild(canvas);
       const highlights=document.createElement('div');highlights.className='verify-pdf-highlights';highlights.style.width=`${viewport.width}px`;highlights.style.height=`${viewport.height}px`;pageHost.appendChild(highlights);stack.appendChild(pageHost);
       canvas.addEventListener('click',ev=>{
@@ -262,13 +272,18 @@ async function renderVerifyPdfPage(pageNo,candidate) {
     }
     const target=stack.querySelector(`[data-page="${state.viewPage}"]`);
     if(target) {
-      const candidateY=candidate&&candidate.pageNo===state.viewPage?candidate.y:null;
+      const activeOrder=state.orders[state.currentIndex];
+      const activeCandidate=state.manualOrderId===activeOrder?.$id&&state.manualCandidate?state.manualCandidate:candidate;
+      const candidateY=activeCandidate&&activeCandidate.pageNo===state.viewPage?activeCandidate.y:null;
       if(candidateY!==null) {
-        const pg=state.pages[state.viewPage-1];const viewport=pg.page.getViewport({scale});
+        const pg=state.pages[state.viewPage-1];const scale=pageScales[state.viewPage-1];const viewport=pg.page.getViewport({scale});
         const scaledY=viewport.height-(candidateY*scale);
         shell.scrollTop=Math.max(0,target.offsetTop+scaledY-shell.clientHeight*.38);
       } else shell.scrollTop=Math.max(0,target.offsetTop-8);
     }
+    // Always begin at the left edge after a zoom/re-render. Users can then
+    // scroll right and back to the true document origin on both large/small pages.
+    shell.scrollLeft=0;
     updateVerifyVisiblePage();
   } catch(err) { console.error('Could not render statement PDF:',err);stack.innerHTML='<p class="verify-error">This statement page could not be rendered. Try Fit width or adjust zoom.</p>'; }
 }
