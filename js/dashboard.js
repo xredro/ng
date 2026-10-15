@@ -31,6 +31,49 @@ let profileDocId = null;
 let user;
 let res;
 
+// Public customer-form URLs. GitHub Pages serves this project from /ng,
+// while the Cloudflare Pages deployment serves it from the site root.
+const XREDRO_FORM_HOSTS = {
+  github: "https://xredro.github.io/ng/form.html",
+  cloudflare: "https://xredro.pages.dev/form.html"
+};
+function getPublicFormLink(formOwnerId, platform = "current") {
+  const id = encodeURIComponent(String(formOwnerId || ""));
+  let base;
+  if (platform === "github") base = XREDRO_FORM_HOSTS.github;
+  else if (platform === "cloudflare") base = XREDRO_FORM_HOSTS.cloudflare;
+  else {
+    const host = String(window.location.hostname || "").toLowerCase();
+    if (host === "xredro.github.io" || host.endsWith(".github.io")) {
+      base = `${window.location.origin}/ng/form.html`;
+    } else {
+      base = `${window.location.origin}/form.html`;
+    }
+  }
+  return `${base}?fid=${id}`;
+}
+function copyTextCompat(value) {
+  // Clipboard API is unavailable in some older/mobile browsers such as Opera Mini.
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(value).catch(() => legacyCopyText(value));
+  }
+  return Promise.resolve(legacyCopyText(value));
+}
+function legacyCopyText(value) {
+  const temp = document.createElement("textarea");
+  temp.value = value;
+  temp.setAttribute("readonly", "");
+  temp.style.position = "fixed";
+  temp.style.left = "-9999px";
+  document.body.appendChild(temp);
+  temp.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) {}
+  temp.remove();
+  if (!ok) throw new Error("This browser did not allow copying. Please copy the link from the field manually.");
+  return true;
+}
+
 /* =========================
 UTILITY / HELPER FUNCTIONS
 ========================= */
@@ -287,10 +330,15 @@ function updateSystemStatus(ok = true, message = "") {
   }
 }
 
-function copyFormLink() {
-  const link = `${window.location.origin}/ng/form.html?fid=${user.$id}`;
-  navigator.clipboard.writeText(link);
-  showToast("Form link copied", "success");
+async function copyFormLink(platform = "current") {
+  if (!user?.$id) return showToast("Your account is still loading. Try again in a moment.", "error");
+  const link = getPublicFormLink(user.$id, platform);
+  try {
+    await copyTextCompat(link);
+    showToast(`${platform === "cloudflare" ? "Cloudflare" : platform === "github" ? "GitHub" : "Customer form"} link copied`, "success");
+  } catch (e) {
+    showToast(e?.message || "Could not copy the link. Please copy it manually.", "error");
+  }
 }
 
 function renderOrders(orders) {

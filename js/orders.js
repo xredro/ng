@@ -410,7 +410,13 @@ async function deleteOrder(id, clickEvent) {
     showToast("Order deleted successfully.", "success");
   } catch (e) {
     console.error("Failed to delete order:", e);
-    showToast(e?.message ? `Could not delete order: ${e.message}` : "Could not delete this order. Please try again.", "error");
+    const detail = String(e?.message || e || "");
+    const looksLikeFetchFailure = /failed to fetch|unable to fetch|networkerror|network request failed|load failed/i.test(detail);
+    if (looksLikeFetchFailure) {
+      showToast("Delete request could not reach Appwrite. Add this site's hostname under Appwrite Console → Settings → Platforms → Web, then retry. Check your connection too.", "error");
+    } else {
+      showToast(detail ? `Could not delete order: ${detail}` : "Could not delete this order. Please try again.", "error");
+    }
   } finally {
     deletingOrderIds.delete(id);
   }

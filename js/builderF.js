@@ -62,6 +62,49 @@ function highlightSelectedTheme() {
   });
 }
 
+// Public customer-form URLs. GitHub Pages serves this project from /ng,
+// while the Cloudflare Pages deployment serves it from the site root.
+const XREDRO_FORM_HOSTS = {
+  github: "https://xredro.github.io/ng/form.html",
+  cloudflare: "https://xredro.pages.dev/form.html"
+};
+function getPublicFormLink(formOwnerId, platform = "current") {
+  const id = encodeURIComponent(String(formOwnerId || ""));
+  let base;
+  if (platform === "github") base = XREDRO_FORM_HOSTS.github;
+  else if (platform === "cloudflare") base = XREDRO_FORM_HOSTS.cloudflare;
+  else {
+    const host = String(window.location.hostname || "").toLowerCase();
+    if (host === "xredro.github.io" || host.endsWith(".github.io")) {
+      base = `${window.location.origin}/ng/form.html`;
+    } else {
+      base = `${window.location.origin}/form.html`;
+    }
+  }
+  return `${base}?fid=${id}`;
+}
+function copyTextCompat(value) {
+  // Clipboard API is unavailable in some older/mobile browsers such as Opera Mini.
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(value).catch(() => legacyCopyText(value));
+  }
+  return Promise.resolve(legacyCopyText(value));
+}
+function legacyCopyText(value) {
+  const temp = document.createElement("textarea");
+  temp.value = value;
+  temp.setAttribute("readonly", "");
+  temp.style.position = "fixed";
+  temp.style.left = "-9999px";
+  document.body.appendChild(temp);
+  temp.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (_) {}
+  temp.remove();
+  if (!ok) throw new Error("This browser did not allow copying. Please copy the link from the field manually.");
+  return true;
+}
+
 /* =========================
 UTILITY / HELPER FUNCTIONS
 ========================= */
@@ -267,15 +310,21 @@ async function saveForm() {
 /* ---------------- FORM LINK ---------------- */
 function setupFormLink() {
   const input = document.getElementById("formLinkInput");
-  const link = `${window.location.origin}/ng/form.html?fid=${formId}`;
-  input.value = link;
+  if (input) input.value = getPublicFormLink(formId, "current");
 }
 
-function copyFormLink() {
-  const input = document.getElementById("formLinkInput");
-  input.select();
-  document.execCommand("copy");
-  showToast("Form link copied", "success");
+async function copyFormLink(platform = "current") {
+  const id = formId || new URLSearchParams(window.location.search).get("fid");
+  if (!id) return showToast("Save or open a form before copying its link.", "error");
+  const link = getPublicFormLink(id, platform);
+  try {
+    await copyTextCompat(link);
+    showToast(`${platform === "cloudflare" ? "Cloudflare" : platform === "github" ? "GitHub" : "Customer form"} link copied`, "success");
+  } catch (e) {
+    const input = document.getElementById("formLinkInput");
+    if (input) { input.value = link; input.focus(); input.select(); }
+    showToast(e?.message || "Could not copy the link. Copy it from the link field instead.", "error");
+  }
 }
 
 /* ---------------- ADD MENU ---------------- */
