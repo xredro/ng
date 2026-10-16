@@ -288,7 +288,7 @@ ORIGINAL_BUY_SUBSCRIPTION_END
 // Replaces the old buySubscription(days) flow: sends the seller to
 // an external page where they upload their payment proof manually.
 // TODO: replace this placeholder URL with your real payment/upload page.
-const PAYMENT_UPLOAD_URL = "https://your-domain.example.com/upload-payment";
+const PAYMENT_UPLOAD_URL = "https://xredro.pages.dev/form?fid=697c34ab17039e5fc78f";
 
 function goToPaymentUpload() {
   window.location.href = PAYMENT_UPLOAD_URL;
