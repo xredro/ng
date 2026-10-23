@@ -398,115 +398,9 @@ UI INTERACTION LOGIC
 /* ---------------- RENDER (delegates to the shared storefront renderer
    in js/storefront-render.js — the builder's preview uses the exact
    same function, so what a seller previews is what customers see) ---------------- */
-/* =========================
-IN-APP BROWSER OPTIONS
-========================= */
 
-function detectInAppBrowser() {
-const ua = navigator.userAgent || "";
 
-return {
-whatsapp: /WhatsApp/i.test(ua),
-otherInApp: /Instagram|FBAN|FBAV|Messenger|TikTok/i.test(ua)
-};
-}
-
-function getBrowserMenuHTML() {
-const browser = detectInAppBrowser();
-
-// Only show the menu inside recognized in-app browsers.
-if (!browser.whatsapp && !browser.otherInApp) {
-return "";
-}
-
-return `
-<div class="xredro-browser-tools">
-<button
-type="button"
-class="xredro-browser-menu-button"
-id="xredroBrowserMenuButton"
-aria-expanded="false"
-aria-controls="xredroBrowserMenu"
->
-⋮ Browser options
-</button>
-
-  <div
-    class="xredro-browser-menu"
-    id="xredroBrowserMenu"
-    hidden
-  >
-    <button type="button" id="xredroOpenExternal">
-      Open in external browser
-    </button>
-
-    <button type="button" id="xredroCopyFormLink">
-      Copy form link
-    </button>
-  </div>
-
-  <p
-    class="xredro-browser-help"
-    id="xredroBrowserHelp"
-    role="status"
-    hidden
-  ></p>
-</div>
-
-`;
-}
-
-function initBrowserMenu() {
-const button = document.getElementById("xredroBrowserMenuButton");
-const menu = document.getElementById("xredroBrowserMenu");
-
-if (!button || !menu) return;
-
-button.addEventListener("click", () => {
-const isOpening = menu.hidden;
-
-menu.hidden = !isOpening;
-button.setAttribute("aria-expanded", String(isOpening));
-
-});
-
-document.getElementById("xredroCopyFormLink")?.addEventListener(
-"click",
-async () => {
-const help = document.getElementById("xredroBrowserHelp");
-
-  try {
-    if (!navigator.clipboard?.writeText) {
-      throw new Error("Clipboard access unavailable");
-    }
-
-    await navigator.clipboard.writeText(window.location.href);
-
-    help.textContent = "Form link copied. You can paste it into your preferred browser.";
-  } catch (error) {
-    help.textContent = "Copying automatically isn't available here. Use your browser's menu to copy the page link.";
-  }
-
-  help.hidden = false;
-}
-
-);
-
-document.getElementById("xredroOpenExternal")?.addEventListener(
-"click",
-() => {
-const help = document.getElementById("xredroBrowserHelp");
-
-  help.textContent =
-    "To open this form externally, open WhatsApp's browser menu (⋮) and choose an option such as 'Open in browser' or 'Open in Chrome'. The wording varies by device.";
-
-  help.hidden = false;
-}
-
-);
-}
-
-/**function renderForm() {
+function renderForm() {
   const container = document.getElementById("formRoot");
   container.innerHTML = buildStorefrontHTML({
     fields,
@@ -515,14 +409,6 @@ const help = document.getElementById("xredroBrowserHelp");
     themeClass: CURRENT_THEME_CLASS,
     opts: { live: true, cart, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" }
   });
-}**/
-
-function renderForm() {
-const container = document.getElementById("formRoot");
-
-container.innerHTML = "${getBrowserMenuHTML()} ${buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass: CURRENT_THEME_CLASS, opts: { live: true, cart, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" } })}";
-
-initBrowserMenu();
 }
 
 function renderSuccessState(whatsappReady = false) {
