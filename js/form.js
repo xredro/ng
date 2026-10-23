@@ -506,7 +506,7 @@ const help = document.getElementById("xredroBrowserHelp");
 );
 }
 
-function renderForm() {
+/**function renderForm() {
   const container = document.getElementById("formRoot");
   container.innerHTML = buildStorefrontHTML({
     fields,
@@ -515,6 +515,14 @@ function renderForm() {
     themeClass: CURRENT_THEME_CLASS,
     opts: { live: true, cart, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" }
   });
+}**/
+
+function renderForm() {
+const container = document.getElementById("formRoot");
+
+container.innerHTML = "${getBrowserMenuHTML()} ${buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass: CURRENT_THEME_CLASS, opts: { live: true, cart, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" } })}";
+
+initBrowserMenu();
 }
 
 function renderSuccessState(whatsappReady = false) {
