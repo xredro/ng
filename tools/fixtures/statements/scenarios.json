@@ -1,0 +1,348 @@
+{
+ "bankA_clean": {
+  "pdf": "bankA_clean.pdf",
+  "layout": {
+   "mode": "three",
+   "regions": {
+    "date": {
+     "x0": 0.0672,
+     "x1": 0.1881
+    },
+    "desc": {
+     "x0": 0.2016,
+     "x1": 0.5544
+    },
+    "credit": {
+     "x0": 0.6921,
+     "x1": 0.7929
+    }
+   }
+  },
+  "orders": [
+   {
+    "id": "O1",
+    "name": "John Doe",
+    "date": "2026-11-10",
+    "total": 15000,
+    "expect": "confident",
+    "why": "name, date and amount all agree"
+   },
+   {
+    "id": "O2",
+    "name": "John Doe",
+    "date": "2026-11-10",
+    "total": 22500,
+    "expect": "review",
+    "why": "John Doe and John Doe Jr are both plausible"
+   },
+   {
+    "id": "O3",
+    "name": "John Doe Jr",
+    "date": "2026-11-10",
+    "total": 22500,
+    "expect": "review",
+    "why": "similar names, same amount"
+   },
+   {
+    "id": "O4",
+    "name": "Mary Jane Adams",
+    "date": "2026-11-11",
+    "total": 7500,
+    "expect": "confident",
+    "why": "identical amount, distinct names"
+   },
+   {
+    "id": "O5",
+    "name": "Peter Okonkwo",
+    "date": "2026-11-11",
+    "total": 7500,
+    "expect": "confident",
+    "why": "identical amount, distinct names"
+   },
+   {
+    "id": "O6",
+    "name": "Tunde Bakare",
+    "date": "2026-11-09",
+    "total": 18000,
+    "expect": "review",
+    "why": "date is 2 days off"
+   },
+   {
+    "id": "O7",
+    "name": "Ngozi Eze",
+    "date": "2026-11-01",
+    "total": 16000,
+    "expect": "review",
+    "why": "name and amount match, date is 10 days off"
+   },
+   {
+    "id": "O8",
+    "name": "Wrong Person",
+    "date": "2026-11-01",
+    "total": 5500,
+    "expect": "unmatched",
+    "why": "amount only"
+   },
+   {
+    "id": "O9",
+    "name": "Chinedu Emmanuel Obiora",
+    "date": "2026-11-12",
+    "total": 48000,
+    "expect": "confident",
+    "why": "wrapped description"
+   },
+   {
+    "id": "O10",
+    "name": "Amina Bello",
+    "date": "2026-11-12",
+    "total": 9000,
+    "expect": "review",
+    "why": "two identical-looking transactions"
+   },
+   {
+    "id": "O11",
+    "name": "Amina Bello",
+    "date": "2026-11-12",
+    "total": 9000,
+    "expect": "review",
+    "why": "two identical-looking transactions"
+   },
+   {
+    "id": "O12",
+    "name": "Grace Ade",
+    "date": "2026-11-10",
+    "total": 30000,
+    "expect": "unmatched",
+    "why": "the 30,000.00 on the statement is a DEBIT"
+   },
+   {
+    "id": "O13",
+    "name": "Funmi Alade",
+    "date": "2026-11-12",
+    "total": 25400,
+    "expect": "confident",
+    "why": "25,400.00 is also the closing balance figure in the page header; only the credit counts"
+   },
+   {
+    "id": "O14",
+    "name": "Kayode Johnson",
+    "date": "2026-11-13",
+    "total": 11250,
+    "expect": "confident",
+    "why": "name after the word DEPOSIT"
+   },
+   {
+    "id": "O15",
+    "name": "Halima Sani",
+    "date": "2026-11-14",
+    "total": 6000,
+    "expect": "confident",
+    "why": "late row, page 3"
+   },
+   {
+    "id": "O16",
+    "name": "Ibrahim Lawal",
+    "date": "2026-11-10",
+    "total": 1234567,
+    "expect": "unmatched",
+    "why": "equals the 'Total credits' text in the page summary, which is not a transaction"
+   }
+  ],
+  "pages": 2,
+  "note": "5 columns, dd/mm/yyyy (13+ days present so the order is provable), debit and credit columns, wrapped descriptions, summary text above the table"
+ },
+ "bankB_combined": {
+  "pdf": "bankB_combined.pdf",
+  "layout": {
+   "mode": "two",
+   "regions": {
+    "namedate": {
+     "x0": 0.049,
+     "x1": 0.5392
+    },
+    "credit": {
+     "x0": 0.6209,
+     "x1": 0.768
+    }
+   }
+  },
+  "orders": [
+   {
+    "id": "B1",
+    "name": "Ibrahim Musa",
+    "date": "2026-11-10",
+    "total": 11000,
+    "expect": "confident",
+    "why": "combined column, CR suffix"
+   },
+   {
+    "id": "B2",
+    "name": "Funke Alade",
+    "date": "2026-11-10",
+    "total": 13000,
+    "expect": "confident",
+    "why": "wrapped details"
+   },
+   {
+    "id": "B3",
+    "name": "Chidi Nwankwo",
+    "date": "2026-11-11",
+    "total": 18000,
+    "expect": "confident",
+    "why": "same amount as another credit, different name"
+   },
+   {
+    "id": "B4",
+    "name": "Hauwa Suleiman",
+    "date": "2026-11-11",
+    "total": 18000,
+    "expect": "confident",
+    "why": "same amount as another credit, different name"
+   },
+   {
+    "id": "B5",
+    "name": "Landlord Ade",
+    "date": "2026-11-13",
+    "total": 9500,
+    "expect": "unmatched",
+    "why": "9,500.00 appears as a DR"
+   },
+   {
+    "id": "B6",
+    "name": "Oluwaseun Falana",
+    "date": "2026-11-12",
+    "total": 9500,
+    "expect": "confident",
+    "why": "its own credit of 9,500.00; the DR of 9,500.00 must not count"
+   },
+   {
+    "id": "B7",
+    "name": "Temitope Ajayi",
+    "date": "2026-11-14",
+    "total": 12600,
+    "expect": "review",
+    "why": "two identical-looking credits"
+   }
+  ],
+  "pages": 2,
+  "note": "date and description share a column; one amount column marked CR/DR; dates like '10 Nov 2026 09:14'; Letter page"
+ },
+ "bankC_iso": {
+  "pdf": "bankC_iso.pdf",
+  "layout": {
+   "mode": "three",
+   "regions": {
+    "date": {
+     "x0": 0.0672,
+     "x1": 0.1848
+    },
+    "desc": {
+     "x0": 0.21,
+     "x1": 0.5796
+    },
+    "credit": {
+     "x0": 0.6048,
+     "x1": 0.7392
+    }
+   }
+  },
+  "orders": [
+   {
+    "id": "C1",
+    "name": "Emeka Okoro",
+    "date": "2026-11-10",
+    "total": 15000,
+    "expect": "confident",
+    "why": "ISO dates, signed amounts"
+   },
+   {
+    "id": "C2",
+    "name": "Adaeze Okoro",
+    "date": "2026-11-11",
+    "total": 15000,
+    "expect": "confident",
+    "why": "same amount, same surname, different first name and day"
+   },
+   {
+    "id": "C3",
+    "name": "Rasheed Lawal",
+    "date": "2026-11-11",
+    "total": 3200,
+    "expect": "confident",
+    "why": "plain credit"
+   },
+   {
+    "id": "C4",
+    "name": "Dstv Customer",
+    "date": "2026-11-12",
+    "total": 9000,
+    "expect": "unmatched",
+    "why": "the 9,000.00 is a debit (-9,000.00)... but another credit of 9,000.00 exists, see C5"
+   },
+   {
+    "id": "C5",
+    "name": "Christiana Uche",
+    "date": "2026-11-12",
+    "total": 9000,
+    "expect": "confident",
+    "why": "its own credit; the debit of the same amount must be ignored"
+   }
+  ],
+  "pages": 1,
+  "note": "ISO dates; one signed amount column (+credit, -debit)"
+ },
+ "bankD_ambiguous": {
+  "pdf": "bankD_ambiguous.pdf",
+  "layout": {
+   "mode": "three",
+   "regions": {
+    "date": {
+     "x0": 0.0672,
+     "x1": 0.1881
+    },
+    "desc": {
+     "x0": 0.2016,
+     "x1": 0.5544
+    },
+    "credit": {
+     "x0": 0.6921,
+     "x1": 0.7929
+    }
+   }
+  },
+  "orders": [
+   {
+    "id": "D1",
+    "name": "Caroline Eke",
+    "date": "2026-11-06",
+    "total": 8800,
+    "expect": "review",
+    "why": "06/11/2026 could be 6 Nov or 11 Jun; nothing in the statement settles it"
+   },
+   {
+    "id": "D2",
+    "name": "Lateef Adewale",
+    "date": "2026-11-05",
+    "total": 14000,
+    "expect": "review",
+    "why": "two rows of 14,000; one on 05/11 (ambiguous) and 02/11"
+   }
+  ],
+  "pages": 1,
+  "note": "every date has a day of 12 or less, so day-first can't be proven"
+ },
+ "_unsupported": [
+  {
+   "pdf": "image_only.pdf",
+   "why": "image-only PDF: a photograph or scan saved as a PDF"
+  },
+  {
+   "pdf": "tiny_text.pdf",
+   "why": "almost no text"
+  },
+  {
+   "pdf": "no_figures.pdf",
+   "why": "words but no amounts or dates"
+  }
+ ]
+}
