@@ -10,8 +10,12 @@
   <link rel="stylesheet" href="css/verify.css">
   <link rel="stylesheet" href="css/alert.css" />
     <link rel="stylesheet" href="css/nav-shared.css">
+  <link rel="stylesheet" href="css/xr-tokens.css">
+  <link rel="stylesheet" href="css/xr-components.css">
+  <link rel="stylesheet" href="css/orders-v2.css">
+<link rel="stylesheet" href="css/order-card.css">
 </head>
-<body>
+<body class="xr-app">
 <script>
   (function () {
     const savedTheme = localStorage.getItem("theme");
@@ -61,49 +65,58 @@
    </div>
   </div>
 </nav>
-<main class="orders-page">
-
-  <section class="orders-header">
-    <h1>Orders</h1>
-    <div class="actions">
-      <button onclick="openOrderDeleteModal()">Delete Orders</button>
-      <button type="button" onclick="openDeliverySummary()">Products to deliver</button>
-      <button type="button" onclick="exportOrdersPDF()">Export PDF</button>
-      <button type="button" onclick="openVerifyOverlay()">Verify Payments</button>
+<main class="xr-main ord">
+  <header class="xr-page-head">
+    <div>
+      <h1 class="xr-h1">Orders</h1>
+      <p class="xr-text-2">Check payments, move orders along and see what to deliver.</p>
     </div>
-  </section>
+  </header>
 
-  <input
-    type="text"
-    id="orderSearch"
-    class="search"
-    placeholder="Search names, products, location..."
-  />
-
-  <div class="filters">
-    <button data-filter="all">All</button>
-    <button data-filter="pending">Unpaid</button>
-    <button data-filter="paid">Paid</button>
-    <button data-filter="delivered">Delivered</button>
+  <div class="ord-toolbar">
+    <button type="button" class="xr-btn xr-btn--primary" onclick="openVerifyOverlay()">Verify payments</button>
+    <button type="button" class="xr-btn xr-btn--secondary" onclick="openDeliverySummary()">Products to deliver</button>
+    <button type="button" class="xr-btn xr-btn--secondary" onclick="exportOrdersPDF()">Export PDF</button>
+    <button type="button" class="xr-btn xr-btn--ghost ord-danger" onclick="openOrderDeleteModal()">Delete orders</button>
   </div>
 
-  <section id="ordersList"></section>
+  <label class="xr-sr-only" for="orderSearch">Search orders</label>
+  <input type="search" id="orderSearch" class="xr-input ord-search" placeholder="Search names, products, location..." autocomplete="off" />
 
+  <div class="ord-filters xr-chips" role="group" aria-label="Filter orders">
+    <button type="button" class="xr-chip" data-filter="all">All</button>
+    <button type="button" class="xr-chip" data-filter="pending">Unpaid</button>
+    <button type="button" class="xr-chip" data-filter="review">Needs review</button>
+    <button type="button" class="xr-chip" data-filter="updated">Updated</button>
+    <button type="button" class="xr-chip" data-filter="paid">Paid</button>
+    <button type="button" class="xr-chip" data-filter="delivered">Delivered</button>
+    <button type="button" class="xr-chip" data-filter="cancelled">Cancelled</button>
+  </div>
+
+  <section id="ordersList" aria-busy="true" aria-live="polite">
+    <div class="xr-card xr-stack xr-stack--sm"><span class="xr-skeleton" style="height:16px;width:50%"></span><span class="xr-skeleton" style="height:12px;width:80%"></span><span class="xr-skeleton" style="height:12px;width:30%"></span></div>
+  </section>
 </main>
-
 <div id="toast-container"></div>
 
 <div id="confirmModal" class="modal hidden" onclick="closeOrderDeleteModal(event)">
-  <div class="modal-content" onclick="event.stopPropagation()">
-    <label>Are you sure you want to delete all orders?</label>
-    <div class="actions">
-      <button class="danger" onclick="closeOrderDeleteModal()">Cancel</button>
-      <button onclick="deleteAllOrders()">Delete</button>
+  <div class="modal-content xr-card" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+    <h2 class="xr-h3" id="delTitle">Delete all orders?</h2>
+    <p class="xr-text-2" style="margin:var(--xr-s-2) 0 var(--xr-s-4)">This removes every order and its payment image. It cannot be undone.</p>
+    <div class="xr-row">
+      <button type="button" class="xr-btn xr-btn--secondary" onclick="closeOrderDeleteModal()">Keep orders</button>
+      <button type="button" class="xr-btn xr-btn--danger-solid" onclick="deleteAllOrders()">Delete all</button>
     </div>
   </div>
 </div>
-
 <div id="modal" class="modal hidden"></div>
+
+<!-- ORDER CARD, ID AND RECOVERY -->
+<div id="idModal" class="modal hidden" onclick="closeIdDialog(event)">
+  <div class="modal-content xr-card" onclick="event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="idTitle" style="max-height:90vh;overflow-y:auto">
+    <div id="idBody"></div>
+  </div>
+</div>
 
 <!-- PRODUCT DELIVERY SUMMARY -->
 <div id="deliverySummaryModal" class="modal hidden" onclick="closeDeliverySummary(event)">
@@ -150,14 +163,20 @@
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   // pdf.js needs its worker pointed at a matching CDN build
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 </script>
+<script src="js/telegram-config.js"></script>
+<script src="js/telegram.js"></script>
+<script src="js/order-logic.js"></script>
+<script src="js/order-card.js"></script>
+<script src="js/orders-updates.js"></script>
 <script src="js/orders.js"></script>
+<script src="js/verify-engine.js"></script>
+<script src="js/verify-viewer.js"></script>
 <script src="js/paymentVerify.js"></script>
 <script src="js/themeF.js"></script>
 <script src="js/alert.js"></script>

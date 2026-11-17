@@ -59,6 +59,20 @@
 
       <div id="adminResult" class="admin-result hidden"></div>
     </section>
+
+    <section id="batchPanel" class="admin-card batch-card hidden">
+      <p class="eyebrow">BATCH MODE</p>
+      <h2 class="batch-title">Paid subscription orders</h2>
+      <p class="batch-help">Loads every order in your store that you marked <b>Paid</b>, reads each customer's email and whether they picked 7 or 30 days, and activates or extends them all at once. Anyone with time left keeps it: it is added to the new plan. Finished orders are set to Delivered.</p>
+      <div class="batch-toolbar">
+        <button type="button" id="batchLoadBtn" class="batch-btn">Load paid orders</button>
+        <label class="batch-all"><input type="checkbox" id="batchAll"> Select all ready</label>
+      </div>
+      <p id="batchStatus" class="batch-status" aria-live="polite"></p>
+      <div id="batchList" class="batch-list"></div>
+      <button type="button" id="batchRunBtn" class="activate-btn" disabled>Process selected</button>
+      <div id="batchSummary" class="admin-result hidden"></div>
+    </section>
   </main>
 
   <div id="toast-container"></div>

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /ng/dashboard.html
+Disallow: /ng/orders.html
+Disallow: /ng/settings.html
+Disallow: /ng/admin.html
+Disallow: /ng/order.html
+Disallow: /ng/design-system.html
+
+Sitemap: https://xredro.github.io/ng/sitemap.xml

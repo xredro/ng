@@ -3,27 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Form Builder | X REDRO</title>
-  <link rel="stylesheet" href="css/form.shared.css">
+  <title>Store Builder | X REDRO</title>
   <link rel="stylesheet" href="css/stylesF.css" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-  <!-- Per-theme Google Fonts for the live preview — same set as form.html -->
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Space+Grotesk:wght@400;500&family=Archivo+Black&family=Inter:wght@400;500&family=Quicksand:wght@500;700&family=Sora:wght@600;700&family=Playfair+Display:wght@400;500&family=Roboto+Condensed:wght@400;700&family=Poppins:wght@500;700;800&family=Cormorant+Garamond:wght@500;600&family=Fredoka:wght@600;700&display=swap">
+  <!-- The store preview runs in its own frame and reads this URL to load the store fonts there.
+       "preload" fetches it once without applying the fonts to the builder page itself. -->
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Space+Grotesk:wght@400;500&family=Archivo+Black&family=Inter:wght@400;500&family=Quicksand:wght@500;700&family=Sora:wght@600;700&family=Playfair+Display:wght@400;500&family=Roboto+Condensed:wght@400;700&family=Poppins:wght@500;700;800&family=Cormorant+Garamond:wght@500;600&family=Fredoka:wght@600;700&display=swap">
   <link rel="stylesheet" href="css/gomart-visual.css">
   <link rel="stylesheet" href="css/alert.css" />
-  <!-- Store visual themes — used by the live preview overlay below -->
-  <link rel="stylesheet" href="css/theme-r1.css">
-  <link rel="stylesheet" href="css/theme-r2.css">
-  <link rel="stylesheet" href="css/theme-r3.css">
-  <link rel="stylesheet" href="css/theme-r4.css">
-  <link rel="stylesheet" href="css/theme-r5.css">
-  <link rel="stylesheet" href="css/theme-r6.css">
-  <link rel="stylesheet" href="css/theme-r7.css">
-  <link rel="stylesheet" href="css/theme-r8.css">
-  <link rel="stylesheet" href="css/theme-r9.css">
   <link rel="stylesheet" href="css/nav-shared.css">
+  <link rel="stylesheet" href="css/xr-tokens.css">
+  <link rel="stylesheet" href="css/xr-components.css">
+  <link rel="stylesheet" href="css/builder-v2.css">
 </head>
-<body>
+<body class="xr-app">
 <script>
   (function () {
     const savedTheme = localStorage.getItem("theme");
@@ -74,45 +67,103 @@
   </div>
 </nav>
 <!-- MAIN -->
-<main class="container">
+<main class="xr-main bld" id="builderMain">
 
-  <div class="page-header">
-    <h1>Form Builder</h1>
-
-    <div class="actions">
-      <input id="formLinkInput" readonly>
-      <button onclick="copyFormLink()">Copy link</button>
-      <button type="button" onclick="openPreview(event)">Preview Form</button>
+  <header class="xr-page-head">
+    <div>
+      <h1 class="xr-h1">Store builder</h1>
+      <p class="xr-text-2">Set up your store, check the preview, then share the link.</p>
     </div>
-  </div>
+  </header>
 
-  <!-- TITLE -->
-  <h3>Title</h3>
-  <section class="card">
-    
-    <div class="row">
-      <div>
-        <p>Heading</p>
-        <input id="titleInput" placeholder="My Business Name" oninput="formTitle = this.value">
-      </div>
-      <div>
-        <p>sub Heading</p>
-        <input id="subtitleInput" placeholder="Select your order" oninput="formSubtitle = this.value">
-      </div>
+  <!-- SHARE -->
+  <section class="xr-card bld-share" aria-label="Share your store">
+    <label class="xr-label" for="formLinkInput">Your store link</label>
+    <div class="bld-link-row">
+      <input id="formLinkInput" class="xr-input" readonly>
+      <button type="button" class="xr-btn xr-btn--secondary" onclick="copyFormLink()">Copy link</button>
     </div>
+    <button type="button" class="xr-btn xr-btn--primary xr-btn--block" onclick="openPreview(event)">Preview your store</button>
   </section>
 
-  <!-- STORE THEME (visual design for the customer-facing page) -->
-  <h3>Store Theme</h3>
-  <section class="card">
-    <div id="themePicker" class="theme-picker-scroll">
+  <!-- STORE NAME -->
+  <details class="xr-card bld-sec" open>
+    <summary><span class="bld-sec__title">Store name</span><span class="bld-sec__hint">Shown at the top of your store</span></summary>
+    <div class="bld-sec__body bld-two">
+      <div class="xr-field"><label class="xr-label" for="titleInput">Heading</label>
+        <input id="titleInput" class="xr-input" placeholder="My Business Name" oninput="formTitle = this.value"></div>
+      <div class="xr-field"><label class="xr-label" for="subtitleInput">Sub heading</label>
+        <input id="subtitleInput" class="xr-input" placeholder="Select your order" oninput="formSubtitle = this.value"></div>
+    </div>
+  </details>
+
+  <!-- STORE DETAILS (used by every store design) -->
+  <details class="xr-card bld-sec" id="storeDetails">
+    <summary><span class="bld-sec__title">Store details</span><span class="bld-sec__hint">Logo, banner, about and contacts</span></summary>
+    <div class="bld-sec__body">
+      <p class="xr-hint">Anything you leave blank is simply not shown on your store.</p>
+      <p class="sd-note" id="storeDetailsNote" style="display:none">To turn this on, add a text attribute named <b>storeConfig</b> (size 4000, not required) to the <b>form</b> collection in Appwrite, then reload this page.</p>
+
+      <fieldset class="bld-group"><legend>Look</legend>
+        <div class="xr-field"><label class="xr-label" for="sd_tagline">Short tagline</label>
+          <input id="sd_tagline" class="xr-input" maxlength="120" placeholder="Handmade bags, delivered nationwide" oninput="updateStoreConfig('tagline', this.value)"></div>
+        <div class="xr-field"><label class="xr-label" for="sd_heroCta">Button text</label>
+          <input id="sd_heroCta" class="xr-input" maxlength="24" placeholder="Shop now" oninput="updateStoreConfig('heroCta', this.value)"></div>
+        <div class="bld-two">
+          <div class="xr-field"><span class="xr-label">Logo</span>
+            <img id="sd_logoPreview" class="sd-preview sd-logo" alt="" style="display:none">
+            <div class="xr-row"><label class="xr-btn xr-btn--secondary xr-btn--sm">Upload logo<input type="file" accept="image/*" hidden id="sd_logoFile" onchange="uploadStoreImage('logo', this)"></label>
+            <button type="button" class="xr-btn xr-btn--ghost xr-btn--sm" onclick="removeStoreImage('logo')">Remove</button></div></div>
+          <div class="xr-field"><span class="xr-label">Banner image</span>
+            <img id="sd_bannerPreview" class="sd-preview" alt="" style="display:none">
+            <div class="xr-row"><label class="xr-btn xr-btn--secondary xr-btn--sm">Upload banner<input type="file" accept="image/*" hidden id="sd_bannerFile" onchange="uploadStoreImage('banner', this)"></label>
+            <button type="button" class="xr-btn xr-btn--ghost xr-btn--sm" onclick="removeStoreImage('banner')">Remove</button></div></div>
+        </div>
+      </fieldset>
+
+      <fieldset class="bld-group"><legend>About</legend>
+        <div class="xr-field"><label class="xr-label" for="sd_about">About your store</label>
+          <textarea id="sd_about" class="xr-textarea" rows="3" maxlength="600" placeholder="Tell customers who you are" oninput="updateStoreConfig('about', this.value)"></textarea></div>
+        <div class="xr-field"><label class="xr-label" for="sd_policy">Delivery and returns</label>
+          <textarea id="sd_policy" class="xr-textarea" rows="2" maxlength="600" placeholder="e.g. Delivery in 2-4 days within Lagos" oninput="updateStoreConfig('policy', this.value)"></textarea></div>
+      </fieldset>
+
+      <fieldset class="bld-group"><legend>Contact</legend>
+        <div class="bld-two">
+          <div class="xr-field"><label class="xr-label" for="sd_phone">Phone</label>
+            <input id="sd_phone" class="xr-input" inputmode="tel" placeholder="08012345678" oninput="updateStoreConfig('phone', this.value)"></div>
+          <div class="xr-field"><label class="xr-label" for="sd_whatsapp">WhatsApp number</label>
+            <input id="sd_whatsapp" class="xr-input" inputmode="tel" placeholder="08012345678" oninput="updateStoreConfig('whatsapp', this.value)"></div>
+        </div>
+        <div class="xr-field"><label class="xr-label" for="sd_email">Email</label>
+          <input id="sd_email" class="xr-input" inputmode="email" placeholder="shop@example.com" oninput="updateStoreConfig('email', this.value)"></div>
+      </fieldset>
+
+      <fieldset class="bld-group"><legend>Social</legend>
+        <div class="bld-three">
+          <div class="xr-field"><label class="xr-label" for="sd_instagram">Instagram</label>
+            <input id="sd_instagram" class="xr-input" placeholder="yourhandle" oninput="updateStoreConfig('instagram', this.value)"></div>
+          <div class="xr-field"><label class="xr-label" for="sd_tiktok">TikTok</label>
+            <input id="sd_tiktok" class="xr-input" placeholder="yourhandle" oninput="updateStoreConfig('tiktok', this.value)"></div>
+          <div class="xr-field"><label class="xr-label" for="sd_facebook">Facebook</label>
+            <input id="sd_facebook" class="xr-input" placeholder="yourpage" oninput="updateStoreConfig('facebook', this.value)"></div>
+        </div>
+      </fieldset>
+    </div>
+  </details>
+
+  <!-- STORE DESIGN -->
+  <details class="xr-card bld-sec" open>
+    <summary><span class="bld-sec__title">Store design</span><span class="bld-sec__hint">Pick how your store looks</span></summary>
+    <div class="bld-sec__body">
+      <div id="themePicker" class="theme-picker-scroll">
       <div class="theme-swatch" data-theme="r1" onclick="selectStoreTheme('r1')">
         <div class="theme-swatch-preview theme-swatch-r1"></div>
         <span>Neon</span>
       </div>
       <div class="theme-swatch" data-theme="r2" onclick="selectStoreTheme('r2')">
         <div class="theme-swatch-preview theme-swatch-r2"></div>
-        <span>Catalog</span>
+        <span>Minimal</span>
       </div>
       <div class="theme-swatch" data-theme="r3" onclick="selectStoreTheme('r3')">
         <div class="theme-swatch-preview theme-swatch-r3"></div>
@@ -143,29 +194,33 @@
         <span>Bold Deals</span>
       </div>
     </div>
-  </section>
+    </div>
+  </details>
+
+  <!-- PRODUCTS -->
+  <details class="xr-card bld-sec" id="secProducts" open>
+    <summary><span class="bld-sec__title">Products</span><span class="bld-sec__hint" id="hintProducts">&nbsp;</span></summary>
+    <div class="bld-sec__body"><div id="productFields"></div></div>
+  </details>
 
   <!-- INPUT FIELDS -->
-  <div class="section-header">
-    <h3 style="display: inline-block; margin-right: 10px;">Input Fields</h3>
-    <button class="add-btn" id="addFieldBtn" aria-expanded="false" aria-controls="addMenu" onclick="toggleAddMenu(this)" style="display: inline-block">+</button>
+  <details class="xr-card bld-sec" id="secFields">
+    <summary><span class="bld-sec__title">Order form questions</span><span class="bld-sec__hint" id="hintFields">&nbsp;</span></summary>
+    <div class="bld-sec__body">
+      <div class="xr-row xr-row--between">
+        <p class="xr-hint" style="margin:0">Extra questions customers answer at checkout, such as size, colour or address.</p>
+        <button class="add-btn xr-btn xr-btn--secondary xr-btn--sm" id="addFieldBtn" type="button" aria-expanded="false" aria-controls="addMenu" onclick="toggleAddMenu(this)">+ Add</button>
+      </div>
+      <div id="fields" class="fields"></div>
+    </div>
+  </details>
+
+  <!-- SAVE BAR -->
+  <div class="bld-savebar" role="region" aria-label="Save">
+    <span id="saveState" class="bld-state" role="status">All changes saved</span>
+    <button type="button" id="saveBtn" class="xr-btn xr-btn--primary" onclick="saveForm()">Save changes</button>
   </div>
-  <section class="inputCard">
-    <div id="fields" class="fields"></div>
-  </section>
-
-  <!-- PRODUCTS (its own section — category chips + grid, tap a tile to edit) -->
-  <div class="section-header">
-    <h3 style="display: inline-block; margin-right: 10px;">Products</h3>
-  </div>
-  <section class="inputCard">
-    <div id="productFields"></div>
-  </section>
-
-  <button class="save" onclick="saveForm()">Save Form</button>
-
 </main>
-
 <!-- ADD MENU -->
 <div id="addMenu" class="add-menu-overlay hidden" onclick="closeAddMenu(event)" aria-hidden="true">
   <section class="add-menu-panel" role="dialog" aria-modal="true" aria-labelledby="addMenuTitle" onclick="event.stopPropagation()">
@@ -183,50 +238,40 @@
      wrapping it) so it looks exactly like visiting the real customer
      page, not like a small modal nested inside the builder. -->
 <div id="previewOverlay" class="preview-overlay hidden">
-  <button class="preview-close-btn" onclick="closePreview()">&times; Close Preview</button>
-  <div id="previewForm" class="preview-fullbleed"></div>
+  <div class="preview-bar">
+    <span class="preview-label">Preview</span>
+    <div class="preview-devices" role="group" aria-label="Preview size">
+      <button type="button" id="pvPhone" aria-pressed="true" onclick="setPreviewDevice('phone')">Phone</button>
+      <button type="button" id="pvFull" aria-pressed="false" onclick="setPreviewDevice('full')">Full width</button>
+    </div>
+    <button type="button" class="preview-close-btn" onclick="closePreview()">Close</button>
+  </div>
+  <div class="preview-stage is-phone" id="previewStage">
+    <iframe id="previewFrame" title="Store preview"></iframe>
+  </div>
 </div>
 
 <div id="toast-container"></div>
-
 <div id="subscriptionModal" class="modal hidden">
-  <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
-  <div class="subscribe">
-  <h2>Your subscription has expired</h2>
-
-  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
-  <div class="subscribe-row">
-      <span>7 days</span>
-      <button onclick="buySubscription(7)">Buy Subscription</button>
-    </div>
-
-    <div class="subscribe-row">
-      <span>30 days</span>
-      <button onclick="buySubscription(30)">Buy Subscription</button>
-    </div>
-  -->
-
-  <div class="subscribe-row">
-      <span>Renew to keep your store live</span>
-      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
-    </div>
-   </div>     
+  <div class="xr-card dash-modal-card" role="dialog" aria-modal="true" aria-labelledby="subTitle">
+    <h2 class="xr-h2" id="subTitle">Your subscription has expired</h2>
+    <p class="xr-text-2" style="margin:var(--xr-s-2) 0 0">Renew to keep your store live.</p>
+    <button type="button" class="xr-btn xr-btn--primary xr-btn--block" style="margin-top:var(--xr-s-4)" onclick="goToPaymentUpload()">Upload payment proof</button>
+  </div>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
 <script src="js/themeF.js"></script>
 <script src="js/storefront-render.js"></script>
+<script src="js/storefront-chrome.js"></script>
 <script src="js/builderF.js"></script>
 <script src="js/alert.js"></script>
 <script>
   const burger = document.querySelector('.burger');
   const mobileMenu = document.querySelector('.mobile-menu');
-
   burger.addEventListener('click', () => {
     const open = mobileMenu.classList.toggle('open');
     burger.setAttribute('aria-expanded', String(open));
   });
-</script>
 </script>
 </body>
 </html>

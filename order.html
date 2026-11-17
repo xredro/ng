@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Retrieve my order | X REDRO</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/xr-tokens.css">
+  <link rel="stylesheet" href="css/xr-components.css">
+  <link rel="stylesheet" href="css/alert.css">
+  <link rel="stylesheet" href="css/order.css">
+</head>
+<body class="xr-app op-page">
+  <header class="op-top">
+    <a href="index.html" aria-label="X Redro home"><img class="op-logo" src="assets/logo-light.png" alt="X Redro"></a>
+  </header>
+
+  <main class="op-main" id="main">
+    <section id="opGate" class="xr-card op-gate" aria-labelledby="opGateTitle">
+      <p class="xr-text-2" id="opGateStore" style="margin:0;font-weight:700"></p>
+      <h1 class="xr-h2" id="opGateTitle">Retrieve my order</h1>
+      <p class="xr-text-2">Type the 12-character Public Order ID from your order card. You can then see your order, change it and send more payment evidence.</p>
+      <form id="opGateForm" class="xr-stack" autocomplete="off" novalidate>
+        <div class="xr-field">
+          <label class="xr-label" for="opCode">Public Order ID</label>
+          <input class="xr-input op-code-input" id="opCode" name="code" type="text" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="14" placeholder="X7KM92PQ4N8Z" aria-describedby="opGateMsg">
+          <p class="xr-hint">It is on the order card you downloaded after ordering.</p>
+        </div>
+        <p id="opGateMsg" class="xr-error" role="alert" hidden></p>
+        <button class="xr-btn xr-btn--primary xr-btn--block" id="opGateBtn" type="submit">Find my order</button>
+      </form>
+      <p class="xr-hint op-lost">Lost your order ID? Contact the seller. They can check it is you and send you your card again.</p>
+    </section>
+
+    <section id="opOff" class="xr-card op-gate" hidden></section>
+
+    <div id="opView" hidden>
+      <section id="opHead" class="xr-card"></section>
+      <section id="opConfirm" class="xr-card" hidden></section>
+      <section id="opSummary" class="xr-card"></section>
+      <section id="opItems" class="xr-card"></section>
+      <section id="opAdd" class="xr-card"></section>
+      <section id="opInfo" class="xr-card"></section>
+      <section id="opPay" class="xr-card"></section>
+      <section id="opReview" class="xr-card op-review"></section>
+      <section id="opHistory" class="xr-card"></section>
+      <section id="opCardSave" class="xr-card"></section>
+      <section id="opContact" class="op-contact"></section>
+      <p class="op-leave"><button type="button" class="xr-btn xr-btn--ghost xr-btn--sm" id="opLeave">Close this order</button></p>
+    </div>
+  </main>
+
+  <div id="toast-container"></div>
+  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
+  <script src="js/telegram-config.js"></script>
+  <script src="js/telegram.js"></script>
+  <script src="js/order-logic.js"></script>
+  <script src="js/order-card.js"></script>
+  <script src="js/alert.js"></script>
+  <script src="js/order.js"></script>
+</body>
+</html>

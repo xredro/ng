@@ -9,8 +9,11 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/gomart-visual.css">
   <link rel="stylesheet" href="css/nav-shared.css">
+  <link rel="stylesheet" href="css/xr-tokens.css">
+  <link rel="stylesheet" href="css/xr-components.css">
+  <link rel="stylesheet" href="css/dashboard-v2.css">
 </head>
-<body>
+<body class="xr-app">
 <script>
   (function () {
     const savedTheme = localStorage.getItem("theme");
@@ -62,90 +65,89 @@
   </div>
 </nav>
 
-<main class="dashboard">
+<main class="xr-main">
 
-  <h1>Dashboard</h1>
-  <p class="dashboard-sub">Here's what's happening with your store today.</p>
+  <header class="xr-page-head">
+    <div>
+      <h1 class="xr-h1">Dashboard</h1>
+      <p class="xr-text-2">Here's what's happening with your store today.</p>
+    </div>
+    <div class="xr-row">
+      <button type="button" class="xr-btn xr-btn--primary" onclick="copyFormLink()">Copy store link</button>
+      <a class="xr-btn xr-btn--secondary" id="viewStoreLink" href="#" target="_blank" rel="noopener">View store</a>
+    </div>
+  </header>
 
-  <section id="stats" class="stats">
-    <div>
-      <span id="totalOrders">0</span>
-      <p>Total Orders</p>
+  <div class="dash-notices" aria-live="polite">
+    <div id="loadError" class="xr-alert xr-alert--error hidden" role="alert">
+      <div><span class="xr-alert__title">Could not load your orders</span><span id="loadErrorText">Check your connection and reload the page.</span></div>
     </div>
-    <div>
-      <span id="deliveredOrders">0</span>
-      <p>Delivered Orders</p>
+    <!-- ATTENTION STATUS -->
+    <section id="attentionStatus" class="xr-alert xr-alert--warning hidden">
+      <span id="attentionIcon" aria-hidden="true">&#9888;</span>
+      <p id="attentionText">0 orders awaiting action</p>
+    </section>
+    <div id="expiryNotice" class="xr-alert xr-alert--warning hidden" role="status">
+      <div><span class="xr-alert__title" id="expiryTitle">Your plan ends soon</span><span id="expiryText"></span></div>
     </div>
-    <div>
-      <span id="paidOrders">0</span>
-      <p>Paid Orders</p>
-    </div>
-    <div>
-      <span id="pendingOrders">0</span>
-      <p>Pending Payments</p>
-    </div>
-  </section>
-  
-  <!-- ATTENTION STATUS -->
-  <section id="attentionStatus" class="attention-status hidden">
-    <span id="attentionIcon">⚠</span>
-    <p id="attentionText">0 orders awaiting action</p>
-  </section>
+  </div>
 
-  <section id="subscription" class="subscription">
-    <span>Subscription Plans</span>
-    <strong id="planDays">0 days</strong>
-    <span>Expires in</span>
-    <strong id="expiresIn">0 days</strong>
-    <!-- <button id="buySubscription">Buy Subscription</button> -->
-  </section>
-  
-  <!-- FORM STATUS -->
-  <section class="form-status">
-    <div>
-      <p class="label">Order Form Link</p>
-      <strong>Always live</strong>
-    </div>
-    <button class="copybtn" onclick="copyFormLink()">Copy link</button>
+  <section id="stats" class="xr-grid xr-grid--4 dash-section" aria-label="Order summary">
+    <div class="xr-stat xr-stat--dark"><span class="xr-stat__value" id="totalOrders">&ndash;</span><span class="xr-stat__label">Total orders</span></div>
+    <div class="xr-stat xr-stat--info"><span class="xr-stat__value" id="deliveredOrders">&ndash;</span><span class="xr-stat__label">Delivered</span></div>
+    <div class="xr-stat xr-stat--success"><span class="xr-stat__value" id="paidOrders">&ndash;</span><span class="xr-stat__label">Paid</span></div>
+    <div class="xr-stat xr-stat--danger"><span class="xr-stat__value" id="pendingOrders">&ndash;</span><span class="xr-stat__label">Unpaid</span></div>
   </section>
 
-  <section id="latestOrders">
-    <h2>Last 3 Orders</h2>
-    <div id="ordersList"></div>
+  <section class="xr-grid xr-grid--3 dash-section dash-values" aria-label="Order value">
+    <div class="xr-card"><span class="xr-small xr-text-2">Submitted order value</span><span class="dash-value" id="valueAll">&ndash;</span><span class="dash-value-note">All orders, paid or not</span></div>
+    <div class="xr-card"><span class="xr-small xr-text-2">Marked paid or delivered</span><span class="dash-value" id="valuePaid">&ndash;</span><span class="dash-value-note">Orders you have marked paid</span></div>
+    <div class="xr-card"><span class="xr-small xr-text-2">Awaiting payment</span><span class="dash-value" id="valueUnpaid">&ndash;</span><span class="dash-value-note">Orders still unpaid</span></div>
   </section>
-  
-  <!-- SYSTEM STATUS -->
-  <section class="system-status">
-    <span class="dot"></span>
-    <p id="systemText">All services operational</p>
-  </section>
+
+  <div class="dash-grid">
+    <section id="recentOrders" aria-labelledby="latestH">
+      <div class="xr-row xr-row--between" style="margin-bottom:var(--xr-s-3)">
+        <h2 class="xr-h3" id="latestH">Latest orders</h2>
+        <a class="xr-btn xr-btn--ghost xr-btn--sm" href="orders.html">View all</a>
+      </div>
+      <div class="xr-card xr-card--flush" id="ordersList" aria-busy="true">
+        <div class="xr-stack xr-stack--sm" style="padding:var(--xr-s-4)"><span class="xr-skeleton" style="height:16px;width:55%"></span><span class="xr-skeleton" style="height:12px;width:80%"></span><span class="xr-skeleton" style="height:12px;width:35%"></span></div>
+      </div>
+    </section>
+
+    <aside class="dash-side" aria-label="Store and plan">
+      <section id="subscription" class="xr-card">
+        <h2 class="xr-h3" style="margin-bottom:var(--xr-s-2)">Your plan</h2>
+        <div class="dash-kv"><span class="xr-text-2">Plan</span><strong id="planDays">&ndash;</strong></div>
+        <div class="dash-kv"><span class="xr-text-2">Expires in</span><strong id="expiresIn">&ndash;</strong></div>
+      </section>
+      <section class="xr-card">
+        <h2 class="xr-h3" style="margin-bottom:var(--xr-s-2)">Your store link</h2>
+        <p class="xr-text-2 xr-small" style="margin:0 0 var(--xr-s-3)">Share this link in your bio, Status and chats.</p>
+        <button type="button" class="xr-btn xr-btn--secondary xr-btn--block" onclick="copyFormLink()">Copy link</button>
+      </section>
+      <section class="xr-card">
+        <h2 class="xr-h3" style="margin-bottom:var(--xr-s-3)">Quick actions</h2>
+        <div class="dash-links">
+          <a class="xr-btn xr-btn--ghost" href="indexF.html">Edit store and products</a>
+          <a class="xr-btn xr-btn--ghost" href="orders.html">Manage orders</a>
+          <a class="xr-btn xr-btn--ghost" href="settings.html">Settings</a>
+        </div>
+      </section>
+    </aside>
+  </div>
 
 </main>
 
 <div id="paymentImageModal" class="modal hidden" onclick="this.classList.add('hidden')"></div>
 
 <div id="subscriptionModal" class="modal hidden">
-  <!-- <button onclick="goToSelar()">Buy Subscription</button> -->
-  <div class="subscribe">
-  <h2>Your subscription has expired</h2>
-
-  <!-- Old Selar-based plan buttons — kept for reference, not deleted.
-  <div class="subscribe-row">
-      <span>7 days</span>
-      <button onclick="buySubscription(7)">Buy Subscription</button>
-    </div>
-
-    <div class="subscribe-row">
-      <span>30 days</span>
-      <button onclick="buySubscription(30)">Buy Subscription</button>
-    </div>
-  -->
-
-  <div class="subscribe-row">
-      <span>Renew to keep your store live</span>
-      <button onclick="goToPaymentUpload()">Upload Payment Proof</button>
-    </div>
-   </div>     
+  <div class="xr-card dash-modal-card" role="dialog" aria-modal="true" aria-labelledby="subTitle">
+    <h2 class="xr-h2" id="subTitle">Your subscription has expired</h2>
+    <p class="xr-text-2" style="margin:var(--xr-s-2) 0 0">Renew to keep your store live.</p>
+    <button type="button" class="xr-btn xr-btn--primary xr-btn--block" onclick="goToPaymentUpload()">Upload payment proof</button>
+  </div>
 </div>
 
 <div id="toast-container"></div>
@@ -154,6 +156,7 @@
 <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.1"></script>
 <script src="js/alert.js"></script>
 <script src="js/themeF.js"></script>
+<script src="js/time-left.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
   const burger = document.querySelector('.burger');

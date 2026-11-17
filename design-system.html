@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>X-Redro Design System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap">
+<link rel="stylesheet" href="css/xr-tokens.css">
+<link rel="stylesheet" href="css/xr-components.css">
+<style>
+  /* page-only layout for this style guide */
+  .sg-sec { margin-top: var(--xr-s-10); }
+  .sg-sec > .xr-h2 { margin-bottom: var(--xr-s-4); }
+  .sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--xr-s-3); }
+  .sg-sw { border: 1px solid var(--xr-border); border-radius: var(--xr-r-md); overflow: hidden; background: var(--xr-surface); font-size: var(--xr-fs-xs); }
+  .sg-sw i { display: block; height: 52px; }
+  .sg-sw span { display: block; padding: 6px 8px; color: var(--xr-text-2); word-break: break-all; }
+  @media (max-width: 599px) { .sg-two { grid-template-columns: minmax(0, 1fr); } }
+  .sg-top { position: sticky; top: 0; z-index: var(--xr-z-nav); background: var(--xr-bg); padding: var(--xr-s-3) 0; border-bottom: 1px solid var(--xr-border); }
+</style>
+</head>
+<body class="xr-app">
+<script>try{var t=localStorage.getItem("theme");if(t)document.body.dataset.theme=t}catch(e){}</script>
+
+<div class="xr-container" style="padding-bottom:80px">
+  <div class="sg-top xr-row xr-row--between">
+    <strong>X-Redro design system</strong>
+    <button class="xr-btn xr-btn--secondary xr-btn--sm" id="themeBtn" type="button">Toggle dark mode</button>
+  </div>
+
+  <section class="sg-sec">
+    <h1 class="xr-h1">Seller app foundation</h1>
+    <p class="xr-text-2">Tokens in <code>css/xr-tokens.css</code>, components in <code>css/xr-components.css</code>. Storefront themes are separate and keep their own looks.</p>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Colour</h2>
+    <div class="sg-swatches">
+      <div class="sg-sw"><i style="background:var(--xr-lime)"></i><span>lime, primary action</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-green)"></i><span>green, brand accent</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-ink)"></i><span>ink</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-bg)"></i><span>bg</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-surface)"></i><span>surface</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-surface-2)"></i><span>surface-2</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-border-strong)"></i><span>border strong</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-success-bg)"></i><span>success / paid</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-danger-bg)"></i><span>danger / unpaid</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-info-bg)"></i><span>info / delivered</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-warning-bg)"></i><span>warning / attention</span></div>
+      <div class="sg-sw"><i style="background:var(--xr-neutral-bg)"></i><span>neutral / cancelled</span></div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Typography</h2>
+    <div class="xr-card xr-stack--sm xr-stack">
+      <div class="xr-h1">Heading one</div>
+      <div class="xr-h2">Heading two</div>
+      <div class="xr-h3">Heading three</div>
+      <p style="margin:0">Body text at 15px. Orders from WhatsApp, Instagram and TikTok in one place.</p>
+      <p class="xr-text-2 xr-small" style="margin:0">Secondary text at 13.5px for supporting detail.</p>
+      <span class="xr-eyebrow">Eyebrow label</span>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Buttons</h2>
+    <div class="xr-card xr-stack">
+      <div class="xr-row">
+        <button class="xr-btn xr-btn--primary" type="button">Primary</button>
+        <button class="xr-btn xr-btn--dark" type="button">Dark</button>
+        <button class="xr-btn xr-btn--secondary" type="button">Secondary</button>
+        <button class="xr-btn xr-btn--ghost" type="button">Ghost</button>
+      </div>
+      <div class="xr-row">
+        <button class="xr-btn xr-btn--danger" type="button">Cancel order</button>
+        <button class="xr-btn xr-btn--danger-solid" type="button">Delete</button>
+        <button class="xr-btn xr-btn--primary" type="button" disabled>Disabled</button>
+        <button class="xr-btn xr-btn--primary xr-btn--loading" type="button">Saving</button>
+        <button class="xr-btn xr-btn--secondary xr-btn--sm" type="button">Small</button>
+      </div>
+      <button class="xr-btn xr-btn--primary xr-btn--block" type="button">Full width primary</button>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Form fields</h2>
+    <div class="xr-card xr-stack">
+      <div class="xr-field"><label class="xr-label" for="f1">Product name</label><input class="xr-input" id="f1" placeholder="Black handbag"></div>
+      <div class="xr-field"><label class="xr-label" for="f2">Price</label><div class="xr-input-group"><span class="xr-prefix">&#8358;</span><input class="xr-input" id="f2" inputmode="numeric" placeholder="12,000"></div><span class="xr-hint">Numbers only.</span></div>
+      <div class="xr-field is-invalid"><label class="xr-label" for="f3">Phone number</label><input class="xr-input" id="f3" value="0801"><span class="xr-error">Enter a valid Nigerian number.</span></div>
+      <div class="xr-field"><label class="xr-label" for="f4">Description <span class="xr-optional">(optional)</span></label><textarea class="xr-textarea" id="f4"></textarea></div>
+      <div class="xr-field"><label class="xr-label" for="f5">Category</label><select class="xr-select" id="f5"><option>General</option><option>Bags</option></select></div>
+      <label class="xr-switch"><input type="checkbox" checked><span class="xr-switch-track"></span>Track stock for this product</label>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Cards and stats</h2>
+    <div class="xr-grid xr-grid--4" style="margin-bottom:var(--xr-s-3)">
+      <div class="xr-stat xr-stat--dark"><span class="xr-stat__value">48</span><span class="xr-stat__label">Total orders</span></div>
+      <div class="xr-stat xr-stat--info"><span class="xr-stat__value">21</span><span class="xr-stat__label">Delivered</span></div>
+      <div class="xr-stat xr-stat--success"><span class="xr-stat__value">17</span><span class="xr-stat__label">Paid</span></div>
+      <div class="xr-stat xr-stat--danger"><span class="xr-stat__value">10</span><span class="xr-stat__label">Unpaid</span></div>
+    </div>
+    <p class="xr-hint">Sample numbers for illustration only.</p>
+    <div class="xr-card" style="margin-top:var(--xr-s-3)">
+      <div class="xr-card__head"><h3 class="xr-h3">Card title</h3><button class="xr-btn xr-btn--ghost xr-btn--sm" type="button">Action</button></div>
+      <p class="xr-text-2" style="margin:0">Cards use a 16px radius, a hairline border and a very light shadow.</p>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Status badges</h2>
+    <div class="xr-card xr-row">
+      <span class="xr-badge xr-badge--unpaid xr-badge--dot">Unpaid</span>
+      <span class="xr-badge xr-badge--paid xr-badge--dot">Paid</span>
+      <span class="xr-badge xr-badge--delivered xr-badge--dot">Delivered</span>
+      <span class="xr-badge xr-badge--attention xr-badge--dot">Needs attention</span>
+      <span class="xr-badge xr-badge--cancelled xr-badge--dot">Cancelled</span>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Filters</h2>
+    <div class="xr-card xr-stack">
+      <div class="xr-chips" role="group" aria-label="Order filters">
+        <button class="xr-chip is-active" type="button">All 48</button>
+        <button class="xr-chip" type="button">Unpaid 10</button>
+        <button class="xr-chip" type="button">Paid 17</button>
+        <button class="xr-chip" type="button">Delivered 21</button>
+        <button class="xr-chip" type="button">Cancelled 0</button>
+      </div>
+      <div class="xr-seg" role="tablist"><button role="tab" aria-selected="true" type="button">Orders</button><button role="tab" aria-selected="false" type="button">History</button></div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Alerts</h2>
+    <div class="xr-stack xr-stack--sm">
+      <div class="xr-alert" role="status"><div><span class="xr-alert__title">Heads up</span>Your stock count updates when an order is placed.</div></div>
+      <div class="xr-alert xr-alert--success" role="status"><div><span class="xr-alert__title">Saved</span>Your store was updated.</div></div>
+      <div class="xr-alert xr-alert--warning" role="alert"><div><span class="xr-alert__title">Low stock</span>Only 2 left of Gold wristwatch.</div></div>
+      <div class="xr-alert xr-alert--error" role="alert"><div><span class="xr-alert__title">Could not save</span>Check your connection and try again.</div></div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">List rows (orders)</h2>
+    <div class="xr-card xr-card--flush">
+      <ul class="xr-list">
+        <li class="xr-list-row"><div class="xr-list-row__main"><div class="xr-list-row__title">Amaka O.</div><div class="xr-list-row__sub">2 x Leather tote</div></div><span class="xr-num"><strong>&#8358;24,000</strong></span><span class="xr-badge xr-badge--paid">Paid</span></li>
+        <li class="xr-list-row"><div class="xr-list-row__main"><div class="xr-list-row__title">Tunde B.</div><div class="xr-list-row__sub">1 x Oud perfume</div></div><span class="xr-num"><strong>&#8358;18,500</strong></span><span class="xr-badge xr-badge--unpaid">Unpaid</span></li>
+        <li class="xr-list-row"><div class="xr-list-row__main"><div class="xr-list-row__title">Ngozi E.</div><div class="xr-list-row__sub">3 x Satin scarf, a very long product name that gets truncated on small screens</div></div><span class="xr-num"><strong>&#8358;9,000</strong></span><span class="xr-badge xr-badge--delivered">Delivered</span></li>
+      </ul>
+    </div>
+    <p class="xr-hint">Sample customers for illustration only.</p>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Empty and loading states</h2>
+    <div class="xr-grid sg-two">
+      <div class="xr-card"><div class="xr-empty"><div class="xr-empty__icon" aria-hidden="true">&#128717;</div><h3 class="xr-empty__title">No orders yet</h3><p class="xr-empty__text">Share your store link and orders will appear here.</p><button class="xr-btn xr-btn--primary" type="button">Copy store link</button></div></div>
+      <div class="xr-card xr-stack xr-stack--sm" aria-busy="true"><span class="xr-skeleton" style="width:60%;height:18px"></span><span class="xr-skeleton" style="width:100%;height:14px"></span><span class="xr-skeleton" style="width:80%;height:14px"></span><div><span class="xr-spinner" role="status" aria-label="Loading"></span></div></div>
+    </div>
+  </section>
+
+  <section class="sg-sec">
+    <h2 class="xr-h2">Modal and bottom sheet</h2>
+    <button class="xr-btn xr-btn--secondary" id="openModal" type="button">Open sheet</button>
+    <p class="xr-hint">Bottom sheet on phones, centred dialog from 600px.</p>
+  </section>
+</div>
+
+<div class="xr-modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="xr-modal__backdrop" id="modalBackdrop"></div>
+  <div class="xr-modal__dialog xr-stack">
+    <h3 class="xr-h2" id="mTitle">Cancel this order?</h3>
+    <p class="xr-text-2" style="margin:0">Reserved stock will be returned to the product.</p>
+    <div class="xr-row"><button class="xr-btn xr-btn--danger-solid" id="modalOk" type="button">Cancel order</button><button class="xr-btn xr-btn--secondary" id="modalNo" type="button">Keep order</button></div>
+  </div>
+</div>
+
+<script>
+  var body = document.body;
+  document.getElementById('themeBtn').onclick = function () {
+    var next = body.dataset.theme === 'dark' ? 'light' : 'dark';
+    body.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  };
+  var modal = document.getElementById('modal');
+  function openM() { modal.hidden = false; document.getElementById('modalNo').focus(); }
+  function closeM() { modal.hidden = true; document.getElementById('openModal').focus(); }
+  document.getElementById('openModal').onclick = openM;
+  document.getElementById('modalBackdrop').onclick = closeM;
+  document.getElementById('modalNo').onclick = closeM;
+  document.getElementById('modalOk').onclick = closeM;
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) closeM(); });
+</script>
+</body>
+</html>
