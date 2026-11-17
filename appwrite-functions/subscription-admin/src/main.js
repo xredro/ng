@@ -43,7 +43,16 @@ module.exports = async ({ req, res, log, error }) => {
       if (!result.documents.length) return res.json({ ok: false, message: 'No X-Redro account was found with that email.' }, 404);
       const profile = result.documents[0];
       if (!profile.userId) return res.json({ ok: false, message: 'This account record has no user ID.' }, 422);
-      return res.json({ ok: true, user: { userId: profile.userId, email: profile.email, username: profile.username || '' } });
+      // Also report any plan that is still running, so the admin page can say "extend" instead of "activate".
+      let subscription = null;
+      try {
+        const subs = await databases.listDocuments(databaseId, subscriptionsCollectionId, [
+          Query.equal('userId', profile.userId), Query.equal('status', 'active'), Query.orderDesc('expiresAt'), Query.limit(1)
+        ]);
+        const running = subs.documents[0];
+        if (running && new Date(running.expiresAt) > new Date()) subscription = { plan: running.plan, expiresAt: running.expiresAt };
+      } catch (_) { /* the lookup still works without it */ }
+      return res.json({ ok: true, user: { userId: profile.userId, email: profile.email, username: profile.username || '' }, subscription });
     }
 
     if (action === 'activate') {
@@ -66,7 +75,18 @@ module.exports = async ({ req, res, log, error }) => {
       if (!profile || profile.userId !== userId) return res.json({ ok: false, message: 'The selected customer account could not be confirmed.' }, 404);
 
       const now = new Date();
-      const expiry = new Date(now);
+      // Time the customer still has is kept: the new plan starts counting from the end of the running one.
+      // The plan name and durationDay stay exactly as requested (the plan "as is"); only expiresAt includes the remaining time.
+      let base = new Date(now);
+      let previousExpiresAt = null;
+      const running = await databases.listDocuments(databaseId, subscriptionsCollectionId, [
+        Query.equal('userId', userId), Query.equal('status', 'active'), Query.orderDesc('expiresAt'), Query.limit(1)
+      ]);
+      if (running.documents[0] && new Date(running.documents[0].expiresAt) > now) {
+        base = new Date(running.documents[0].expiresAt);
+        previousExpiresAt = base.toISOString();
+      }
+      const expiry = new Date(base);
       expiry.setDate(expiry.getDate() + durationDays);
       const planLabel = presets[planName] ? planName : `custom-${durationDays}-days`;
 
@@ -89,6 +109,7 @@ module.exports = async ({ req, res, log, error }) => {
         ok: true,
         user: { email: profile.email, username: profile.username || '' },
         subscription: { id: created.$id, plan: planLabel, days: durationDays, expiresAt: expiry.toISOString() },
+        extended: !!previousExpiresAt, previousExpiresAt, remainingMs: previousExpiresAt ? Math.max(0, base.getTime() - now.getTime()) : 0,
         warning: retireFailures ? 'The new subscription is active, but one or more older active records could not be retired. Check the Subscriptions collection.' : ''
       });
     }
