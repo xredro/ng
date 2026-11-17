@@ -27,11 +27,14 @@ let fields = [];
 let formTitle = "";
 let formSubtitle = "";
 let CURRENT_THEME_CLASS = "theme-r1";
+let storeConfig = null; // optional JSON from the form doc (logo, banner, contact...), see docs/STOREFRONT-ARCHITECTURE.md
 
 let CURRENT_FORM_ID = "";
 let FORM_OWNER_ID = "";
 let whatsappNumber = "";
 let whatsappOrderRedirectEnabled = false;
+let customerOrderUpdatesEnabled = true; // seller can switch customer order changes off in Settings (form attribute customerOrderUpdatesEnabled; missing = on)
+let lastOrderCard = null;               // data for the downloadable order card shown after a successful order (js/order-card.js)
 let pendingWhatsAppUrl = "";
 
 const cart = {};
@@ -179,6 +182,7 @@ function buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, orderId 
   // attaches that same recent screenshot manually before pressing Send.
   const message = [
     "Hello, I just placed an order via X-Redro.",
+    orderId ? `Order ID: ${orderId}` : "",
     "",
     "Selected products:",
     ...productLines,
@@ -193,6 +197,118 @@ function paymentImageUrl(fileId) {
   return `https://nyc.cloud.appwrite.io/v1/storage/buckets/${PRODUCT_IMAGES_BUCKET}/files/${encodeURIComponent(fileId)}/view?project=695981480033c7a4eb0d`;
 }
 
+/* The seller can mark a product sold out while a customer already has it in their cart.
+   Right before sending, check the latest saved store. Sold-out items are taken out of the cart,
+   the store is redrawn showing them as sold out, and the customer is told. Products are matched by
+   name (not position), so a store edited in the meantime cannot swap quantities between products.
+   Returns true when the order can go ahead. If the check itself fails (no network) the order goes ahead. */
+async function removeSoldOutFromCart() {
+  let latest;
+  try {
+    const doc = await databases.getDocument(DB_ID, FORMS, CURRENT_FORM_ID);
+    latest = (doc.fields || []).map(f => (typeof f === "string" ? JSON.parse(f) : f));
+  } catch (err) {
+    console.warn("Could not re-check availability:", err);
+    return true;
+  }
+
+  const removed = [];
+  fields.forEach(field => {
+    if (field.type !== "product") return;
+    const fresh = latest.find(f => f.id === field.id && f.type === "product");
+    if (!fresh) return;
+    (field.products || []).forEach((p, i) => {
+      const key = `${field.id}_${i}`;
+      const match = (fresh.products || []).find(q => q.name === p.name);
+      if (match && (match.soldOut === true || match.soldOut === "true")) {
+        p.soldOut = true;
+        if ((cart[key] || 0) > 0) { removed.push(p.name || "A product"); delete cart[key]; }
+      }
+    });
+  });
+
+  if (!removed.length) return true;
+
+  renderForm();
+  updateTotal();
+  showToast(`${removed.join(", ")} just sold out and was removed from your order.`, "warning");
+  return false;
+}
+
+/* Public Order ID: random, 12 characters, kept on the original order as its own field.
+   It is checked against existing orders first, and the database's unique index on publicOrderID is the final guard. */
+async function publicIdTaken(id) {
+  try {
+    const r = await databases.listDocuments(DB_ID, ORDERS, [Appwrite.Query.equal("publicOrderID", id), Appwrite.Query.limit(1)]);
+    return r.documents.length > 0;
+  } catch (e) {
+    return false; // cannot check from here (permissions or the field does not exist yet); the unique index still protects
+  }
+}
+
+/* Creates the order. With the Public Order ID first; if the Orders collection has no publicOrderID field yet
+   (Appwrite refuses an unknown attribute) the order is sent exactly the old way, so selling never stops. */
+async function createOrderDocument(payload) {
+  const permissions = [
+    Appwrite.Permission.write(Appwrite.Role.any()),
+    Appwrite.Permission.read(Appwrite.Role.any())
+  ];
+  if (window.XrOrder && window.XrOrderCard) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let publicOrderID = "";
+      try { publicOrderID = XrOrderCard.generatePublicId(); } catch (e) { console.warn("No secure random source:", e); break; }
+      if (await publicIdTaken(publicOrderID)) continue;
+      try {
+        const res = await databases.createDocument(DB_ID, ORDERS, Appwrite.ID.unique(), Object.assign({}, payload, { publicOrderID }), permissions);
+        return { res, publicOrderID };
+      } catch (err) {
+        const msg = String((err && (err.message || (err.response && err.response.message))) || "");
+        if (err && err.code === 409) continue; // another order already has this ID: pick a different one
+        if (err && err.code === 400 && /attribute|structure/i.test(msg)) {
+          console.warn("The Orders collection has no publicOrderID field yet; sending the order without one.", msg);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+  const res = await databases.createDocument(DB_ID, ORDERS, Appwrite.ID.unique(), payload, permissions);
+  return { res, publicOrderID: "" };
+}
+
+function buildOrderCardData({ createdAt, publicId, rawFormData, totalAmount, hasProof }) {
+  const items = [];
+  rawFormData.forEach(f => {
+    if (f.type === "product") (f.value || []).forEach(p => items.push({ name: p.name, qty: Number(p.qty || 0), price: Number(p.price || 0) }));
+  });
+  const productTotal = items.reduce((t, i) => t + i.qty * i.price, 0);
+  const cfg = typeof storefrontNormalizeConfig === "function" ? storefrontNormalizeConfig(storeConfig) : {};
+  let dateText = "";
+  try { dateText = new Date(createdAt || Date.now()).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch (e) { dateText = new Date().toDateString(); }
+  let retrievalUrl = "";
+  try { retrievalUrl = new URL("order.html?fid=" + encodeURIComponent(CURRENT_FORM_ID), window.location.href).href; } catch (e) { retrievalUrl = "order.html"; }
+  return {
+    storeName: formTitle, logoUrl: cfg.logoUrl || "", publicId, dateText, items,
+    feesAmount: Math.max(0, totalAmount - productTotal), total: totalAmount,
+    paymentStatus: hasProof ? "Payment image received" : "Awaiting payment",
+    paymentTone: hasProof ? "info" : "warn",
+    contact: { whatsapp: cfg.whatsapp || whatsappNumber || "", phone: cfg.phone || "" },
+    retrievalUrl, updatesEnabled: customerOrderUpdatesEnabled
+  };
+}
+
+/* A slim bar above the store so customers who already ordered can find their order. It is added once to the
+   live store only (never the builder preview), above every theme, and hidden when the seller turned order changes off. */
+function renderRetrieveStrip() {
+  const root = document.getElementById("formRoot");
+  if (!root || !customerOrderUpdatesEnabled || !CURRENT_FORM_ID || document.getElementById("ocRetrieveStrip")) return;
+  const strip = document.createElement("div");
+  strip.id = "ocRetrieveStrip";
+  strip.className = "oc-retrieve-strip";
+  strip.innerHTML = `<span>Already ordered?</span> <a href="order.html?fid=${encodeURIComponent(CURRENT_FORM_ID)}">Retrieve My Order</a>`;
+  root.parentNode.insertBefore(strip, root);
+}
+
 async function submitOrder() {
   // validate normal inputs first
   if (!validateFormInputs()) return;
@@ -205,6 +321,8 @@ async function submitOrder() {
     showToast("Please select at least one product", "warning");
     return;
   }
+
+  if (!(await removeSoldOutFromCart())) return;
 
   /* payment proof image */
   const paymentInput = document.getElementById("paymentProof");
@@ -274,21 +392,22 @@ async function submitOrder() {
   };
 
   try {
-    const res = await databases.createDocument(
-      DB_ID,
-      ORDERS,
-      Appwrite.ID.unique(),
-      orderPayload,
-      [
-        Appwrite.Permission.write(Appwrite.Role.any()),
-        Appwrite.Permission.read(Appwrite.Role.any())
-      ]
-    );
+    const { res, publicOrderID } = await createOrderDocument(orderPayload);
 
     console.log("ORDER CREATED:", res);
+    if (typeof xrTelegramNotify === "function") xrTelegramNotify("new_order", res.$id); // fire and forget: never delays or fails the order
+
+    // the order exists now: nothing about the card may turn this into a "failed" order
+    try {
+      lastOrderCard = publicOrderID ? buildOrderCardData({ createdAt: res.$createdAt, publicId: publicOrderID, rawFormData, totalAmount, hasProof: !!paymentFileId }) : null;
+      if (window.XrOrderCard) XrOrderCard.setCurrent(lastOrderCard);
+    } catch (cardErr) {
+      console.warn("Could not prepare the order card:", cardErr);
+      lastOrderCard = null;
+    }
 
     const waUrl = (whatsappOrderRedirectEnabled && paymentFileId)
-      ? buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, res.$id)
+      ? buildWhatsAppOrderUrl(rawFormData, totalAmount, paymentFileId, publicOrderID)
       : null;
 
     if (waUrl) {
@@ -312,6 +431,15 @@ async function submitOrder() {
 
 function changeQty(fieldId, index, delta) {
   const key = `${fieldId}_${index}`;
+
+  // a product the seller marked sold out cannot be added (its buttons are disabled too)
+  const pf = fields.find(f => f.id === fieldId);
+  const prod = pf && Array.isArray(pf.products) ? pf.products[index] : null;
+  if (delta > 0 && prod && (prod.soldOut === true || prod.soldOut === "true")) {
+    showToast(`${prod.name || "This product"} is sold out`, "info");
+    return;
+  }
+
   cart[key] = Math.max(0, (cart[key] || 0) + delta);
 
   const qty = cart[key];
@@ -390,6 +518,9 @@ function updateTotal() {
   if (cartBarCount) cartBarCount.innerText = `${items} item${items === 1 ? "" : "s"}`;
   if (cartBarTotal) cartBarTotal.innerText = `₦${formatNaira(total)}`;
   if (cartBar) cartBar.classList.toggle("visible", items > 0);
+
+  // full-store themes: cart drawer, header count, checkout summary
+  if (typeof storefrontRefreshCart === "function") storefrontRefreshCart(fields, cart, "changeQty");
 }
 
 /* =========================
@@ -407,6 +538,7 @@ function renderForm() {
     formTitle,
     formSubtitle,
     themeClass: CURRENT_THEME_CLASS,
+    storeConfig,
     opts: { live: true, cart, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" }
   });
 }
@@ -417,7 +549,7 @@ function renderSuccessState(whatsappReady = false) {
   container.innerHTML = `
     <div class="preview-theme ${CURRENT_THEME_CLASS}">
       <div class="preview-card success-state">
-        <h2 class="business-name">${formTitle}</h2>
+        <h2 class="business-name">${storefrontEscape(formTitle)}</h2>
 
         <div class="success-icon">✓</div>
 
@@ -425,6 +557,8 @@ function renderSuccessState(whatsappReady = false) {
         <p class="success-subtitle">
           The seller will contact you shortly.
         </p>
+
+        ${lastOrderCard && window.XrOrderCard ? XrOrderCard.panelHTML(lastOrderCard) : ""}
 
         ${whatsappReady ? `
           <div class="whatsapp-handoff-box">
@@ -438,6 +572,10 @@ function renderSuccessState(whatsappReady = false) {
       </div>
     </div>
   `;
+
+  const strip = document.getElementById("ocRetrieveStrip");
+  if (strip) strip.remove();
+  if (lastOrderCard && window.XrOrderCard) XrOrderCard.fillPreview();
 }
 
 /* =========================
@@ -500,6 +638,7 @@ async function initForm() {
     // or if the `storeTheme` attribute hasn't been added to the form
     // collection in Appwrite yet — see NOTE in js/builderF.js).
     CURRENT_THEME_CLASS = doc.storeTheme ? `theme-${doc.storeTheme}` : "theme-r1";
+    storeConfig = doc.storeConfig || null;
 
     fields = doc.fields.map(f =>
       typeof f === "string" ? JSON.parse(f) : f
@@ -509,8 +648,10 @@ async function initForm() {
     FORM_OWNER_ID = doc.userId || "";
     whatsappNumber = String(doc.whatsappNumber || "").trim();
     whatsappOrderRedirectEnabled = doc.whatsappOrderRedirectEnabled === true;
+    customerOrderUpdatesEnabled = doc.customerOrderUpdatesEnabled !== false;
 
     renderForm();
+    renderRetrieveStrip();
   } catch (err) {
     console.error("INIT ERROR:", err);
     showToast(err.message || "Form not found", "error");

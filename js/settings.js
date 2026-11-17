@@ -30,6 +30,7 @@ let profileDocId = null;
 let user;
 let res;
 let formDoc = null;
+let loadedProfile = { username: "", email: "" }; // what is saved, used to detect changes and to cancel an edit
 
 /* =========================
 CORE BUSINESS LOGIC
@@ -43,61 +44,87 @@ async function requireAuth() {
   }
 }
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function showSubscription(sub, daysLeft) {
+  setText("subPlan", sub ? sub.plan : "None");
+  const badge = document.getElementById("subStatus");
+  const expires = document.getElementById("subExpires");
+  if (!sub || daysLeft <= 0) {
+    setText("subStatus", "Expired");
+    if (badge) badge.className = "xr-badge xr-badge--unpaid xr-badge--dot";
+    if (expires) expires.textContent = "Expired";
+    return;
+  }
+  const soon = daysLeft <= 3;
+  setText("subStatus", soon ? "Ending soon" : "Active");
+  if (badge) badge.className = `xr-badge xr-badge--${soon ? "attention" : "paid"} xr-badge--dot`;
+  if (expires) expires.textContent = typeof xrTimeLeft === "function" && sub.expiresAt ? xrTimeLeft(new Date(sub.expiresAt) - new Date()).text : `${daysLeft} ${daysLeft === 1 ? "day" : "days"}`;
+}
+
 async function loadUser() {
   user = await requireAuth();
   if (!user) return;
 
-  res = await databases.listDocuments(
-    DB_ID,
-    USERS,
-    [
+  try {
+    res = await databases.listDocuments(
+      DB_ID,
+      USERS,
+      [
+        Query.equal("userId", user.$id),
+        Query.orderDesc("$createdAt"),
+        Query.limit(1)
+      ]
+    );
+
+    if (!res.documents.length) return;
+
+    const profile = res.documents[0];
+    profileDocId = profile.$id;
+
+    username.value = profile.username || "";
+    email.value = profile.email || user.email || "";
+    loadedProfile = { username: username.value, email: email.value };
+
+    // WhatsApp-style profile avatar: initials, no photo
+    const avatarEl = document.getElementById("profileAvatar");
+    const nameDisplayEl = document.getElementById("profileNameDisplay");
+    const displayName = profile.username || user.email || "Your account";
+    if (avatarEl) avatarEl.textContent = displayName.trim().charAt(0).toUpperCase();
+    if (nameDisplayEl) nameDisplayEl.textContent = displayName;
+
+    //Theme Application
+    const savedTheme = profile.theme || "light";
+    applyTheme(savedTheme);
+
+    //Subscription Check (the real plan and expiry are shown, not a fixed label)
+    const subRes = await databases.listDocuments(DB_ID, SUBS, [
       Query.equal("userId", user.$id),
-      Query.orderDesc("$createdAt"),
+      Query.equal("status", "active"),
+      Query.orderDesc("expiresAt"),
       Query.limit(1)
-    ]
-  );
+    ]);
 
-  if (!res.documents.length) return;
+    if (!subRes.documents.length) {
+      showSubscription(null, 0);
+      document.getElementById("subscriptionModal")?.classList.remove("hidden");
+      return;
+    }
+    const sub = subRes.documents[0];
+    const daysLeft = Math.ceil(
+      (new Date(sub.expiresAt) - new Date()) / 86400000
+    );
 
-  const profile = res.documents[0];
-  profileDocId = profile.$id;
-
-  username.value = profile.username || "";
-  email.value = profile.email || user.email || "";
-
-  // GoMart-style profile avatar — WhatsApp-style initials, no photo
-  const avatarEl = document.getElementById("profileAvatar");
-  const nameDisplayEl = document.getElementById("profileNameDisplay");
-  const displayName = profile.username || user.email || "Your account";
-  if (avatarEl) avatarEl.textContent = displayName.trim().charAt(0).toUpperCase();
-  if (nameDisplayEl) nameDisplayEl.textContent = displayName;
-     
-  //Theme Application    
-  profileDocId = res.documents[0].$id;
-
-  const savedTheme = res.documents[0].theme || "light";
-  applyTheme(savedTheme);
-  
-  //Quick Subscription Check
-  const subRes = await databases.listDocuments(DB_ID, SUBS, [
-    Query.equal("userId", user.$id),
-    Query.equal("status", "active"),
-    Query.orderDesc("expiresAt"),
-    Query.limit(1)
-  ]);
-
-  if (!subRes.documents.length) {
-    document.getElementById("subscriptionModal")?.classList.remove("hidden");
-    return;
-  }
-  const sub = subRes.documents[0];
-  const daysLeft = Math.ceil(
-    (new Date(sub.expiresAt) - new Date()) / 86400000
-  );
-
-  if (daysLeft <= 0) {
-    document.getElementById("subscriptionModal").classList.remove("hidden");
-    return;
+    showSubscription(sub, daysLeft);
+    if (daysLeft <= 0) {
+      document.getElementById("subscriptionModal").classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error(err);
+    document.getElementById("settingsError")?.classList.remove("hidden");
   }
 }
 
@@ -263,6 +290,8 @@ async function loadWhatsAppSettings() {
     const toggle = document.getElementById("whatsappOrderRedirectEnabled");
     if (numberInput) numberInput.value = formDoc?.whatsappNumber || "";
     if (toggle) toggle.checked = formDoc?.whatsappOrderRedirectEnabled === true;
+    const updatesToggle = document.getElementById("customerOrderUpdatesEnabled");
+    if (updatesToggle) updatesToggle.checked = formDoc?.customerOrderUpdatesEnabled !== false; // missing field = on
   } catch (err) {
     console.error("Failed to load WhatsApp settings:", err);
   }
@@ -326,27 +355,66 @@ async function saveWhatsAppSettings() {
   }
 }
 
+/* Customer order changes on/off. Saved immediately; the store and the Retrieve My Order page read it from the form document. */
+async function saveOrderUpdatesSetting(box) {
+  const enabled = !!box.checked;
+  box.disabled = true;
+  try {
+    if (!formDoc) {
+      const found = await databases.listDocuments(DB_ID, FORMS, [Query.equal("userId", user.$id), Query.limit(1)]);
+      formDoc = found.documents[0] || null;
+    }
+    if (!formDoc) throw new Error("No storefront form exists for this account.");
+    await databases.updateDocument(DB_ID, FORMS, formDoc.$id, { customerOrderUpdatesEnabled: enabled });
+    formDoc.customerOrderUpdatesEnabled = enabled;
+    showToast(enabled ? "Customers can retrieve and update their orders" : "Customer order changes are off", "success");
+  } catch (err) {
+    console.error("Failed to save the order changes setting:", err);
+    box.checked = !enabled; // put the switch back: nothing was saved
+    showToast("Could not save. Make sure the customerOrderUpdatesEnabled (boolean) attribute exists on the form collection.", "error");
+  } finally { box.disabled = false; }
+}
+
 /* =========================
 UI INTERACTION LOGIC
 ========================= */
+// The profile fields stay locked until Edit is pressed; Save is only available while editing.
+function setEditing(on) {
+  document.getElementById("username").disabled = !on;
+  document.getElementById("email").disabled = !on;
+  document.getElementById("updateAccount").disabled = !on;
+  const btn = document.getElementById("userUpdate");
+  btn.textContent = on ? "Cancel" : "Edit";
+  if (on) document.getElementById("username").focus();
+}
+
 document.getElementById("updateAccount").onclick = async () => {
+  const btn = document.getElementById("updateAccount");
   try {
     const nameVal = username.value.trim();
     const emailVal = email.value.trim();
-    const passwordVal = prompt("Enter your password to confirm email change");
+    const emailChanged = emailVal !== (user.email || "");
+    const nameChanged = nameVal !== loadedProfile.username;
 
-    if (!passwordVal) {
-      showToast("Password required to update email", "warning");
-      return;
+    if (!nameVal) { showToast("Enter a username", "warning"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) { showToast("Enter a valid email address", "warning"); return; }
+    if (!emailChanged && !nameChanged) { showToast("Nothing to update", "info"); setEditing(false); return; }
+
+    // Only an email change needs the password
+    let passwordVal = null;
+    if (emailChanged) {
+      passwordVal = prompt("Enter your password to confirm your new email");
+      if (!passwordVal) {
+        showToast("Password required to change your email", "warning");
+        return;
+      }
     }
 
-    // Update name
-    await account.updateName(nameVal);
+    btn.disabled = true;
+    btn.classList.add("xr-btn--loading");
 
-    // Update email (ONLY if changed)
-    if (emailVal !== user.email) {
-      await account.updateEmail(emailVal, passwordVal);
-    }
+    if (nameChanged) await account.updateName(nameVal);
+    if (emailChanged) await account.updateEmail(emailVal, passwordVal);
 
     // Update profile collection
     await databases.updateDocument(DB_ID, USERS, profileDocId, {
@@ -354,17 +422,33 @@ document.getElementById("updateAccount").onclick = async () => {
       email: emailVal
     });
 
+    user.name = nameVal;
+    user.email = emailVal;
+    loadedProfile = { username: nameVal, email: emailVal };
+    const avatarEl = document.getElementById("profileAvatar");
+    const nameDisplayEl = document.getElementById("profileNameDisplay");
+    if (avatarEl) avatarEl.textContent = nameVal.charAt(0).toUpperCase();
+    if (nameDisplayEl) nameDisplayEl.textContent = nameVal;
+
+    setEditing(false);
     showToast("Account updated successfully", "success");
 
   } catch (err) {
     console.error(err);
     showToast(err.message || "Update failed", "error");
+    btn.disabled = false;
+  } finally {
+    btn.classList.remove("xr-btn--loading");
   }
 };
 
 document.getElementById("userUpdate").onclick = () => {
-  document.getElementById("username").disabled = false;
-  document.getElementById("email").disabled = false;
+  const editing = !document.getElementById("updateAccount").disabled;
+  if (editing) {                        // Cancel: put the saved values back
+    username.value = loadedProfile.username;
+    email.value = loadedProfile.email;
+  }
+  setEditing(!editing);
 };
 
 function openPasswordModal() {
@@ -379,4 +463,96 @@ function closePasswordModal(e) {
 /* =========================
 INITIALIZATION / BOOTSTRAP LOGIC
 ========================= */
-loadUser().then(() => loadWhatsAppSettings());
+/* =========================
+TELEGRAM NOTIFICATIONS
+=========================
+   Talks to the Cloudflare Worker with a short-lived Appwrite JWT. The Worker, not this page, holds the bot token, finds the
+   seller from that JWT and keeps the chat id. This page never sees or sends a chat id. */
+const TG_ICON = `<svg class="tg-icon" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="12" fill="#2AABEE"/><path fill="#fff" d="M17.9 7.1 15.8 17c-.15.7-.57.87-1.15.54l-3.2-2.36-1.54 1.49c-.17.17-.31.31-.64.31l.23-3.26 5.93-5.36c.26-.23-.06-.36-.4-.13l-7.33 4.62-3.16-.99c-.69-.21-.7-.69.14-1.02l12.35-4.76c.57-.21 1.07.14.88 1z"/></svg>`;
+const tg = { state: "loading", deepLink: "", expires: 0, timer: null, message: "", retry: "status", busy: false };
+
+function tgEscape(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+async function tgCall(path) {
+  const jwt = await account.createJWT();
+  const res = await fetch(window.XR_TELEGRAM.workerUrl.replace(/\/+$/, "") + path, {
+    method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + jwt.jwt }, body: "{}"
+  });
+  let data = null; try { data = await res.json(); } catch (e) { /* no body */ }
+  if (!data) throw new Error("The notification service did not answer properly.");
+  return data;
+}
+function tgSet(state, message) { tg.state = state; tg.message = message || ""; renderTelegram(); }
+function renderTelegram() {
+  const el = document.getElementById("tgBody");
+  if (!el) return;
+  const head = (cls, label) => `<div class="tg-status">${TG_ICON}<span class="tg-dot tg-dot--${cls}" aria-hidden="true"></span><strong>${label}</strong></div>`;
+  const dis = tg.busy ? "disabled" : "";
+  let html = "";
+  if (tg.state === "loading") html = head("off", "Checking…");
+  else if (tg.state === "unconfigured") html = `${head("off", "Not set up yet")}<p class="xr-hint">The Telegram notification service has not been switched on for this site yet. See docs/TELEGRAM.md.</p>`;
+  else if (tg.state === "disconnected") html = `${head("off", "Not connected")}<div class="tg-actions"><button type="button" class="xr-btn xr-btn--primary" ${dis} onclick="tgConnect()">Connect Telegram</button></div>`;
+  else if (tg.state === "connecting") html = `${head("wait", "Waiting for you in Telegram…")}
+      <ol class="tg-steps"><li>Tap <b>Open Telegram</b> below.</li><li>In Telegram, press <b>Start</b>.</li><li>Come back here. This page updates by itself.</li></ol>
+      <div class="tg-actions"><a class="xr-btn xr-btn--primary" href="${tgEscape(tg.deepLink)}" target="_blank" rel="noopener">Open Telegram</a>
+      <button type="button" class="xr-btn xr-btn--secondary" onclick="tgCancel()">Cancel</button></div>
+      <p class="xr-hint">This link is just for you, works once, and expires in 10 minutes.</p>`;
+  else if (tg.state === "connected") html = `${head("on", "Connected")}<p class="xr-hint">You'll get a message here for new orders, order updates, cancellations and additional payments.</p>
+      <div class="tg-actions"><button type="button" class="xr-btn xr-btn--secondary" ${dis} onclick="tgTest()">Send Test Notification</button>
+      <button type="button" class="xr-btn xr-btn--danger" ${dis} onclick="tgDisconnect()">Disconnect Telegram</button></div>`;
+  else html = `${head("err", "Something went wrong")}<div class="xr-alert xr-alert--error" role="alert"><div>${tgEscape(tg.message || "Telegram could not be reached.")}</div></div>
+      <div class="tg-actions"><button type="button" class="xr-btn xr-btn--primary" onclick="tgRetry()">Try again</button></div>`;
+  if (tg.message && tg.state !== "error") html += `<p class="tg-note" role="status">${tgEscape(tg.message)}</p>`;
+  el.innerHTML = html;
+}
+function tgStopPolling() { if (tg.timer) { clearInterval(tg.timer); tg.timer = null; } }
+async function tgLoadStatus() {
+  if (!xrTelegramConfigured()) return tgSet("unconfigured");
+  try {
+    const r = await tgCall("/api/telegram/status");
+    if (!r.ok) throw new Error(r.message || "The notification service reported a problem.");
+    tgSet(r.connected ? "connected" : "disconnected");
+  }
+  catch (e) { console.error("Telegram status failed:", e); tg.retry = "status"; tgSet("error", "Could not check Telegram right now. Check your connection and try again."); }
+}
+async function tgConnect() {
+  tg.busy = true; renderTelegram();
+  try {
+    const r = await tgCall("/api/telegram/connect");
+    if (!r.ok) throw new Error(r.message || "Could not start the connection.");
+    tg.deepLink = r.deepLink; tg.expires = Date.now() + (r.expiresInSec || 600) * 1000;
+    tg.busy = false; tgSet("connecting");
+    window.open(tg.deepLink, "_blank", "noopener");           // may be blocked on phones: the Open Telegram button always works
+    tgStopPolling();
+    tg.timer = setInterval(async () => {
+      if (Date.now() > tg.expires) { tgStopPolling(); tg.retry = "connect"; return tgSet("error", "The connection link expired. Press Try again for a new one."); }
+      try { const s = await tgCall("/api/telegram/status"); if (s.ok && s.connected) { tgStopPolling(); tgSet("connected"); showToast("Telegram connected", "success"); } } catch (e) { /* keep waiting */ }
+    }, 3000);
+  } catch (e) {
+    console.error("Telegram connect failed:", e); tg.busy = false; tg.retry = "connect";
+    tgSet("error", e.message || "Could not start the connection.");
+  }
+}
+function tgCancel() { tgStopPolling(); tgSet("disconnected"); }
+function tgRetry() { return tg.retry === "connect" ? tgConnect() : (tgSet("loading"), tgLoadStatus()); }
+async function tgTest() {
+  tg.busy = true; renderTelegram();
+  try {
+    const r = await tgCall("/api/telegram/test");
+    tg.busy = false;
+    if (r.ok) { tg.state = "connected"; tg.message = ""; renderTelegram(); showToast("Test notification sent. Check Telegram.", "success"); }
+    else if (r.code === "blocked") { tg.retry = "connect"; tgSet("error", r.message); }
+    else { tg.state = "connected"; tg.message = ""; renderTelegram(); showToast(r.message || "Could not send the test.", "error"); }
+  } catch (e) { console.error(e); tg.busy = false; tg.state = "connected"; renderTelegram(); showToast("Could not send the test. Try again.", "error"); }
+}
+async function tgDisconnect() {
+  if (!confirm("Stop Telegram notifications for your store?")) return;
+  tg.busy = true; renderTelegram();
+  try {
+    const r = await tgCall("/api/telegram/disconnect");
+    tg.busy = false;
+    if (!r.ok) throw new Error(r.message || "Could not disconnect.");
+    tgSet("disconnected"); showToast("Telegram disconnected", "success");
+  } catch (e) { console.error(e); tg.busy = false; tg.state = "connected"; renderTelegram(); showToast("Could not disconnect. Try again.", "error"); }
+}
+
+loadUser().then(() => { loadWhatsAppSettings(); renderTelegram(); tgLoadStatus(); });

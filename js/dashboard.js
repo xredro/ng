@@ -91,6 +91,27 @@ function normalizeAmount(value) {
   return 0;
 }
 
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function formatNaira(n) {
+  return "₦" + (Number(n) || 0).toLocaleString();
+}
+
+// customer-facing words for the stored status values
+function statusLabel(status) {
+  return { pending: "Unpaid", paid: "Paid", delivered: "Delivered", cancelled: "Cancelled" }[status] || String(status || "Unknown");
+}
+function statusBadgeClass(status) {
+  return { pending: "unpaid", paid: "paid", delivered: "delivered", cancelled: "cancelled" }[status] || "neutral";
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
 function parseFormData(raw) {
   if (!Array.isArray(raw)) return [];
 
@@ -154,36 +175,47 @@ async function requireAuth() {
   }
 }
 
+// Appwrite returns at most 100 documents per request (25 by default), so
+// every order is fetched page by page. Counts and values then cover all orders.
+let dashboardOrders = [];
+async function fetchAllOrders(userId) {
+  const all = [];
+  let cursor = null;
+  for (;;) {
+    const queries = [Query.equal("userId", userId), Query.orderDesc("$createdAt"), Query.limit(100)];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+    const page = await databases.listDocuments(DB_ID, ORDERS, queries);
+    all.push(...page.documents);
+    if (page.documents.length < 100 || all.length >= 5000) break;
+    cursor = page.documents[page.documents.length - 1].$id;
+  }
+  return all;
+}
+
 async function loadStats(userId) {
-  const res = await databases.listDocuments(DB_ID, ORDERS, [
-    Query.equal("userId", userId)
-  ]);
+  const orders = await fetchAllOrders(userId);
+  dashboardOrders = orders;
 
-  const orders = res.documents;
+  const by = status => orders.filter(o => o.status === status);
+  const sum = list => list.reduce((t, o) => t + normalizeAmount(o.totalAmount), 0);
+  const pending = by("pending");
 
-  const pendingCount = orders.filter(o => o.status === "pending").length;
+  setText("totalOrders", orders.length);
+  setText("deliveredOrders", by("delivered").length);
+  setText("paidOrders", by("paid").length);
+  setText("pendingOrders", pending.length);
 
-  totalOrders.innerText = orders.length;
-  deliveredOrders.innerText = orders.filter(o => o.status === "delivered").length;
-  paidOrders.innerText = orders.filter(o => o.status === "paid").length;
-  pendingOrders.innerText = pendingCount;
+  // "Submitted" is what customers ordered. "Marked paid" is only what you have
+  // marked paid or delivered. Neither is a bank balance.
+  setText("valueAll", formatNaira(sum(orders.filter(o => o.status !== "cancelled"))));
+  setText("valuePaid", formatNaira(sum(by("paid")) + sum(by("delivered"))));
+  setText("valueUnpaid", formatNaira(sum(pending)));
 
-  return pendingCount;
+  return pending.length;
 }
 
 async function loadLatestOrders(userId) {
-  const user = await requireAuth();
-  const res = await databases.listDocuments(
-    DB_ID,
-    ORDERS,
-    [
-      Query.equal("userId", user.$id),
-      Query.orderDesc("$createdAt"),
-      Query.limit(3)
-    ]
-  );
-
-  renderOrders(res.documents);
+  renderOrders(dashboardOrders.slice(0, 3));
 }
 
 /* =========================
@@ -297,37 +329,51 @@ function goToPaymentUpload() {
 function updateAttention(pendingCount) {
   const box = document.getElementById("attentionStatus");
   const text = document.getElementById("attentionText");
+  const icon = document.getElementById("attentionIcon");
+  if (!box || !text) return;
 
   if (pendingCount > 0) {
     box.classList.remove("hidden");
-    text.textContent = `${pendingCount} orders awaiting payment`;
+    box.classList.remove("xr-alert--success");
+    box.classList.add("xr-alert--warning");
+    if (icon) icon.textContent = "⚠";
+    text.textContent = `${pendingCount} ${pendingCount === 1 ? "order is" : "orders are"} awaiting payment`;
   } else {
     box.classList.remove("hidden");
-    text.textContent = "✓ No pending actions";
-    document.getElementById("attentionIcon").textContent = "✓";
+    box.classList.remove("xr-alert--warning");
+    box.classList.add("xr-alert--success");
+    if (icon) icon.textContent = "✓";
+    text.textContent = "No pending actions";
   }
 }
 
+// kept for compatibility with older markup; both are no-ops when the elements are absent
 function updateFormStatus(isPublished, link) {
   const state = document.getElementById("formState");
   const input = document.getElementById("formLinkInput");
-
-  if (isPublished) {
-    state.textContent = "Live";
-    input.value = link;
-  } else {
-    state.textContent = "Not published";
-  }
+  if (state) state.textContent = isPublished ? "Live" : "Not published";
+  if (input && isPublished) input.value = link;
 }
 
 function updateSystemStatus(ok = true, message = "") {
   const text = document.getElementById("systemText");
-  const dot = document.querySelector(".system-status .dot");
+  if (!ok && text) text.textContent = message;
+}
 
-  if (!ok) {
-    dot.style.background = "#ff5252";
-    text.textContent = message;
-  }
+function showLoadError(message) {
+  const box = document.getElementById("loadError");
+  if (!box) return;
+  setText("loadErrorText", message || "Check your connection and reload the page.");
+  box.classList.remove("hidden");
+}
+
+function showExpiryNotice(daysLeft, msLeft) {
+  const box = document.getElementById("expiryNotice");
+  if (!box) return;
+  const left = typeof xrTimeLeft === "function" && msLeft != null ? xrTimeLeft(msLeft) : null;
+  setText("expiryTitle", left && left.underDay ? `Your plan ends in ${left.text}` : daysLeft <= 1 ? "Your plan ends within a day" : `Your plan ends in ${daysLeft} days`);
+  setText("expiryText", "Renew to keep your store live and taking orders.");
+  box.classList.remove("hidden");
 }
 
 async function copyFormLink(platform = "current") {
@@ -343,64 +389,66 @@ async function copyFormLink(platform = "current") {
 
 function renderOrders(orders) {
   const wrap = document.getElementById("ordersList");
+  wrap.removeAttribute("aria-busy");
   wrap.innerHTML = "";
 
   if (!orders.length) {
-    wrap.innerHTML = "<p>No recent orders.</p>";
+    wrap.innerHTML = `
+      <div class="xr-empty">
+        <h3 class="xr-empty__title">No orders yet</h3>
+        <p class="xr-empty__text">Share your store link and new orders will show up here.</p>
+        <button type="button" class="xr-btn xr-btn--primary" onclick="copyFormLink()">Copy store link</button>
+      </div>`;
     return;
   }
 
   orders.forEach(order => {
-    const card = document.createElement("div");
-    card.className = "order-card";
+    const row = document.createElement("div");
+    row.className = "dash-order";
 
-    const title = getCardTitle(order);
-    const summary = getProductSummary(order.formData);
-    const amount = normalizeAmount(order.totalAmount);
+    const title = escapeHtml(getCardTitle(order));
+    const summary = escapeHtml(getProductSummary(order.formData) || "No products");
+    const amount = formatNaira(normalizeAmount(order.totalAmount));
+    const date = escapeHtml(new Date(order.$createdAt).toDateString());
+    const status = order.status;
+    const proofId = escapeHtml(String(order.paymentProof || "").replace(/[^A-Za-z0-9_.-]/g, ""));
 
-    card.innerHTML = `
-      <div class="card-header" onclick="toggleDashboardOrderExpand(this)">
-        <span class="order-dot status-${order.status}"></span>
-        <h3>${title}</h3>
-        <div class="status ${order.status}"> ${order.status} </div>
+    const payment = status === "pending"
+      ? (order.paymentProof
+          ? `<button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" onclick="viewPaymentImage('${proofId}')">View payment image</button>`
+          : `<span class="xr-text-2">No payment proof uploaded</span>`)
+      : status === "cancelled"
+        ? `<span class="xr-text-2">Order cancelled</span>`
+        : `<span class="xr-badge xr-badge--paid">Marked paid</span>`;
+
+    row.innerHTML = `
+      <div class="dash-order__head" role="button" tabindex="0" aria-expanded="false"
+           onclick="toggleDashboardOrderExpand(this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDashboardOrderExpand(this)}">
+        <span class="dash-order__title">${title}</span>
+        <span class="xr-badge xr-badge--${statusBadgeClass(status)} xr-badge--dot">${escapeHtml(statusLabel(status))}</span>
+        <span class="dash-order__sub">${summary}</span>
+        <span class="dash-order__amount">${amount}</span>
+        <span class="dash-order__date">${date}</span>
       </div>
+      <div class="dash-order__more hidden">
+        <strong>Payment:</strong> ${payment}
+      </div>`;
 
-      <div class="order-summary-line">
-        <span class="summary-item">
-          ${summary || "No products"}
-        </span>
-        <span class="order-date">
-          ${new Date(order.$createdAt).toDateString()}
-        </span>
-      </div>
-
-      <div class="meta">
-        <span>₦${amount.toLocaleString() || 0}</span>
-      </div>
-
-      <div class="expanded hidden">
-        <div class="order-field">
-          <strong>Payment:</strong>
-          ${order.status === "pending"
-            ? (order.paymentProof
-                ? `<button class="view-payment-btn" onclick="viewPaymentImage('${order.paymentProof}')">View payment image</button>`
-                : `<span class="no-proof">No payment proof uploaded</span>`)
-            : `<span class="payment-verified">&#10003; Payment verified</span>`
-          }
-        </div>
-      </div>
-    `;
-
-    wrap.appendChild(card);
+    wrap.appendChild(row);
   });
 }
 
 function toggleDashboardOrderExpand(headerEl) {
-  const card = headerEl.closest(".order-card");
-  card.querySelector(".expanded").classList.toggle("hidden");
+  const card = headerEl.closest(".dash-order");
+  const more = card.querySelector(".dash-order__more");
+  const open = more.classList.toggle("hidden") === false;
+  card.classList.toggle("is-open", open);
+  headerEl.setAttribute("aria-expanded", String(open));
 }
 
 function viewPaymentImage(fileId) {
+  fileId = String(fileId || "").replace(/[^A-Za-z0-9_.-]/g, "");
   if (!fileId) return;
   const modal = document.getElementById("paymentImageModal");
   modal.innerHTML = `<img src="https://nyc.cloud.appwrite.io/v1/storage/buckets/696825350032fe17c1eb/files/${fileId}/view?project=695981480033c7a4eb0d" />`;
@@ -414,54 +462,61 @@ async function initDashboard() {
   user = await requireAuth();
   if (!user) return;
 
-  res = await databases.listDocuments(DB_ID, USERS, [
-    Query.equal("userId", user.$id)
-  ]);
+  const viewLink = document.getElementById("viewStoreLink");
+  if (viewLink) viewLink.href = getPublicFormLink(user.$id);
 
-  /*const subRes = await databases.listDocuments(DB_ID, SUBS, [
-    Query.equal("userId", user.$id)
-  ]);*/
+  try {
+    res = await databases.listDocuments(DB_ID, USERS, [
+      Query.equal("userId", user.$id)
+    ]);
 
-  const subRes = await databases.listDocuments(DB_ID, SUBS, [
-    Query.equal("userId", user.$id),
-    Query.equal("status", "active"),
-    Query.orderDesc("expiresAt"),
-    Query.limit(1)
-  ]);
-  
-  //Theme Application
-  if (!res.documents.length) return;
+    const subRes = await databases.listDocuments(DB_ID, SUBS, [
+      Query.equal("userId", user.$id),
+      Query.equal("status", "active"),
+      Query.orderDesc("expiresAt"),
+      Query.limit(1)
+    ]);
 
-  const profile = res.documents[0];
-  profileDocId = profile.$id;
+    //Theme Application
+    if (!res.documents.length) return;
 
-  const savedTheme = res.documents[0].theme || "light";
-  applyTheme(savedTheme);
-  
-  //Quick Subscription Check
-  const now = new Date();
+    const profile = res.documents[0];
+    profileDocId = profile.$id;
 
-  if (!subRes.documents.length) {
-    document.getElementById("subscriptionModal").classList.remove("hidden");
-    return;
+    const savedTheme = res.documents[0].theme || "light";
+    applyTheme(savedTheme);
+
+    //Quick Subscription Check
+    const now = new Date();
+
+    if (!subRes.documents.length) {
+      document.getElementById("subscriptionModal").classList.remove("hidden");
+      return;
+    }
+
+    const sub = subRes.documents[0];
+    const expiresAt = new Date(sub.expiresAt);
+
+    if (expiresAt <= now || sub.status !== "active") {
+      document.getElementById("subscriptionModal").classList.remove("hidden");
+      return;
+    }
+
+    const daysLeft = Math.ceil((expiresAt - now) / 86400000);
+
+    setText("planDays", sub.plan);
+    setText("expiresIn", typeof xrTimeLeft === "function" ? xrTimeLeft(expiresAt - now).text : `${daysLeft} ${daysLeft === 1 ? "day" : "days"}`);
+    if (daysLeft <= 3) showExpiryNotice(daysLeft, expiresAt - now);
+
+    const pendingCount = await loadStats(user.$id);
+    await loadLatestOrders(user.$id);
+    updateAttention(pendingCount);
+  } catch (err) {
+    console.error(err);
+    showLoadError("We could not reach the server. Check your connection and reload the page.");
+    const list = document.getElementById("ordersList");
+    if (list) list.removeAttribute("aria-busy");
   }
-  
-  const sub = subRes.documents[0];
-  const expiresAt = new Date(sub.expiresAt);
-
-  if (expiresAt <= now || sub.status !== "active") {
-    document.getElementById("subscriptionModal").classList.remove("hidden");
-    return;
-  }
-
-  const daysLeft = Math.ceil((expiresAt - now) / 86400000);
-
-  planDays.innerText = sub.plan;
-  expiresIn.innerText = `${daysLeft} days`;
-  
-  const pendingCount = await loadStats(user.$id);
-  loadLatestOrders(user.$id);
-  updateAttention(pendingCount);
 }
 
 initDashboard();

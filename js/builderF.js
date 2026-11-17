@@ -38,6 +38,49 @@ let formId;
 let formTitle = "";
 let formSubtitle = "";
 
+// Text that goes inside HTML templates must be escaped, or a quote in a product
+// name breaks the field and markup in a name would be inserted into the page.
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ---- unsaved-changes tracking ---- */
+let savedSnapshot = "";
+function currentSnapshot() {
+  return JSON.stringify([formTitle, formSubtitle, selectedStoreTheme, fields, storeConfigSupported ? storefrontNormalizeConfig(storeConfig) : null]);
+}
+function markSaved() { savedSnapshot = currentSnapshot(); refreshDirty(); }
+function isDirty() { return savedSnapshot !== "" && currentSnapshot() !== savedSnapshot; }
+function refreshDirty() {
+  const el = document.getElementById("saveState");
+  if (!el) return;
+  const dirty = isDirty();
+  el.textContent = dirty ? "Unsaved changes" : "All changes saved";
+  el.classList.toggle("is-dirty", dirty);
+}
+let dirtyTimer = null;
+function refreshDirtySoon() { clearTimeout(dirtyTimer); dirtyTimer = setTimeout(refreshDirty, 150); }
+function setSaving(on) {
+  const btn = document.getElementById("saveBtn");
+  if (!btn) return;
+  btn.disabled = on;
+  btn.classList.toggle("xr-btn--loading", on);
+}
+function updateSectionHints() {
+  const productFields = fields.filter(f => f.type === "product");
+  const count = productFields.reduce((n, f) => n + (Array.isArray(f.products) ? f.products.length : 0), 0);
+  const other = fields.filter(f => f.type !== "product").length;
+  const set = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  set("hintProducts", count === 0 ? "None yet" : `${count} ${count === 1 ? "product" : "products"}`);
+  set("hintFields", other === 0 ? "None yet" : `${other} ${other === 1 ? "field" : "fields"}`);
+}
+
+// Store details (logo, banner, tagline, contact...) are kept as ONE JSON string in
+// the form doc attribute `storeConfig`. It is only written when that attribute
+// exists on the collection (checked at load), so saving never breaks without it.
+let storeConfig = {};
+let storeConfigSupported = false;
+
 // Visual theme for the customer-facing store page — one of "r1".."r4",
 // matching css/theme-r1.css .. theme-r4.css. Persisted on the form
 // document as `storeTheme` (NOTE: add a `storeTheme` string attribute
@@ -58,7 +101,9 @@ function selectStoreTheme(themeId) {
 
 function highlightSelectedTheme() {
   document.querySelectorAll("#themePicker .theme-swatch").forEach(el => {
-    el.classList.toggle("active", el.dataset.theme === selectedStoreTheme);
+    const on = el.dataset.theme === selectedStoreTheme;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-checked", String(on));
   });
 }
 
@@ -252,7 +297,19 @@ async function requireAuth() {
 }
 
 /* ---------------- SAVE ---------------- */
+function openInvalidProduct(field, index, message) {
+  const state = getProductUIState(field.id);
+  state.activeCategory = "All";
+  state.editingIndex = index;
+  const sec = document.getElementById("secProducts");
+  if (sec) sec.open = true;
+  renderFields();
+  showToast(message, "warning");
+}
+
 async function saveForm() {
+  const btn = document.getElementById("saveBtn");
+  if (btn && btn.disabled) return;
 
   const productFields = fields.filter(f => f.type === "product");
 
@@ -270,41 +327,47 @@ async function saveForm() {
     return;
   }
 
-  // Optional: block empty product name or price
-  let invalidProduct = null;
-
+  // every product needs a name and a price: open the first one that does not
   for (const field of productFields) {
-    invalidProduct = field.products.find(
-      p => !p.name || !p.price
-    );
-    if (invalidProduct) break;
+    for (let i = 0; i < field.products.length; i++) {
+      const p = field.products[i];
+      if (!p.name || !p.price) {
+        const who = p.name ? `"${p.name}"` : `Product ${i + 1}`;
+        openInvalidProduct(field, i, `${who} needs a ${!p.name ? "name" : "price"}.`);
+        return;
+      }
+    }
   }
 
-  if (invalidProduct) {
-    showToast("Each product must have a name and price.", "warning");
-    return;
+  setSaving(true);
+  try {
+    const safeFields = fields.map(f => JSON.stringify(f));
+
+    await databases.updateDocument(DB_ID, FORMS, formId, {
+      title: formTitle,
+      subtitle: formSubtitle,
+      fields: safeFields,
+      storeTheme: selectedStoreTheme,
+      ...(storeConfigSupported ? { storeConfig: JSON.stringify(storefrontNormalizeConfig(storeConfig)) } : {}),
+      $updatedAt: new Date().toISOString()
+    });
+
+    // Replaced or removed images are deleted only AFTER the save worked. Before,
+    // they were deleted first, so a failed save left the form pointing at files that were gone.
+    const toDelete = imagesMarkedForDeletion;
+    imagesMarkedForDeletion = [];
+    for (const imageId of toDelete) {
+      try { await storage.deleteFile(PRODUCT_IMAGES_BUCKET, imageId); } catch {}
+    }
+
+    markSaved();
+    showToast("Form saved successfully", "success");
+  } catch (err) {
+    console.error(err);
+    showToast("Could not save. Check your connection and try again.", "error");
+  } finally {
+    setSaving(false);
   }
-
-  for (let imageId of imagesMarkedForDeletion) {
-    try {
-      await storage.deleteFile(PRODUCT_IMAGES_BUCKET, imageId);
-    } catch {}
-  }
-
-  imagesMarkedForDeletion = [];
-
-  // Saving if valid
-  const safeFields = fields.map(f => JSON.stringify(f));
-
-  await databases.updateDocument(DB_ID, FORMS, formId, {
-    title: formTitle,
-    subtitle: formSubtitle,
-    fields: safeFields,
-    storeTheme: selectedStoreTheme,
-    $updatedAt: new Date().toISOString()
-  });
-
-  showToast("Form saved successfully", "success");
 }
 
 /* ---------------- FORM LINK ---------------- */
@@ -387,7 +450,7 @@ function renderFields() {
         <div class="field-header">
           <input
             class="field-label"
-            value="${field.label || ""}"
+            value="${escapeHtml(field.label || "")}"
             onchange="updateLabel('${field.id}', this.value)"
           />
           <span class="remove remove-field" data-id="${field.id}" onclick="event.stopPropagation(); removeField('${field.id}')">×</span>
@@ -408,7 +471,7 @@ function renderFields() {
       <div class="field-header" onclick="toggleFieldExpanded(event, '${field.id}')">
         <input
           class="field-label"
-          value="${field.label || ""}"
+          value="${escapeHtml(field.label || "")}"
           onchange="updateLabel('${field.id}', this.value)"
           onclick="event.stopPropagation()"
         />
@@ -427,6 +490,9 @@ function renderFields() {
 
     container.appendChild(card);
   });
+
+  updateSectionHints();
+  refreshDirtySoon();
 }
 
 function toggleFieldExpanded(e, id) {
@@ -599,11 +665,14 @@ function renderProducts(field) {
     tile.className = "product-tile";
     tile.innerHTML = `
       <div class="product-tile-image">
-        ${p.imageUrl ? `<img src="${p.imageUrl}" class="product-img"/>` : `<span class="product-tile-placeholder">+ Photo</span>`}
+        ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="product-img"/>` : `<span class="product-tile-placeholder">+ Photo</span>`}
       </div>
-      <div class="product-tile-name">${p.name || "Untitled"}</div>
+      <div class="product-tile-name">${escapeHtml(p.name || "Untitled")}</div>
       <div class="product-tile-price">₦${p.price ? formatWithCommas(p.price) : "0"}</div>
+      <button type="button" class="product-tile-toggle${p.soldOut ? " is-soldout" : ""}" aria-pressed="${p.soldOut ? "true" : "false"}"
+        onclick="event.stopPropagation(); toggleSoldOut('${field.id}', ${i})">${p.soldOut ? "Back in stock" : "Mark sold out"}</button>
     `;
+    if (p.soldOut) tile.classList.add("is-soldout");
     tile.onclick = () => openProductEditor(field.id, i);
     grid.appendChild(tile);
   });
@@ -628,48 +697,84 @@ function renderProducts(field) {
     const p = field.products[i];
     const editor = document.createElement('div');
     editor.className = "product-editor-overlay";
+    editor.setAttribute("role", "dialog");
+    editor.setAttribute("aria-modal", "true");
     editor.innerHTML = `
       <div class="product-editor-card">
         <div class="product-editor-head">
           <strong>Edit product</strong>
-          <span class="product-editor-close" onclick="closeProductEditor('${field.id}')">&times;</span>
+          <button type="button" class="product-editor-close" aria-label="Close" onclick="closeProductEditor('${field.id}')">&times;</button>
         </div>
 
         <div class="product-editor-image">
-          ${p.imageUrl ? `<img src="${p.imageUrl}" class="product-img"/>` : ""}
+          ${p.imageUrl ? `<img src="${escapeHtml(p.imageUrl)}" alt="" class="product-img"/>` : ""}
           <label class="upload-btn">
             ${p.imageUrl ? "Change image" : "Upload image"}
-            <input type="file" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
+            <input type="file" accept="image/*" hidden onchange="uploadProductImage('${field.id}', ${i}, this)">
           </label>
         </div>
 
-        <label>Name</label>
-        <input placeholder="Product name" value="${p.name || ""}"
-          onchange="updateProduct('${field.id}', ${i}, 'name', this.value)">
+        <div class="xr-field">
+          <label class="xr-label">Name</label>
+          <input class="xr-input" placeholder="Product name" value="${escapeHtml(p.name || "")}"
+            onchange="updateProduct('${field.id}', ${i}, 'name', this.value)">
+        </div>
 
-        <label>Price</label>
-        <input placeholder="₦ Price" value="${p.price ? formatWithCommas(p.price) : ""}"
-          oninput="handlePriceInput(this)" onblur="savePrice('${field.id}', ${i}, this.value)">
+        <div class="xr-field">
+          <label class="xr-label">Price</label>
+          <div class="xr-input-group"><span class="xr-prefix">₦</span>
+            <input class="xr-input" inputmode="numeric" placeholder="Price" value="${p.price ? formatWithCommas(p.price) : ""}"
+              oninput="handlePriceInput(this)" onblur="savePrice('${field.id}', ${i}, this.value)"></div>
+        </div>
 
-        <label>Category</label>
-        <input placeholder="e.g. Audio" value="${p.category || "General"}"
-          onchange="updateProduct('${field.id}', ${i}, 'category', this.value); renderFields();">
+        <div class="xr-field">
+          <label class="xr-label">Category</label>
+          <input class="xr-input" placeholder="e.g. Audio" value="${escapeHtml(p.category || "General")}"
+            onchange="updateProduct('${field.id}', ${i}, 'category', this.value); renderFields();">
+        </div>
 
-        <label>Description <span style="opacity:.55;">(optional)</span></label>
-        <textarea class="product-description-input" rows="3"
-          placeholder="Short description of this product"
-          onchange="updateProduct('${field.id}', ${i}, 'description', this.value)">${p.description || ""}</textarea>
+        <div class="xr-field">
+          <label class="xr-label">Description <span class="xr-optional">(optional)</span></label>
+          <textarea class="xr-textarea product-description-input" rows="3"
+            placeholder="Short description of this product"
+            onchange="updateProduct('${field.id}', ${i}, 'description', this.value)">${escapeHtml(p.description || "")}</textarea>
+        </div>
 
-        <button type="button" class="product-editor-delete"
-          onclick="removeProduct('${field.id}', ${i}); closeProductEditor('${field.id}');">
-          Delete product
-        </button>
+        <label class="xr-switch product-featured-row">
+          <input type="checkbox" ${p.featured ? "checked" : ""}
+            onchange="updateProduct('${field.id}', ${i}, 'featured', this.checked)">
+          <span class="xr-switch-track"></span>
+          Show in "Featured" on the store
+        </label>
+
+        <label class="xr-switch product-soldout-row">
+          <input type="checkbox" ${p.soldOut ? "checked" : ""}
+            onchange="updateProduct('${field.id}', ${i}, 'soldOut', this.checked)">
+          <span class="xr-switch-track"></span>
+          Sold out
+        </label>
+        <p class="xr-hint" style="margin:-8px 0 0">Customers still see it, but cannot order it. Save your changes to apply.</p>
+
+        <div class="product-editor-actions">
+          <button type="button" class="xr-btn xr-btn--primary" onclick="closeProductEditor('${field.id}')">Done</button>
+          <button type="button" class="xr-btn xr-btn--danger"
+            onclick="removeProduct('${field.id}', ${i}); closeProductEditor('${field.id}');">Delete product</button>
+        </div>
       </div>
     `;
     wrap.appendChild(editor);
   }
 
   return wrap;
+}
+
+// Quick "sold out" switch on the product tile. The change is applied to the store when you save.
+function toggleSoldOut(fieldId, index) {
+  const field = fields.find(f => f.id === fieldId);
+  const p = field && field.products ? field.products[index] : null;
+  if (!p) return;
+  p.soldOut = !p.soldOut;
+  renderFields();
 }
 
 async function uploadProductImage(fieldId, index, input) {
@@ -679,17 +784,22 @@ async function uploadProductImage(fieldId, index, input) {
   const field = fields.find(f => f.id === fieldId);
   const product = field.products[index];
 
-  // delete old image if exists
-  if (product.imageId) {
-    await storage.deleteFile(PRODUCT_IMAGES_BUCKET, product.imageId);
+  // Upload the new file first. The old one is only queued for deletion and is removed
+  // after a successful save, so a failed upload or save never leaves the form pointing at a missing image.
+  let uploaded;
+  try {
+    uploaded = await storage.createFile(
+      PRODUCT_IMAGES_BUCKET,
+      Appwrite.ID.unique(),
+      file,
+      [Appwrite.Permission.read(Appwrite.Role.any())]
+    );
+  } catch (err) {
+    console.error(err);
+    showToast("Could not upload the image. Try again.", "error");
+    return;
   }
-
-  const uploaded = await storage.createFile(
-    PRODUCT_IMAGES_BUCKET,
-    Appwrite.ID.unique(),
-    file,
-    [Appwrite.Permission.read(Appwrite.Role.any())]
-  );
+  if (product.imageId) imagesMarkedForDeletion.push(product.imageId);
 
   const previewUrl = storage.getFileView(
     PRODUCT_IMAGES_BUCKET,
@@ -716,7 +826,7 @@ function renderAdditionalFees(field) {
     row.className = "fee-row";
 
     row.innerHTML = `
-      <input placeholder="Fee name" value="${f.name || ""}"
+      <input placeholder="Fee name" value="${escapeHtml(f.name || "")}"
         onchange="updateAdditionalFee('${field.id}', ${i}, 'name', this.value)">
 
       <input placeholder="₦ Amount" value="${f.price ? formatWithCommas(f.price) : ""}"
@@ -768,7 +878,10 @@ function normalizeProducts(field) {
     return;
   }
 
+  // `...p` keeps any extra properties (featured, and future stock fields) so they
+  // survive edit, save and reload instead of being silently dropped.
   field.products = field.products.map(p => ({
+    ...(p && typeof p === "object" ? p : {}),
     name: p?.name ?? "",
     price: p?.price ?? "",
     imageId: p?.imageId ?? "",
@@ -809,94 +922,125 @@ function removeProduct(fieldId, index) {
   renderFields();
 }
 
-/* ---------------- PREVIEW OVERLAY ---------------- */
-let previewCart = {};
+/* ---------------- STORE DETAILS (logo, banner, tagline, contact) ---------------- */
+const STORE_TEXT_KEYS = ["tagline", "heroCta", "about", "policy", "phone", "email", "whatsapp", "instagram", "tiktok", "facebook"];
+
+function fillStoreDetails() {
+  STORE_TEXT_KEYS.forEach(k => {
+    const el = document.getElementById("sd_" + k);
+    if (el) { el.value = storeConfig[k] || ""; el.disabled = !storeConfigSupported; }
+  });
+  ["logo", "banner"].forEach(kind => {
+    const img = document.getElementById("sd_" + kind + "Preview");
+    const input = document.getElementById("sd_" + kind + "File");
+    if (input) input.disabled = !storeConfigSupported;
+    if (img) {
+      const url = storeConfig[kind + "Url"];
+      img.src = url || "";
+      img.style.display = url ? "block" : "none";
+    }
+  });
+  const note = document.getElementById("storeDetailsNote");
+  if (note) note.style.display = storeConfigSupported ? "none" : "block";
+}
+
+function updateStoreConfig(key, value) {
+  if (!storeConfigSupported) return;
+  storeConfig[key] = value;
+}
+
+async function uploadStoreImage(kind, input) {
+  const file = input.files[0];
+  if (!file || !storeConfigSupported) return;
+  try {
+    const uploaded = await storage.createFile(
+      PRODUCT_IMAGES_BUCKET,
+      Appwrite.ID.unique(),
+      file,
+      [Appwrite.Permission.read(Appwrite.Role.any())]
+    );
+    // the old file is removed on Save, same as replaced product images
+    if (storeConfig[kind + "Id"]) imagesMarkedForDeletion.push(storeConfig[kind + "Id"]);
+    storeConfig[kind + "Id"] = uploaded.$id;
+    storeConfig[kind + "Url"] = storage.getFileView(PRODUCT_IMAGES_BUCKET, uploaded.$id).href;
+    fillStoreDetails();
+  } catch (err) {
+    showToast("Could not upload image", "error");
+  }
+}
+
+function removeStoreImage(kind) {
+  if (!storeConfigSupported) return;
+  if (storeConfig[kind + "Id"]) imagesMarkedForDeletion.push(storeConfig[kind + "Id"]);
+  storeConfig[kind + "Id"] = "";
+  storeConfig[kind + "Url"] = "";
+  fillStoreDetails();
+}
+
+/* ---------------- PREVIEW OVERLAY ----------------
+   The preview is an <iframe> that loads only the store's own CSS and JS,
+   the same files as form.html. That keeps the builder page's global styles
+   (fonts, inputs, buttons) out of the preview, and gives the store a real
+   viewport, so what you see here matches the live page. */
+
+function absUrl(path) { return new URL(path, document.baseURI).href; }
+
+function buildPreviewDoc(data) {
+  // "<" is escaped so store text can never close the script tag
+  const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  const themeId = String(data.themeClass || "").replace(/^theme-/, "").replace(/[^a-z0-9]/gi, "") || "r1";
+  const fontLink = document.querySelector('link[href*="family=Orbitron"]');
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+${fontLink ? `<link rel="stylesheet" href="${fontLink.href}">` : ""}
+<link rel="stylesheet" href="${absUrl("css/form.shared.css")}">
+<link rel="stylesheet" href="${absUrl("css/storefront-base.css")}">
+<link rel="stylesheet" href="${absUrl("css/alert.css")}">
+<link rel="stylesheet" href="${absUrl("css/theme-" + themeId + ".css")}">
+</head><body>
+<div id="root"></div><div id="toast-container"></div>
+<script>window.__PREVIEW__ = ${json};<\/script>
+<script src="${absUrl("js/storefront-render.js")}"><\/script>
+<script src="${absUrl("js/storefront-chrome.js")}"><\/script>
+<script src="${absUrl("js/alert.js")}"><\/script>
+<script src="${absUrl("js/preview-runtime.js")}"><\/script>
+</body></html>`;
+}
+
+function setPreviewDevice(mode) {
+  const stage = document.getElementById("previewStage");
+  const phone = mode !== "full";
+  stage.classList.toggle("is-phone", phone);
+  document.getElementById("pvPhone").setAttribute("aria-pressed", String(phone));
+  document.getElementById("pvFull").setAttribute("aria-pressed", String(!phone));
+}
 
 function openPreview(e) {
   if (e) e.preventDefault();
   const overlay = document.getElementById("previewOverlay");
-  const container = document.getElementById("previewForm");
+  const frame = document.getElementById("previewFrame");
+  const wasHidden = overlay.classList.contains("hidden");
+  if (wasHidden) setPreviewDevice(window.innerWidth >= 700 ? "phone" : "full");
 
-  previewCart = {};
-  container.innerHTML = buildStorefrontHTML({
+  frame.srcdoc = buildPreviewDoc({
     fields,
     formTitle,
     formSubtitle,
     themeClass: `theme-${selectedStoreTheme}`,
-    // live:true so the preview is genuinely interactive (real qty
-    // buttons, real running total) — same renderer as the real page,
-    // just pointed at a throwaway preview cart instead of a real order.
-    opts: { live: true, cart: previewCart, qtyFn: "previewChangeQty", totalFn: "previewUpdateTotal", submitFn: "previewNoSubmit" }
+    storeConfig
   });
   overlay.classList.remove("hidden");
 }
 
 function closePreview() {
   document.getElementById("previewOverlay").classList.add("hidden");
+  document.getElementById("previewFrame").srcdoc = "";
 }
 
-function previewNoSubmit() {
-  showToast("This is a preview — orders can't be sent from here.", "info");
-}
-
-function previewChangeQty(fieldId, index, delta) {
-  const key = `${fieldId}_${index}`;
-  previewCart[key] = Math.max(0, (previewCart[key] || 0) + delta);
-  const qty = previewCart[key];
-  const el = document.getElementById(`qty-${fieldId}-${index}`);
-  const badgeEl = document.getElementById(`badge-${fieldId}-${index}`);
-  if (el) el.innerText = qty;
-  if (badgeEl) badgeEl.innerText = qty;
-  previewUpdateTotal();
-}
-
-function previewUpdateTotal() {
-  let items = 0, total = 0;
-
-  fields.forEach(field => {
-    if (field.type === "product") {
-      field.products.forEach((p, i) => {
-        const qty = previewCart[`${field.id}_${i}`] || 0;
-        items += qty;
-        total += qty * Number(p.price || 0);
-      });
-    }
-  });
-
-  let additionalFeeAmount = 0;
-  let additionalFeesHtml = [];
-  fields.forEach(field => {
-    if (field.type === "additional_fee") {
-      const select = document.querySelector(`[data-id="${field.id}"]`);
-      if (select && select.value) {
-        const selected = (field.fees || []).find(f => f.name === select.value);
-        if (selected) {
-          additionalFeeAmount += Number(selected.price || 0);
-          additionalFeesHtml.push(`<div>${field.label}: ${selected.name} <span>₦${Number(selected.price || 0).toLocaleString()}</span></div>`);
-        }
-      }
-    }
-  });
-  total += additionalFeeAmount;
-
-  const feeBox = document.getElementById("additionalFeeBox");
-  if (feeBox) {
-    feeBox.innerHTML = additionalFeesHtml.join("");
-    feeBox.style.display = additionalFeesHtml.length ? "block" : "none";
-  }
-
-  const itemCountEl = document.getElementById("itemCount");
-  const totalCostEl = document.getElementById("totalCost");
-  if (itemCountEl) itemCountEl.innerText = items;
-  if (totalCostEl) totalCostEl.innerText = `₦${total.toLocaleString()}`;
-
-  const cartBarCount = document.getElementById("cartBarCount");
-  const cartBarTotal = document.getElementById("cartBarTotal");
-  const cartBar = document.getElementById("cartBar");
-  if (cartBarCount) cartBarCount.innerText = `${items} item${items === 1 ? "" : "s"}`;
-  if (cartBarTotal) cartBarTotal.innerText = `₦${total.toLocaleString()}`;
-  if (cartBar) cartBar.classList.toggle("visible", items > 0);
-}
+window.addEventListener("message", (e) => {
+  const frame = document.getElementById("previewFrame");
+  if (frame && e.source === frame.contentWindow && e.data && e.data.xredro === "closePreview") closePreview();
+});
 
 /* =========================
 UI INTERACTION LOGIC
@@ -972,12 +1116,21 @@ async function initBuilder() {
     formTitle = formDoc.title || "";
     formSubtitle = formDoc.subtitle || "";
     selectedStoreTheme = formDoc.storeTheme || "r1";
+    storeConfigSupported = Object.prototype.hasOwnProperty.call(formDoc, "storeConfig");
+    storeConfig = storefrontNormalizeConfig(formDoc.storeConfig);
+    fillStoreDetails();
 
     document.getElementById("titleInput").value = formTitle;
     document.getElementById("subtitleInput").value = formSubtitle;
     highlightSelectedTheme();
   } catch (err) {
-    // create empty form if not exists
+    // Create an empty form only when it really does not exist (404). Any other
+    // failure (network, permissions) must not be mistaken for "no form yet".
+    if (err && err.code !== 404) {
+      console.error(err);
+      showToast("Could not load your store. Check your connection and reload the page.", "error");
+      return;
+    }
     await databases.createDocument(DB_ID, FORMS, user.$id, {
       userId: user.$id,
       fields: [],
@@ -991,6 +1144,7 @@ async function initBuilder() {
   
   renderFields();
   setupFormLink();
+  markSaved();
 }
 
 initBuilder();
@@ -1005,13 +1159,24 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-document.getElementById("previewOverlay").addEventListener("click", (e) => {
-  const content = document.getElementById("previewForm");
+// keep the "Unsaved changes" label and the leave-page warning in step with edits
+["input", "change", "click"].forEach(t => document.addEventListener(t, refreshDirtySoon));
+window.addEventListener("beforeunload", (e) => {
+  if (isDirty()) { e.preventDefault(); e.returnValue = ""; }
+});
 
-  // click outside preview card
-  if (!content.contains(e.target)) {
-    closePreview();
-  }
+// theme choices are radio-style buttons: reachable and usable from the keyboard
+document.querySelectorAll("#themePicker .theme-swatch").forEach(el => {
+  el.setAttribute("role", "radio");
+  el.tabIndex = 0;
+  el.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectStoreTheme(el.dataset.theme); }
+  });
+});
+
+document.getElementById("previewStage").addEventListener("click", (e) => {
+  // only the dark area around the phone, not the store itself
+  if (e.target === e.currentTarget) closePreview();
 });
 
 /* =========================

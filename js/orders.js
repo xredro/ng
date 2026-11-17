@@ -35,6 +35,9 @@ let businessTitle = "Your Business";
 
 let allOrders = [];
 let activeFilter = "all";
+// long lists are drawn 30 at a time so a phone stays quick with hundreds of orders
+const RENDER_STEP = 30;
+let renderLimit = RENDER_STEP;
 
 const EXPAND_DOWN = `
 <path d="m480-340 180-180-57-56-123 123-123-123-57 56 180 180Zm0 260q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/>`;
@@ -54,6 +57,17 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[char]);
+}
+
+const STATUS_LABEL = { pending: "Unpaid", paid: "Paid", delivered: "Delivered", cancelled: "Cancelled" };
+const STATUS_BADGE = { pending: "unpaid", paid: "paid", delivered: "delivered", cancelled: "cancelled" };
+
+// an unpaid order the customer has already uploaded proof for: it needs the seller to check it
+function needsReview(order) {
+  return normalizedStatus(order) === "pending" && !!order.paymentProof;
+}
+function isNewOrder(order) {
+  return normalizedStatus(order) === "pending" && Date.now() - new Date(order.$createdAt).getTime() < 24 * 3600e3;
 }
 
 function normalizedStatus(order) {
@@ -275,83 +289,123 @@ async function requireAuth() {
   }
 }
 
+// Appwrite returns at most 100 documents per request (25 by default). Fetch every
+// page so the list, the counts, "Products to deliver" and "Export PDF" see all orders.
+async function fetchAllOrders(userId) {
+  const all = [];
+  let cursor = null;
+  for (;;) {
+    const queries = [Query.equal("userId", userId), Query.orderDesc("$createdAt"), Query.limit(100)];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+    const page = await databases.listDocuments(DB_ID, ORDERS, queries);
+    all.push(...page.documents);
+    if (page.documents.length < 100 || all.length >= 5000) break;
+    cursor = page.documents[page.documents.length - 1].$id;
+  }
+  return all;
+}
+
+function showOrdersError(message) {
+  ordersList.removeAttribute("aria-busy");
+  ordersList.innerHTML = `
+    <div class="xr-alert xr-alert--error" role="alert">
+      <div><span class="xr-alert__title">Could not load your orders</span>${escapeHtml(message)}
+      <div style="margin-top:8px"><button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" onclick="fetchOrders()">Try again</button></div></div>
+    </div>`;
+}
+
 async function fetchOrders() {
   user = await requireAuth();
   if (!user) return;
-  
-  res = await databases.listDocuments(DB_ID, USERS, [
-    Query.equal("userId", user.$id)
-  ]);
-  
-  //Theme Application
-  profileDocId = res.documents[0].$id;
 
-  const savedTheme = res.documents[0].theme || "light";
-  applyTheme(savedTheme);
-  
-  //Subscription Check
-  const subRes = await databases.listDocuments(DB_ID, SUBS, [
-    Query.equal("userId", user.$id),
-    Query.equal("status", "active"),
-    Query.orderDesc("expiresAt"),
-    Query.limit(1)
-  ]);
+  try {
+    res = await databases.listDocuments(DB_ID, USERS, [
+      Query.equal("userId", user.$id)
+    ]);
 
-  if (!subRes.documents.length) {
-    document.getElementById("subscriptionModal").classList.remove("hidden");
-    return;
-  }
-  const sub = subRes.documents[0];
-  const daysLeft = Math.ceil(
-    (new Date(sub.expiresAt) - new Date()) / 86400000
-  );
+    if (!res.documents.length) {
+      showOrdersError("We could not find your account profile.");
+      return;
+    }
 
-  if (daysLeft <= 0) {
-    document.getElementById("subscriptionModal").classList.remove("hidden");
-    return;
-  }
+    //Theme Application
+    profileDocId = res.documents[0].$id;
 
-  const odsRes = await databases.listDocuments(
-    DB_ID,
-    ORDERS,
-    [
+    const savedTheme = res.documents[0].theme || "light";
+    applyTheme(savedTheme);
+
+    //Subscription Check
+    const subRes = await databases.listDocuments(DB_ID, SUBS, [
       Query.equal("userId", user.$id),
-      Query.orderDesc("$createdAt")
-    ]
-  );
+      Query.equal("status", "active"),
+      Query.orderDesc("expiresAt"),
+      Query.limit(1)
+    ]);
 
-  const formRes = await databases.listDocuments(DB_ID, FORMS, [
-    Query.equal("userId", user.$id)
-  ]); 
+    if (!subRes.documents.length) {
+      document.getElementById("subscriptionModal").classList.remove("hidden");
+      ordersList.removeAttribute("aria-busy");
+      ordersList.innerHTML = "";
+      return;
+    }
+    const sub = subRes.documents[0];
+    const daysLeft = Math.ceil(
+      (new Date(sub.expiresAt) - new Date()) / 86400000
+    );
 
-  businessTitle = formRes.documents?.[0]?.title || "Your Business";
+    if (daysLeft <= 0) {
+      document.getElementById("subscriptionModal").classList.remove("hidden");
+      ordersList.removeAttribute("aria-busy");
+      ordersList.innerHTML = "";
+      return;
+    }
 
-  allOrders = odsRes.documents;  
-  applyFilter();
+    const [orders, formRes] = await Promise.all([
+      fetchAllOrders(user.$id),
+      databases.listDocuments(DB_ID, FORMS, [Query.equal("userId", user.$id)])
+    ]);
+
+    businessTitle = formRes.documents?.[0]?.title || "Your Business";
+
+    allOrders = orders;
+    if (typeof loadOrderUpdates === "function") await loadOrderUpdates(formRes.documents?.[0] || null); // customer updates and seller decisions (never blocks the orders list)
+    ordersList.removeAttribute("aria-busy");
+    applyFilter();
+  } catch (err) {
+    console.error("Could not load orders:", err);
+    showOrdersError("Check your connection and try again.");
+  }
 }
+
+const FILTERS = {
+  all: { label: "All", test: () => true },
+  pending: { label: "Unpaid", test: o => normalizedStatus(o) === "pending" },
+  review: { label: "Needs review", test: o => needsReview(o) },
+  updated: { label: "Updated", test: o => typeof xrPendingUpdates === "function" && xrPendingUpdates(o) > 0 },
+  paid: { label: "Paid", test: o => normalizedStatus(o) === "paid" },
+  delivered: { label: "Delivered", test: o => normalizedStatus(o) === "delivered" },
+  cancelled: { label: "Cancelled", test: o => normalizedStatus(o) === "cancelled" }
+};
 
 function applyFilter() {
   // Update counts first so a malformed order/card cannot prevent the filters
   // from displaying the real counts.
-  const countAll = allOrders.length;
-  const countPending = allOrders.filter(o => normalizedStatus(o) === "pending").length;
-  const countPaid = allOrders.filter(o => normalizedStatus(o) === "paid").length;
-  const countDelivered = allOrders.filter(o => normalizedStatus(o) === "delivered").length;
-
-  document.querySelectorAll(".filters button").forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.filter === activeFilter);
-    const base = { all: "All", pending: "Unpaid", paid: "Paid", delivered: "Delivered" }[btn.dataset.filter];
-    const count = { all: countAll, pending: countPending, paid: countPaid, delivered: countDelivered }[btn.dataset.filter];
-    if (base) btn.textContent = `${base} ${count ?? 0}`;
+  document.querySelectorAll(".ord-filters button").forEach(btn => {
+    const f = FILTERS[btn.dataset.filter];
+    if (!f) return;
+    const on = btn.dataset.filter === activeFilter;
+    btn.classList.toggle("active", on);
+    btn.classList.toggle("is-active", on);
+    btn.setAttribute("aria-pressed", String(on));
+    btn.textContent = `${f.label} ${allOrders.filter(f.test).length}`;
   });
 
-  let result = activeFilter === "all"
-    ? [...allOrders]
-    : allOrders.filter(o => normalizedStatus(o) === activeFilter);
+  let result = allOrders.filter((FILTERS[activeFilter] || FILTERS.all).test);
 
   const query = String(searchInput?.value || "").trim().toLowerCase();
   if (query) {
     result = result.filter(order => {
+      if (String(order?.publicOrderID || "").toLowerCase().includes(query.replace(/[\s-]/g, ""))) return true;
       const formData = parseFormData(order?.formData);
       return formData.some(f => {
         if (!f) return false;
@@ -367,13 +421,23 @@ function applyFilter() {
 }
 
 async function updateStatus(id, status) {
-  await databases.updateDocument(
-    DB_ID,
-    ORDERS,
-    id,
-    { status }
-  );
-  fetchOrders();
+  const order = allOrders.find(o => o.$id === id);
+  if (!order || normalizedStatus(order) === status) return;
+
+  if (status === "cancelled" && !confirm("Cancel this order? You can restore it later.")) return;
+
+  const previous = order.status;
+  order.status = status;               // show the change straight away
+  applyFilter();
+  try {
+    await databases.updateDocument(DB_ID, ORDERS, id, { status });
+    if (status === "cancelled" && typeof xrTelegramNotify === "function") xrTelegramNotify("order_cancelled", id); // only after the cancellation is saved
+  } catch (err) {
+    console.error("Could not update the order:", err);
+    order.status = previous;           // put it back: the server still has the old status
+    applyFilter();
+    showToast("Could not update the order. Check your connection and try again.", "error");
+  }
 }
 
 const deletingOrderIds = new Set();
@@ -419,28 +483,36 @@ async function deleteOrder(id, clickEvent) {
 async function deleteAllOrders() {
   if (!allOrders.length) {
     showToast("No orders to delete.", "info");
+    closeOrderDeleteModal();
     return;
   }
 
-  for (const order of allOrders) {
-    // Delete payment proof image
+  // Delete the order record first, then its proof image. One failure must not stop the rest.
+  let deleted = 0, failed = 0;
+  for (const order of [...allOrders]) {
+    try {
+      await databases.deleteDocument(DB_ID, ORDERS, order.$id);
+      deleted++;
+    } catch (e) {
+      console.warn(`Could not delete order ${order.$id}`, e);
+      failed++;
+      continue;
+    }
     if (order.paymentProof) {
       try {
-        await client.storage.deleteFile(
-          "696825350032fe17c1eb",
-          order.paymentProof
-        );
+        await client.storage.deleteFile(PRODUCT_IMAGES_BUCKET, order.paymentProof);
       } catch (e) {
         console.warn(`Failed to delete image for order ${order.$id}`, e);
       }
     }
-
-    await databases.deleteDocument(DB_ID, ORDERS, order.$id);
   }
 
   closeOrderDeleteModal();
-  fetchOrders();
-  showToast("All orders deleted successfully", "success");
+  await fetchOrders();
+  showToast(
+    failed ? `Deleted ${deleted} orders. ${failed} could not be deleted, try again.` : "All orders deleted successfully",
+    failed ? "warning" : "success"
+  );
 }
 
 function exportOrdersPDF() {
@@ -508,6 +580,12 @@ function getPaidProductTotals() {
   allOrders
     .filter(order => order.status === "paid")
     .forEach(order => {
+      // with customer updates: the original plus APPROVED updates (pending ones are not promised yet)
+      const override = typeof xrDeliveryItems === "function" ? xrDeliveryItems(order) : null;
+      if (override) {
+        override.forEach(it => { totals.set(it.name, (totals.get(it.name) || 0) + it.qty); });
+        return;
+      }
       parseFormData(order.formData).forEach(field => {
         if (field.type !== "product" || !Array.isArray(field.value)) return;
         field.value.forEach(product => {
@@ -558,105 +636,110 @@ function renderOrders(orders) {
   ordersList.innerHTML = "";
 
   if (!orders.length) {
-    ordersList.innerHTML = "<p>No orders found.</p>";
+    const none = !allOrders.length;
+    ordersList.innerHTML = none
+      ? `<div class="xr-empty xr-card">
+           <h2 class="xr-empty__title">No orders yet</h2>
+           <p class="xr-empty__text">Share your store link and new orders will appear here.</p>
+           <a class="xr-btn xr-btn--primary" href="indexF.html">Open store builder</a>
+         </div>`
+      : `<div class="xr-empty xr-card">
+           <h2 class="xr-empty__title">No orders match</h2>
+           <p class="xr-empty__text">Try a different filter or clear the search.</p>
+         </div>`;
     return;
   }
 
-  orders.forEach(order => {
+  orders.slice(0, renderLimit).forEach(order => {
     try {
     if (!order || typeof order !== "object") return;
-    const card = document.createElement("div");
-    card.className = "order-card";
+    const card = document.createElement("article");
+    card.className = "ord-card";
     const status = normalizedStatus(order) || "pending";
+    const id = escapeHtml(String(order.$id).replace(/[^A-Za-z0-9_.-]/g, ""));
+    const proofId = escapeHtml(String(order.paymentProof || "").replace(/[^A-Za-z0-9_.-]/g, ""));
 
     const summary = getProductSummary(order.formData);
-
-    // Keep a full product representation in the expanded card. The collapsed
-    // summary is intentionally short, but it must never be the only place
-    // where long product/customer content exists.
     const parsedOrderFields = parseFormData(order.formData);
-
-    //normalize amount
     const amounts = normalizeAmount(order.totalAmount);
+    const label = STATUS_LABEL[status] || status;
+    const badge = STATUS_BADGE[status] || "neutral";
+
+    const tags = [
+      isNewOrder(order) ? `<span class="xr-badge xr-badge--info">New</span>` : "",
+      needsReview(order) ? `<span class="xr-badge xr-badge--attention">Proof uploaded</span>` : "",
+      typeof xrUpdateTag === "function" ? xrUpdateTag(order) : ""
+    ].join("");
+
+    const detailRows = parsedOrderFields.map(f => {
+      if (f.type === "product" && Array.isArray(f.value)) {
+        return `
+          <div class="ord-field ord-field--wide">
+            <strong>${escapeHtml(f.label || "Products")}</strong>
+            <div class="order-products-detail">
+              ${f.value.filter(p => p && typeof p === "object").map(p => {
+                const desc = String(p.description || "").trim();
+                const price = Number(p.price || 0);
+                return `<div class="order-product-detail">
+                  <div><strong>${escapeHtml(p.name || "Product")}</strong> × ${Number(p.qty || 0).toLocaleString()}</div>
+                  ${desc ? `<div class="order-product-description">${escapeHtml(desc)}</div>` : ""}
+                  ${price ? `<div class="order-product-price">₦${price.toLocaleString("en-NG")} each</div>` : ""}
+                </div>`;
+              }).join("")}
+            </div>
+          </div>`;
+      }
+      const val = String(f.value ?? "").trim();
+      if (!val) return "";
+      return `<div class="ord-field"><strong>${escapeHtml(f.label || "Field")}</strong><span>${escapeHtml(val)}</span></div>`;
+    }).filter(Boolean).join("");
+
+    let payment;
+    if (status === "pending") {
+      payment = order.paymentProof
+        ? `<button type="button" class="ord-proof" onclick="viewImage('${proofId}')" aria-label="View payment proof full size">
+             <img loading="lazy" alt="Payment proof" src="https://nyc.cloud.appwrite.io/v1/storage/buckets/${PRODUCT_IMAGES_BUCKET}/files/${proofId}/view?project=695981480033c7a4eb0d">
+             <span>View full size</span></button>`
+        : `<span class="xr-text-2">No payment proof uploaded</span>`;
+    } else if (status === "cancelled") {
+      payment = `<span class="xr-text-2">Order cancelled</span>`;
+    } else {
+      payment = `<span class="xr-badge xr-badge--paid">&#10003; Marked paid</span>`;
+    }
+
+    const steps = status === "cancelled"
+      ? `<div class="xr-alert"><div><span class="xr-alert__title">This order is cancelled</span>It is not counted in your paid or delivery totals.</div></div>
+         <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" onclick="updateStatus('${id}', 'pending')">Restore as unpaid</button>`
+      : `<p class="ord-steps-label">Status</p>
+         <div class="ord-steps" role="group" aria-label="Order status">
+           ${["pending", "paid", "delivered"].map(k => `<button type="button" class="ord-step${status === k ? " is-current" : ""}" aria-pressed="${status === k}" onclick="updateStatus('${id}', '${k}')">${STATUS_LABEL[k]}</button>`).join("")}
+         </div>
+         <button type="button" class="xr-btn xr-btn--ghost xr-btn--sm" onclick="updateStatus('${id}', 'cancelled')">Cancel order</button>`;
 
     card.innerHTML = `
-      <div class="card-header">
-        <h3>${escapeHtml(getCardTitle(order))}</h3>
-        <span class="status-tag status-${escapeHtml(status)}">${escapeHtml(status)}</span>
-      </div>
-      
-      <div class="order-summary-line">
-        <span class="summary-item">${escapeHtml(summary || "No products")}</span>
-        <span class="order-date">${new Date(order.$createdAt).toDateString()}</span>
-      </div>
-
-      <div class="meta">
-        <span>₦${amounts.toLocaleString()}</span>
-        <div>
-          <button class="expand-btn" onclick="toggleExpand(this)"> <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#999999"> ${EXPAND_DOWN} </svg></button>
-          <button type="button" class="delete-order-btn" aria-label="Delete this order" title="Delete order" onclick="deleteOrder('${order.$id}', event)"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="currentColor" aria-hidden="true"><path d="m376-300 104-104 104 104 56-56-104-104 104-104-56-56-104 104-104-104-56 56 104 104-104 104 56 56Zm-96 180q-33 0-56.5-23.5T200-200v-520h-40v-80h200v-40h240v40h200v80h-40v520q0 33-23.5 56.5T680-120H280Zm400-600H280v520h400v-520Zm-400 0v520-520Z"/></svg></button>
+      <div class="ord-head" role="button" tabindex="0" aria-expanded="false"
+           onclick="toggleExpand(this)"
+           onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleExpand(this)}">
+        <div class="ord-main">
+          <div class="ord-title"><span class="ord-name">${escapeHtml(getCardTitle(order))}</span>${tags}</div>
+          <div class="ord-sub">${escapeHtml(summary || "No products")}</div>
         </div>
+        <div class="ord-side">
+          <span class="xr-badge xr-badge--${badge} xr-badge--dot">${escapeHtml(label)}</span>
+          <strong class="ord-amount">₦${amounts.toLocaleString()}</strong>
+          ${typeof xrDueChip === "function" ? xrDueChip(order) : ""}
+        </div>
+        <div class="ord-date">${escapeHtml(new Date(order.$createdAt).toDateString())}</div>
       </div>
 
-      <div class="expanded hidden">
-        ${parsedOrderFields
-          .map(f => {
-            if (f.type === "product" && Array.isArray(f.value)) {
-              return `
-                <div class="order-field order-field-wide">
-                  <strong>${escapeHtml(f.label || "Products")}:</strong>
-                  <div class="order-products-detail">
-                    ${f.value.filter(p => p && typeof p === "object").map(p => {
-                      const desc = String(p.description || "").trim();
-                      const price = Number(p.price || 0);
-                      return `<div class="order-product-detail">
-                        <div><strong>${escapeHtml(p.name || "Product")}</strong> × ${Number(p.qty || 0).toLocaleString()}</div>
-                        ${desc ? `<div class="order-product-description">${escapeHtml(desc)}</div>` : ""}
-                        ${price ? `<div class="order-product-price">₦${price.toLocaleString("en-NG")} each</div>` : ""}
-                      </div>`;
-                    }).join("")}
-                  </div>
-                </div>`;
-            }
-            const val = String(f.value ?? "").trim();
-            if (!val) return "";
-            return `
-              <div class="order-field">
-                <strong>${escapeHtml(f.label || "Field")}:</strong> ${escapeHtml(val)}
-              </div>
-            `;
-          })
-          .filter(Boolean)
-          .join("")}
-
-        <div class="order-field">
-          <strong>Payment:</strong>
-          ${status === "pending"
-            ? (order.paymentProof
-                ? `<button class="view-payment-btn" onclick="viewImage('${order.paymentProof}')">View payment image</button>`
-                : `<span class="no-proof">No payment proof uploaded</span>`)
-            : `<span class="payment-verified">&#10003; Payment verified</span>`
-          }
-        </div>
-
-        <div class="status-progress-wrap">
-          <p class="status-progress-label">Status</p>
-          <div class="status-progress">
-            <span class="pstep ${status === "pending" ? "current" : "done"}"
-              onclick="updateStatus('${order.$id}', 'pending')">
-              <i>${status === "pending" ? "&#9679;" : "&#10003;"}</i>Pending
-            </span>
-            <span class="pline ${status === "pending" ? "" : "done"}"></span>
-            <span class="pstep ${status === "paid" ? "current" : (status === "delivered" ? "done" : "todo")}"
-              onclick="updateStatus('${order.$id}', 'paid')">
-              <i>${status === "delivered" ? "&#10003;" : (status === "paid" ? "&#9679;" : "&#9675;")}</i>Paid
-            </span>
-            <span class="pline ${status === "delivered" ? "done" : ""}"></span>
-            <span class="pstep ${status === "delivered" ? "current" : "todo"}"
-              onclick="updateStatus('${order.$id}', 'delivered')">
-              <i>${status === "delivered" ? "&#9679;" : "&#9675;"}</i>Delivered
-            </span>
-          </div>
+      <div class="ord-details hidden">
+        ${typeof xrIdRowHTML === "function" ? xrIdRowHTML(order, id) : ""}
+        ${detailRows}
+        ${typeof xrUpdatesHTML === "function" ? xrUpdatesHTML(order, id) : ""}
+        <div class="ord-field ord-field--wide"><strong>Payment</strong><div>${payment}</div></div>
+        <div class="ord-actions">
+          ${steps}
+          <button type="button" class="xr-btn xr-btn--danger xr-btn--sm" aria-label="Delete this order" onclick="deleteOrder('${id}', event)">Delete order</button>
         </div>
       </div>
     `;
@@ -664,21 +747,36 @@ function renderOrders(orders) {
     ordersList.appendChild(card);
     } catch (error) {
       console.error("Could not render an order card:", order?.$id, error);
-      // Continue rendering other orders instead of breaking the whole filter.
     }
   });
+
+  if (orders.length > renderLimit) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "xr-btn xr-btn--secondary xr-btn--block ord-more";
+    more.textContent = `Show ${Math.min(RENDER_STEP, orders.length - renderLimit)} more (${orders.length - renderLimit} left)`;
+    more.onclick = () => { renderLimit += RENDER_STEP; applyFilter(); };
+    ordersList.appendChild(more);
+  }
 }
 
-function toggleExpand(btn) {
-  const card = btn.closest(".order-card");
-  const expanded = card.querySelector(".expanded");
-  const svg = btn.querySelector("svg");
+function toggleExpand(head) {
+  const card = head.closest(".ord-card");
+  const details = card.querySelector(".ord-details");
+  const open = details.classList.toggle("hidden") === false;
+  card.classList.toggle("is-open", open);
+  head.setAttribute("aria-expanded", String(open));
+}
 
-  const isOpen = !expanded.classList.contains("hidden");
-
-  expanded.classList.toggle("hidden");
-
-  svg.innerHTML = isOpen ? EXPAND_DOWN : CLOSE_EXPAND;
+/* "View full order" from the payment verification workspace: show this order in the list, opened */
+function xrOpenOrderCard(id) {
+  const o = allOrders.find(x => x.$id === id);
+  if (!o) return;
+  activeFilter = "all";
+  if (searchInput) searchInput.value = o.publicOrderID || (window.XrVerify ? XrVerify.customerName(o) : "");
+  applyFilter();
+  const head = document.querySelector(".ord-head");
+  if (head) { head.click(); head.scrollIntoView({ block: "start", behavior: "smooth" }); }
 }
 
 function viewImage(fileId) {
@@ -730,15 +828,17 @@ EVENT LISTENERS / TRIGGERS
 ========================= */
 const searchInput = document.getElementById("orderSearch");
 searchInput.addEventListener("input", () => {
+  renderLimit = RENDER_STEP;
   applyFilter();
 });
 
 const ordersList = document.getElementById("ordersList");
 const modal = document.getElementById("modal");
 
-document.querySelectorAll(".filters button").forEach(btn => {
+document.querySelectorAll(".ord-filters button").forEach(btn => {
   btn.onclick = () => {
     activeFilter = btn.dataset.filter;
+    renderLimit = RENDER_STEP;
     applyFilter();
   };
 });
@@ -754,6 +854,7 @@ window.addEventListener("scroll", () => {
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") {
+    if (typeof closeIdDialog === "function") closeIdDialog();
     closeDeliverySummary();
   }
 });

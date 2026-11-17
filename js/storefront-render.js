@@ -268,12 +268,18 @@ function storefrontPaymentDetails(opts) {
  *   totalFn   — global function name to call on fee change (default "updateTotal")
  *   submitFn  — global function name for the Send Order button (default "submitOrder")
  */
-function buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass, opts }) {
+function buildStorefrontHTML({ fields, formTitle, formSubtitle, themeClass, storeConfig, opts }) {
   opts = Object.assign({ live: false, cart: {}, qtyFn: "changeQty", totalFn: "updateTotal", submitFn: "submitOrder" }, opts || {});
   const themeId = (themeClass || "theme-r1").replace("theme-", "");
   const productFields = fields.filter(f => f.type === "product");
   const otherFields = fields.filter(f => f.type !== "product");
   const initial = (formTitle || "X").trim().charAt(0).toUpperCase();
+
+  // Themes listed in STOREFRONT_CHROME (storefront-chrome.js) render as a full
+  // store. All other themes keep the original layout below, unchanged.
+  if (productFields.length > 0 && typeof storefrontChromeFor === "function" && storefrontChromeFor(themeId)) {
+    return buildStorefrontChromeHTML({ fields, formTitle, formSubtitle, themeClass, themeId, storeConfig, opts });
+  }
 
   const sendBtn = opts.live
     ? `<button class="send-btn" onclick="${opts.submitFn}()">Send Order</button>`
