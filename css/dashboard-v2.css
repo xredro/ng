@@ -1,0 +1,42 @@
+/* Dashboard (Phase 5). Layout for the redesigned page; components come from
+   xr-components.css. The top nav keeps its existing styles from dashboard.css. */
+.xr-main { max-width: var(--xr-content-max); margin: 0 auto; padding: var(--xr-s-5) var(--xr-s-4) var(--xr-s-12); }
+.xr-main .hidden { display: none; }
+.xr-page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--xr-s-4); margin-bottom: var(--xr-s-5); }
+.xr-page-head p { margin: 4px 0 0; }
+.dash-notices { display: flex; flex-direction: column; gap: var(--xr-s-3); }
+.dash-notices:empty { display: none; }
+.dash-notices .xr-alert { margin: 0; }
+.dash-notices .xr-alert p { margin: 0; }
+.dash-section { margin-top: var(--xr-s-5); }
+.dash-section > .xr-h3 { margin-bottom: var(--xr-s-3); }
+.dash-values .xr-card { padding: var(--xr-s-4); }
+.dash-value { display: block; font-size: var(--xr-fs-xl); font-weight: var(--xr-fw-bold); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.dash-value-note { display: block; margin-top: 2px; font-size: var(--xr-fs-xs); color: var(--xr-text-3); }
+.dash-grid { display: grid; gap: var(--xr-s-5); grid-template-columns: minmax(0, 1fr); margin-top: var(--xr-s-5); }
+@media (min-width: 900px) { .dash-grid { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; } }
+.dash-side { display: flex; flex-direction: column; gap: var(--xr-s-4); }
+.dash-side .xr-card { padding: var(--xr-s-4); }
+.dash-kv { display: flex; justify-content: space-between; gap: var(--xr-s-3); padding: 6px 0; font-size: var(--xr-fs-sm); }
+.dash-kv strong { font-variant-numeric: tabular-nums; }
+.dash-links { display: flex; flex-direction: column; gap: var(--xr-s-2); }
+.dash-links .xr-btn { justify-content: flex-start; }
+
+/* recent orders */
+.dash-order { border-top: 1px solid var(--xr-border); }
+.dash-order:first-child { border-top: 0; }
+.dash-order__head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--xr-s-3); align-items: center; padding: var(--xr-s-3) var(--xr-s-4); min-height: 64px; cursor: pointer; }
+.dash-order__head:focus-visible { outline: 2px solid var(--xr-focus); outline-offset: -2px; }
+.dash-order__title { font-weight: var(--xr-fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-order__sub { grid-column: 1; font-size: var(--xr-fs-sm); color: var(--xr-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-order__amount { grid-column: 2; grid-row: 2; text-align: right; font-weight: var(--xr-fw-bold); font-variant-numeric: tabular-nums; }
+.dash-order__date { font-size: var(--xr-fs-xs); color: var(--xr-text-3); grid-column: 1 / -1; }
+.dash-order__more { padding: 0 var(--xr-s-4) var(--xr-s-4); font-size: var(--xr-fs-sm); }
+.dash-order__more .xr-btn { margin-top: var(--xr-s-2); }
+.dash-order.is-open .dash-order__title, .dash-order.is-open .dash-order__sub { white-space: normal; }
+
+/* modals keep the existing .modal overlay from dashboard.css */
+.dash-modal-card { width: min(92vw, 380px); text-align: center; }
+.dash-modal-card .xr-btn { margin-top: var(--xr-s-4); }
+
+@media (max-width: 599px) { .dash-values { grid-template-columns: minmax(0, 1fr); } }

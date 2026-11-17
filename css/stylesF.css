@@ -437,37 +437,20 @@ input {
 /* =========================
    PREVIEW OVERLAY
 ========================= */
-/* Preview overlay — deliberately edge-to-edge, no bordered "card" wrapper,
-   so it looks exactly like the real customer page, not a small modal
-   nested inside the builder. */
-.preview-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--bg, #fff);
-  z-index: 9999;
-  overflow-y: auto;
-}
-.preview-overlay.hidden {
-  display: none;
-}
-.preview-fullbleed {
-  min-height: 100vh;
-}
-.preview-close-btn {
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  z-index: 10000;
-  border: none;
-  border-radius: 999px;
-  background: #16181A;
-  color: #fff;
-  padding: 8px 16px;
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-}
+/* Preview overlay: a top bar (size switch + close) above an isolated iframe.
+   Nothing in the preview inherits builder styles, so it matches the live store. */
+.preview-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; background: #16181A; }
+.preview-overlay.hidden { display: none; }
+.preview-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #16181A; color: #fff; }
+.preview-label { margin-right: auto; font-size: 13px; font-weight: 800; letter-spacing: 0.02em; }
+.preview-devices { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: #2a2d30; }
+.preview-devices button { min-height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: #cfd3d1; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.preview-devices button[aria-pressed="true"] { background: #fff; color: #16181A; }
+.preview-close-btn { min-height: 38px; padding: 0 18px; border: 0; border-radius: 999px; background: #9bdd78; color: #14210f; font-size: 13px; font-weight: 800; cursor: pointer; }
+.preview-stage { flex: 1; min-height: 0; display: flex; justify-content: center; background: #16181A; }
+.preview-stage iframe { border: 0; width: 100%; height: 100%; background: #fff; }
+.preview-stage.is-phone { padding: 0 0 12px; }
+.preview-stage.is-phone iframe { width: 390px; max-width: 100%; border-radius: 22px; }
 
 /* Exipred Subscription */
 .subscribe {
@@ -778,3 +761,16 @@ input {
 .theme-swatch-r7 { background: linear-gradient(135deg, #ffffff 55%, #C0392B 55%); }
 .theme-swatch-r8 { background: linear-gradient(135deg, #FBF3E1 55%, #3DA35D 55%); }
 .theme-swatch-r9 { background: linear-gradient(135deg, #FF7A45, #E0562B); }
+
+/* ---- Store Details panel + featured switch (Phase 3) ---- */
+.sd-hint { margin: 0 0 12px; font-size: 13px; opacity: 0.75; }
+.sd-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: #fdeee1; color: #8a5a1d; }
+.sd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sd-field p { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.sd-field input, .sd-field textarea { width: 100%; box-sizing: border-box; }
+.sd-wide { grid-column: 1 / -1; }
+.sd-preview { display: block; width: 100%; max-height: 90px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
+.sd-logo { width: 72px; height: 72px; object-fit: cover; border-radius: 50%; }
+.sd-upload, .sd-remove { display: inline-block; padding: 9px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid currentColor; background: transparent; color: inherit; margin-right: 6px; }
+.product-featured-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; font-weight: 600; }
+@media (max-width: 520px) { .sd-grid { grid-template-columns: minmax(0, 1fr); } }

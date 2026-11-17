@@ -1,0 +1,148 @@
+/* =========================================================
+   X-REDRO DESIGN TOKENS  (seller app + account pages)
+   =========================================================
+   Single source of truth for colour, type, spacing, radius,
+   shadow, motion and layering. Everything is prefixed --xr-
+   so it cannot collide with the older per-page variables.
+
+   Rules
+   - No !important anywhere in this file or in xr-components.css.
+   - Storefront themes (theme-r1..r9.css) do NOT use these tokens;
+     each store keeps its own identity. These are for the seller app.
+   - Dark mode follows the existing switch: body[data-theme="dark"]
+     (set by js/themeF.js). Light is the default.
+   - Breakpoints (media queries cannot use variables, so they are
+     fixed): phone < 600px, tablet 600-899px, desktop >= 900px.
+
+   Contrast: text pairs below were checked against WCAG AA
+   (4.5:1 body text, 3:1 large text/UI). See docs/DESIGN-SYSTEM.md.
+========================================================= */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- Brand ---------- */
+  --xr-lime:        #9bdd78;   /* primary action fill (matches the nav button) */
+  --xr-lime-hover:  #8ad166;
+  --xr-lime-ink:    #14210f;   /* text on lime */
+  --xr-green:       #3da35d;   /* brand accent: focus ring, icons, positive fills */
+  --xr-green-text:  #2e7d46;   /* green used AS TEXT on white (3da35d is only 3.2:1) */
+  --xr-ink:         #16181a;   /* high-emphasis dark surface / text */
+
+  /* ---------- Surfaces ---------- */
+  --xr-bg:          #f4f5f2;   /* page background */
+  --xr-surface:     #ffffff;   /* cards, inputs, sheets */
+  --xr-surface-2:   #f4f5f2;   /* sunken areas inside cards, input fill on page bg */
+  --xr-overlay:     rgba(15, 17, 18, 0.5);
+
+  /* ---------- Text ---------- */
+  --xr-text:        #16181a;
+  --xr-text-2:      #5f6469;   /* secondary: 5.5:1 on bg, 6.0:1 on white */
+  --xr-text-3:      #6b726d;   /* tertiary / hints: AA on white and bg */
+  --xr-text-inverse:#ffffff;
+
+  /* ---------- Lines ---------- */
+  --xr-border:      #e4e6e2;
+  --xr-border-strong:#c9cdc7;
+  --xr-focus:       #36985a;   /* focus ring: >= 3:1 on both white and the page bg */
+
+  /* ---------- Status tones: [bg, text] pairs ---------- */
+  --xr-info-bg:     #e3eefb;  --xr-info-text:    #2b5ea8;   /* delivered, info */
+  --xr-success-bg:  #e4f3e8;  --xr-success-text: #276b3c;   /* paid, success */
+  --xr-danger-bg:   #fbe6e6;  --xr-danger-text:  #b03226;   /* unpaid, error */
+  --xr-warning-bg:  #fdeee1;  --xr-warning-text: #8a5a1d;   /* needs attention */
+  --xr-neutral-bg:  #eceeea;  --xr-neutral-text: #4f555a;   /* cancelled, inactive */
+  --xr-danger-solid:#b03226;                                /* destructive button fill */
+
+  /* ---------- Typography ---------- */
+  --xr-font: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --xr-fs-xs:   12px;
+  --xr-fs-sm:   13.5px;
+  --xr-fs-base: 15px;
+  --xr-fs-md:   16px;      /* inputs are always >= 16px to stop iOS zooming */
+  --xr-fs-lg:   18px;
+  --xr-fs-xl:   22px;
+  --xr-fs-2xl:  28px;
+  --xr-fs-3xl:  clamp(28px, 6vw, 36px);
+  --xr-fw-regular: 500;
+  --xr-fw-semibold: 700;
+  --xr-fw-bold: 800;
+  --xr-lh-tight: 1.2;
+  --xr-lh-base: 1.5;
+
+  /* ---------- Spacing (4px grid) ---------- */
+  --xr-s-1: 4px;
+  --xr-s-2: 8px;
+  --xr-s-3: 12px;
+  --xr-s-4: 16px;
+  --xr-s-5: 20px;
+  --xr-s-6: 24px;
+  --xr-s-8: 32px;
+  --xr-s-10: 40px;
+  --xr-s-12: 48px;
+
+  /* ---------- Radius ---------- */
+  --xr-r-sm:   8px;
+  --xr-r-md:   12px;     /* inputs */
+  --xr-r-lg:   16px;     /* cards */
+  --xr-r-xl:   22px;     /* sheets, large panels */
+  --xr-r-pill: 999px;    /* buttons, badges, chips */
+
+  /* ---------- Shadow (kept very light) ---------- */
+  --xr-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --xr-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.05);
+  --xr-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+
+  /* ---------- Sizing ---------- */
+  --xr-tap: 44px;            /* minimum touch target */
+  --xr-content-max: 1080px;
+  --xr-sidebar-w: 240px;
+  --xr-bottomnav-h: 60px;
+
+  /* ---------- Motion ---------- */
+  --xr-ease: cubic-bezier(0.2, 0, 0, 1);
+  --xr-dur-1: 120ms;
+  --xr-dur-2: 200ms;
+
+  /* ---------- Layering ---------- */
+  --xr-z-nav: 100;
+  --xr-z-sheet: 400;
+  --xr-z-toast: 600;
+}
+
+/* ---------- Dark mode ---------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --xr-lime:        #9bdd78;
+  --xr-lime-hover:  #aee68e;
+  --xr-lime-ink:    #14210f;
+  --xr-green:       #5cc47c;
+  --xr-green-text:  #8fd6a3;
+  --xr-ink:         #f2f2f2;
+
+  --xr-bg:          #0f0f0f;
+  --xr-surface:     #1a1a1a;
+  --xr-surface-2:   #141414;
+  --xr-overlay:     rgba(0, 0, 0, 0.65);
+
+  --xr-text:        #f2f2f2;
+  --xr-text-2:      #b5b5b5;
+  --xr-text-3:      #9a9a9a;
+  --xr-text-inverse:#111111;
+
+  --xr-border:      #2a2a2a;
+  --xr-border-strong:#3a3a3a;
+  --xr-focus:       #9bdd78;
+
+  --xr-info-bg:     #18283d;  --xr-info-text:    #8db6ee;
+  --xr-success-bg:  #17301f;  --xr-success-text: #8fd6a3;
+  --xr-danger-bg:   #3a1c1c;  --xr-danger-text:  #f0908a;
+  --xr-warning-bg:  #3a2c18;  --xr-warning-text: #e8bd7c;
+  --xr-neutral-bg:  #2a2a2a;  --xr-neutral-text: #b5b5b5;
+  --xr-danger-solid:#c8453f;
+
+  --xr-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --xr-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --xr-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}

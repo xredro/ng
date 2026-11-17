@@ -37,3 +37,42 @@
 
 .theme-r5 .cart-bar { background: #2E2A22; border-radius: 4px; }
 .theme-r5 .cart-bar-checkout-label { background: #fff; color: #2E2A22; border-radius: 2px; }
+
+/* ---------- R5 full-store chrome: luxury boutique ---------- */
+.theme-r5.sf-chrome { --sf-primary: #2E2A22; --sf-primary-ink: #ffffff; --muted: #6f6755; font-family: Georgia, 'Times New Roman', serif; }
+.theme-r5.sf-chrome .sf-header { background: #FBF8F3; border-bottom: 1px solid #E9E2D3; }
+.theme-r5.sf-chrome .sf-brand { font-family: 'Playfair Display', serif; font-weight: 500; font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; }
+.theme-r5.sf-chrome .sf-logo { border-radius: 0; }
+.theme-r5.sf-chrome .sf-nav a { font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #6f6755; }
+.theme-r5.sf-chrome .sf-nav a:hover { background: transparent; color: #2E2A22; }
+.theme-r5.sf-chrome .sf-icon-btn:hover { background: #F3EDE0; }
+.theme-r5.sf-chrome .sf-search input, .theme-r5.sf-chrome .sf-search select { border-radius: 0; background: #fff; border-color: #E9E2D3; }
+.theme-r5.sf-chrome .store-simple-header { padding-top: 0; text-align: center; }
+.theme-r5.sf-chrome .sf-hero-editorial.sf-no-banner .sf-hero-media { background: #F3EDE0; }
+.theme-r5.sf-chrome .sf-hero-editorial.sf-no-banner .sf-hero-media::after { display: none; }
+.theme-r5.sf-chrome .sf-hero-editorial.sf-has-banner { color: #fff; }
+.theme-r5.sf-chrome .sf-hero-editorial.sf-has-banner .store-simple-header h1, .theme-r5.sf-chrome .sf-hero-editorial.sf-has-banner .store-simple-header p, .theme-r5.sf-chrome .sf-hero-editorial.sf-has-banner .sf-tagline { color: #fff; }
+.theme-r5.sf-chrome .sf-hero .store-simple-header h1 { font-size: clamp(30px, 8vw, 54px) !important; line-height: 1.08; letter-spacing: 0.02em; }
+.theme-r5.sf-chrome .sf-hero .store-simple-header p { font-size: clamp(14px, 3.8vw, 18px) !important; }
+.theme-r5.sf-chrome .sf-btn { border-radius: 0; background: transparent; color: inherit; border: 1px solid currentColor; letter-spacing: 0.16em; text-transform: uppercase; font-size: 12px; font-weight: 400; padding: 0 32px; }
+.theme-r5.sf-chrome .sf-btn-block { background: #2E2A22; color: #fff; border-color: #2E2A22; }
+.theme-r5.sf-chrome .sf-btn-ghost { background: transparent; color: #2E2A22; border-color: #2E2A22; }
+.theme-r5.sf-chrome .sf-h2 { font-family: 'Playfair Display', serif; font-weight: 400; font-size: 22px; text-align: center; letter-spacing: 0.04em; }
+.theme-r5.sf-chrome .sf-toolbar { justify-content: center; }
+.theme-r5.sf-chrome .cat-chip { border-radius: 0; font-size: 12.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.theme-r5.sf-chrome .category-scroll { justify-content: center; }
+.theme-r5.sf-chrome .sf-card { background: transparent; border: 0; box-shadow: none; }
+.theme-r5.sf-chrome .sf-card-media { border-radius: 2px; background: #F3EDE0; }
+.theme-r5.sf-chrome .sf-card-name { margin: 6px 0 0; font-family: 'Playfair Display', serif; font-weight: 400; font-size: 19px; text-align: center; }
+.theme-r5.sf-chrome .sf-card .product-price { color: #6B5B3A; text-align: center; font-size: 14px; }
+.theme-r5.sf-chrome .sf-add { background: transparent; color: #2E2A22; border-radius: 0; border-bottom: 1px solid #2E2A22; padding: 0 6px; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 400; min-height: 44px; }
+.theme-r5.sf-chrome .sf-stock { border-radius: 0; }
+.theme-r5.sf-chrome .product-qty-badge { border-radius: 0; }
+.theme-r5.sf-chrome .sf-feat-img { border-radius: 2px; }
+.theme-r5.sf-chrome .sf-feat-name { font-family: 'Playfair Display', serif; font-weight: 400; }
+.theme-r5.sf-chrome .sf-about p { margin: 0 auto; text-align: center; font-style: italic; }
+.theme-r5.sf-chrome .sf-about .sf-h2 { margin-bottom: 14px; }
+.theme-r5.sf-chrome .sf-footer { background: #F3EDE0; border-top: 0; padding-top: 44px; }
+.theme-r5.sf-chrome .sf-ft-name { font-family: 'Playfair Display', serif; font-size: 20px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; }
+.theme-r5.sf-chrome .sf-drawer-panel { border-radius: 0; }
+.theme-r5.sf-chrome .sf-line-ctl button:not(.sf-remove), .theme-r5.sf-chrome .sf-line-img { border-radius: 0; }

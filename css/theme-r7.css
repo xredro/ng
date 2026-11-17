@@ -33,3 +33,28 @@
 
 .theme-r7 .cart-bar { background: #16181A; }
 .theme-r7 .cart-bar-checkout-label { background: #C0392B; color: #fff; }
+
+/* ---------- R7 full-store chrome: listings ---------- */
+.theme-r7.sf-chrome { --sf-primary: #16181A; --sf-primary-ink: #ffffff; --muted: #5f6469; font-family: 'Poppins', 'Manrope', sans-serif; }
+.theme-r7.sf-chrome .sf-header { background: #fff; border-bottom: 1px solid #EBEBEB; }
+.theme-r7.sf-chrome .sf-brand { font-weight: 800; font-size: 17px; }
+.theme-r7.sf-chrome .sf-nav a:hover, .theme-r7.sf-chrome .sf-icon-btn:hover { background: #F4F4F4; }
+.theme-r7.sf-chrome .sf-count { background: #C0392B; color: #fff; }
+.theme-r7.sf-chrome .sf-hero { padding-top: 22px; padding-bottom: 6px; }
+.theme-r7.sf-chrome .sf-hero .store-simple-header h1 { font-size: clamp(22px, 6vw, 32px) !important; font-weight: 800; }
+.theme-r7.sf-chrome .sf-hero .store-simple-header p { margin-top: 4px; }
+.theme-r7.sf-chrome .sf-hero-media { border-radius: 12px; }
+.theme-r7.sf-chrome .sf-h2 { font-weight: 800; font-size: 18px; }
+.theme-r7.sf-chrome .cat-chip { min-height: 38px; border-radius: 8px; font-weight: 600; background: #F4F4F4; }
+.theme-r7.sf-chrome .cat-chip.cat-active { background: #16181A; color: #fff; }
+.theme-r7.sf-chrome .sf-card { background: #fff; border: 0; border-bottom: 1px solid #EBEBEB; border-radius: 0; box-shadow: none; }
+.theme-r7.sf-chrome .sf-card-name { margin: 0; font-size: 15px; font-weight: 700; }
+.theme-r7.sf-chrome .sf-card-desc { -webkit-line-clamp: 2; font-size: 12.5px; }
+.theme-r7.sf-chrome .sf-card .product-price { color: #C0392B; font-weight: 700; font-size: 15px; }
+.theme-r7.sf-chrome .sf-card-foot { padding-top: 6px; }
+.theme-r7.sf-chrome .sf-add { background: #16181A; }
+.theme-r7.sf-chrome .sf-feat-price { color: #C0392B; }
+.theme-r7.sf-chrome .sf-footer { background: #F8F8F8; border-top: 1px solid #EBEBEB; }
+.theme-r7.sf-chrome .cart-bar-checkout-label { background: #C0392B; color: #fff; }
+.theme-r7.sf-chrome .sf-drawer-panel { border-radius: 0; }
+.theme-r7.sf-chrome .sf-line-ctl button:not(.sf-remove) { border-radius: 10px; background: #F4F4F4; color: #16181A; }

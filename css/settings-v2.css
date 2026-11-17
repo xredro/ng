@@ -1,0 +1,18 @@
+/* Settings page (Phase 6). Page shell and components come from xr-components.css. */
+.set .set-card { display: flex; flex-direction: column; gap: var(--xr-s-4); margin-top: var(--xr-s-4); }
+.set .xr-card__head { margin: 0; }
+.set .set-card > .xr-h3 { margin: 0; }
+.set-identity { display: flex; align-items: center; gap: var(--xr-s-3); }
+.set-avatar { display: flex; align-items: center; justify-content: center; flex: none; width: 52px; height: 52px; border-radius: 50%; background: var(--xr-ink); color: var(--xr-text-inverse); font-size: 20px; font-weight: var(--xr-fw-bold); }
+.set-name { min-width: 0; font-weight: var(--xr-fw-bold); overflow-wrap: anywhere; }
+.set .set-switch { align-items: flex-start; min-height: var(--xr-tap); display: flex; width: 100%; font-weight: var(--xr-fw-semibold); }
+.set .set-switch .xr-switch-track { margin-top: 9px; }
+.set-help { margin: 0; }
+.set-kv { display: flex; align-items: center; justify-content: space-between; gap: var(--xr-s-3); font-size: var(--xr-fs-sm); padding: 2px 0; }
+.set-actions { display: flex; flex-wrap: wrap; gap: var(--xr-s-3); }
+.set-modal { display: flex; flex-direction: column; gap: var(--xr-s-4); width: min(92vw, 400px); }
+.set .xr-input { margin: 0; }
+
+/* older settings.css rules make every button wide and every label grey; restore the components */
+.set .xr-card__head .xr-btn { width: auto; flex: none; }
+.set .set-switch, .set .xr-label { color: var(--xr-text); }

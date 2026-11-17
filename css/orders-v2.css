@@ -1,0 +1,98 @@
+/* Orders page (Phase 5/6). Page shell and components come from xr-components.css.
+   Class names start with ord- so the older orders.css rules cannot touch them. */
+.ord-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--xr-s-2); margin-bottom: var(--xr-s-4); }
+.ord-toolbar .xr-btn:first-child { grid-column: 1 / -1; }
+.ord-danger { color: var(--xr-danger-text); }
+@media (min-width: 700px) {
+  .ord-toolbar { display: flex; flex-wrap: wrap; }
+  .ord-toolbar .xr-btn:first-child { grid-column: auto; }
+  .ord-danger { margin-left: auto; }
+}
+.ord .ord-search { margin: 0 0 var(--xr-s-3); width: 100%; }
+.ord-filters { margin-bottom: var(--xr-s-4); }
+.ord-filters .xr-chip { min-height: 40px; }
+
+.ord-card { margin-bottom: var(--xr-s-3); overflow: hidden; background: var(--xr-surface); border: 1px solid var(--xr-border); border-radius: var(--xr-r-lg); box-shadow: var(--xr-shadow-md); }
+.ord-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px var(--xr-s-3); align-items: start; padding: var(--xr-s-4); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ord-head:focus-visible { outline: 2px solid var(--xr-focus); outline-offset: -2px; }
+.ord-main { min-width: 0; }
+.ord-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: var(--xr-fw-bold); }
+.ord-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ord-sub { margin-top: 2px; font-size: var(--xr-fs-sm); color: var(--xr-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ord-card.is-open .ord-sub { white-space: normal; }
+.ord-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ord-amount { font-variant-numeric: tabular-nums; }
+.ord-date { grid-column: 1 / -1; font-size: var(--xr-fs-xs); color: var(--xr-text-3); }
+
+.ord-details { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--xr-s-3); padding: var(--xr-s-4); border-top: 1px solid var(--xr-border); }
+@media (min-width: 700px) { .ord-details { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ord-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--xr-fs-sm); overflow-wrap: anywhere; }
+.ord-field > strong { font-size: var(--xr-fs-xs); font-weight: var(--xr-fw-bold); letter-spacing: 0.05em; text-transform: uppercase; color: var(--xr-text-2); }
+.ord-field--wide, .ord-actions { grid-column: 1 / -1; }
+.ord-proof { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 0; border: 0; background: none; cursor: pointer; }
+.ord-proof img { width: 140px; height: 140px; object-fit: cover; border-radius: var(--xr-r-md); border: 1px solid var(--xr-border); background: var(--xr-surface-2); }
+.ord-proof span { font-size: var(--xr-fs-xs); color: var(--xr-text-2); text-decoration: underline; }
+.ord-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--xr-s-3); padding-top: var(--xr-s-3); border-top: 1px solid var(--xr-border); }
+.ord-steps-label { width: 100%; margin: 0; font-size: var(--xr-fs-xs); font-weight: var(--xr-fw-bold); letter-spacing: 0.05em; text-transform: uppercase; color: var(--xr-text-2); }
+.ord-steps { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--xr-border); border-radius: var(--xr-r-pill); background: var(--xr-surface-2); }
+.ord-step { min-height: 40px; padding: 0 16px; border: 0; border-radius: var(--xr-r-pill); background: transparent; color: var(--xr-text-2); font-size: var(--xr-fs-sm); font-weight: var(--xr-fw-bold); cursor: pointer; }
+.ord-step.is-current { background: var(--xr-ink); color: var(--xr-text-inverse); }
+.ord-actions .xr-btn--danger { margin-left: auto; }
+
+/* ---------- customer updates (Phase 9) ---------- */
+.ord-due { font-size: var(--xr-fs-xs); font-weight: 700; color: var(--xr-warning-text); }
+.ord-update { grid-column: 1 / -1; padding: var(--xr-s-4); border-radius: var(--xr-r-md); background: var(--xr-warning-bg); border: 1px solid var(--xr-border-strong); display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--xr-s-3); }
+.ord-update, .ord-update strong { color: var(--xr-text); }
+.ord-update__head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.ord-update__when, .ord-update__pay { margin: 0; font-size: var(--xr-fs-sm); color: var(--xr-text-2); }
+.ord-update__lines { margin: 0; padding-left: 18px; font-size: var(--xr-fs-sm); }
+.ord-update__nums { margin: 0; font-size: var(--xr-fs-sm); }
+.ord-update__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.ord-proofs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.ord-proof--small { width: 84px; }
+.ord-proof--small img { width: 84px; height: 84px; object-fit: cover; }
+.ord-extra-proofs { margin-top: 10px; }
+.ord-hist { grid-column: 1 / -1; margin-top: var(--xr-s-3); font-size: var(--xr-fs-sm); }
+.ord-hist summary { cursor: pointer; font-weight: 700; min-height: 44px; display: flex; align-items: center; }
+.ord-hist ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ord-hist ol > li { padding-left: 12px; border-left: 2px solid var(--xr-border-strong); }
+.ord-hist__title { display: block; font-weight: 700; }
+.ord-hist__when { display: block; color: var(--xr-text-3); font-size: var(--xr-fs-xs); }
+.ord-hist ul { margin: 4px 0 0; padding-left: 16px; color: var(--xr-text-2); }
+.ord-edit-list { display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto; }
+.ord-edit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ord-edit-row label { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.ord-edit-row label span { font-size: var(--xr-fs-xs); color: var(--xr-text-2); }
+.ord-edit-row .xr-input { width: 90px; flex: none; text-align: center; }
+.ord-edit-totals { margin: var(--xr-s-3) 0 0; font-size: var(--xr-fs-sm); }
+
+/* ---------- seller-assisted recovery (Phase 10) ---------- */
+.ord-access { display: flex; flex-direction: column; gap: 8px; margin-top: var(--xr-s-3); }
+.ord-access__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ord-verify { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ord-verify__row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--xr-border-strong); border-radius: var(--xr-r-md); cursor: pointer; min-height: 44px; }
+.ord-verify__row input { width: 22px; height: 22px; margin-top: 2px; flex: none; }
+.ord-verify__row input:disabled + span { opacity: .55; }
+.ord-verify__row em { display: block; font-style: normal; font-size: var(--xr-fs-sm); color: var(--xr-text-2); }
+.ord-verify__val { display: block; margin-top: 4px; padding: 4px 8px; border-radius: 6px; background: var(--xr-surface-2); font-size: var(--xr-fs-sm); overflow-wrap: anywhere; }
+
+.ord-upd { padding: var(--xr-s-3); border: 1px solid var(--xr-border-strong); border-radius: var(--xr-r-md); margin-top: var(--xr-s-2); display: flex; flex-direction: column; gap: 6px; background: var(--xr-surface); }
+.ord-upd--pending { background: var(--xr-warning-bg); }
+.ord-upd--rejected { opacity: .8; }
+.ord-upd--rejected .ord-update__lines { text-decoration: line-through; }
+.ord-upd__flag { margin: 0; font-size: var(--xr-fs-sm); color: var(--xr-warning-text); font-weight: 600; }
+.ord-pid { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; letter-spacing: .08em; }
+.ord-choice { border: 0; padding: 0; margin: var(--xr-s-3) 0 0; display: flex; flex-direction: column; gap: 8px; }
+.ord-choice label { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.ord-latest { padding: var(--xr-s-3); border-radius: var(--xr-r-md); background: var(--xr-surface-2); }
+.ord-latest__info { margin-top: 8px; display: grid; gap: 6px; }
+
+/* Phase 10: seller changes an order for the customer (reuses .ord-edit-row; the add-product row has a select and a quantity) */
+#idBody .ord-edit-row { margin-bottom: 10px; }
+#idBody .ord-edit-row .xr-select { flex: 1; min-width: 0; }
+#idBody .ord-edit-row--add { flex-wrap: wrap; }
+#idBody .ord-edit-row--add label { flex: 1 1 100%; }
+#idBody .ord-edit-row--add .xr-select { flex: 1 1 0; min-width: 0; }
+#idBody .ord-edit-row--add .xr-input { flex: none; }
+#idBody h3.xr-h4, #idBody .xr-field .xr-label { text-align: left; }
+#idBody .ord-edit-row--add label { text-align: left; }

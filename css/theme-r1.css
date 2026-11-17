@@ -62,3 +62,32 @@
 .theme-r1 .cart-bar { background: #14141C; border: 1px solid #00E5FF; box-shadow: 0 0 22px rgba(0,229,255,0.3); }
 .theme-r1 .cart-bar .cb-info { color: #fff; }
 .theme-r1 .cart-bar-checkout-label { background: #00E5FF; color: #0A0A0F; }
+
+/* ---------- R1 full-store chrome: dark, controlled neon ---------- */
+.theme-r1.sf-chrome { --sf-primary: #00E5FF; --sf-primary-ink: #0A0A0F; font-family: 'Space Grotesk', sans-serif; }
+.theme-r1.sf-chrome .sf-header { background: rgba(10, 10, 15, 0.94); border-bottom: 1px solid #2A2A3A; }
+.theme-r1.sf-chrome .sf-brand { font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase; }
+.theme-r1.sf-chrome .sf-logo { border-radius: 4px; }
+.theme-r1.sf-chrome .sf-logo-initial { border-radius: 4px; }
+.theme-r1.sf-chrome .sf-nav a:hover, .theme-r1.sf-chrome .sf-icon-btn:hover { background: #1C1C2A; }
+.theme-r1.sf-chrome .sf-nav a { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
+.theme-r1.sf-chrome .sf-search input, .theme-r1.sf-chrome .sf-search select { border-radius: 4px; border-color: #2A2A3A; }
+.theme-r1.sf-chrome .sf-hero { min-height: 320px; border-bottom: 1px solid rgba(0, 229, 255, 0.25); }
+.theme-r1.sf-chrome .sf-hero-fallback { background: radial-gradient(120% 90% at 85% 10%, rgba(0, 229, 255, 0.12), transparent 55%), linear-gradient(160deg, #14141C, #0A0A0F); }
+.theme-r1.sf-chrome .sf-hero .store-simple-header h1 { font-size: clamp(26px, 7vw, 44px) !important; text-shadow: 0 0 16px rgba(0, 229, 255, 0.25); }
+.theme-r1.sf-chrome .sf-hero .store-simple-header p, .theme-r1.sf-chrome .sf-tagline { color: #c4c4d6; }
+.theme-r1.sf-chrome .sf-btn { border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; box-shadow: 0 0 12px rgba(0, 229, 255, 0.3); }
+.theme-r1.sf-chrome .sf-btn-ghost { box-shadow: none; color: #fff; }
+.theme-r1.sf-chrome .sf-h2 { font-family: 'Orbitron', sans-serif; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+.theme-r1.sf-chrome .sf-card { border-radius: 4px; }
+.theme-r1.sf-chrome .sf-card:hover { border-color: #00E5FF; }
+.theme-r1.sf-chrome .sf-card-media { margin: 8px 8px 0; width: calc(100% - 16px); border-radius: 2px; }
+.theme-r1.sf-chrome .sf-card-name { margin: 0; text-transform: uppercase; font-size: 12.5px; letter-spacing: 0.03em; }
+.theme-r1.sf-chrome .sf-add { border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; }
+.theme-r1.sf-chrome .sf-stock-out { background: #FF2E63; color: #0A0A0F; }
+.theme-r1.sf-chrome .sf-feat-img { border-radius: 2px; border: 1px solid #2A2A3A; }
+.theme-r1.sf-chrome .sf-footer { background: #0A0A0F; border-top: 1px solid #2A2A3A; }
+.theme-r1.sf-chrome .sf-ft-col h3 { font-family: 'Orbitron', sans-serif; letter-spacing: 0.1em; }
+.theme-r1.sf-chrome .sf-drawer-panel { border-left: 1px solid #2A2A3A; }
+.theme-r1.sf-chrome .sf-line-ctl button { border-radius: 4px; }
+.theme-r1.sf-chrome .sf-line-img { border-radius: 2px; }

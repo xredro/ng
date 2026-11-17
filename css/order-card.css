@@ -1,0 +1,30 @@
+/* Order card panel on the store's "order sent" screen (Phase 8).
+   Neutral on purpose: it sits inside nine different themes, light and dark, so it only uses
+   currentColor and translucent greys, and every selector starts with .oc-. */
+.oc-panel { margin: 22px auto 8px; max-width: 440px; padding: 18px 16px; border-radius: 16px; text-align: left;
+  background: rgba(127,127,127,.10); border: 1px solid rgba(127,127,127,.28); color: inherit; font-family: inherit; }
+.oc-title { margin: 0 0 6px; font-size: 17px; line-height: 1.3; font-weight: 800; }
+.oc-ref { margin: 0 0 12px; font-size: 14px; opacity: .85; }
+.oc-ref strong { font-size: 15px; letter-spacing: .04em; opacity: 1; }
+.oc-code-box { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 10px; border-radius: 12px;
+  border: 2px dashed rgba(127,127,127,.6); background: rgba(127,127,127,.08); }
+.oc-code-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .75; }
+.oc-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: clamp(17px, 5.4vw, 24px); letter-spacing: .06em;
+  font-weight: 800; word-break: break-all; text-align: center; user-select: all; -webkit-user-select: all; }
+.oc-warn { margin: 12px 0 0; font-size: 13.5px; line-height: 1.5; opacity: .9; }
+.oc-preview { display: block; width: 100%; max-width: 320px; margin: 14px auto 0; border-radius: 12px; border: 1px solid rgba(127,127,127,.35); background: #fff; }
+.oc-preview[hidden] { display: none; }
+.oc-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.oc-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 16px; flex: 1 1 160px; border-radius: 12px;
+  border: 1.5px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: 700; font-size: 15px; text-decoration: none; cursor: pointer; }
+.oc-btn--primary { background: #9bdd78; border-color: #9bdd78; color: #14210f; }
+.oc-btn--small { min-height: 40px; flex: 0 0 auto; padding: 6px 14px; font-size: 14px; }
+.oc-btn:disabled { opacity: .6; cursor: progress; }
+.oc-btn:focus-visible { outline: 3px solid #36985a; outline-offset: 2px; }
+.oc-hint { margin: 12px 0 0; font-size: 12.5px; line-height: 1.5; opacity: .75; }
+
+/* "Already ordered? Retrieve My Order" bar above the store. Its own colours, so it reads the same on every theme. */
+.oc-retrieve-strip { display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; background: #16181a; color: #f4f5f2;
+  font: 600 14px/1.3 "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+.oc-retrieve-strip a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border-radius: 999px; background: #9bdd78; color: #14210f; font-weight: 800; text-decoration: none; }
+.oc-retrieve-strip a:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

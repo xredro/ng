@@ -1,39 +1,71 @@
-/* Theme 2 — "Catalog": sharp corners, thick borders, high-contrast
-   monochrome — deliberately the opposite of Simple's soft rounded
-   green look, even though both share the same 2-col grid underneath. */
+/* Theme 2 — "Minimal": airy editorial store. White space, hairline lines,
+   Inter, black as the only accent. (Restyled in Phase 3: this theme used to be
+   a heavy-bordered black and white "Catalog" look.) */
 .preview-theme.theme-r2 {
   --bg: #ffffff;
   --card: #ffffff;
   --text: #111111;
-  --muted: #6E6E6E;
-  --border: #111111;
-  --accent: #111111;
-  --accent-text: #ffffff;
+  --muted: #6b6b6b;
+  --border: #e8e8e8;
+  --accent: #f5f5f3;
+  --accent-text: #111111;
 }
-.theme-r2 .store-simple-header h1 { color: #111; text-transform: uppercase; letter-spacing: 0.02em; font-family: 'Archivo Black', sans-serif !important; font-size: clamp(21px, 5.8vw, 30px) !important; }
-.theme-r2 .store-simple-header p { color: #6E6E6E; font-family: 'Inter', sans-serif !important; font-size: clamp(12.5px, 3.4vw, 15px) !important; }
+.theme-r2 .store-simple-header h1 { color: #111; font-family: 'Inter', sans-serif !important; font-weight: 500; letter-spacing: -0.02em; font-size: clamp(22px, 6vw, 32px) !important; }
+.theme-r2 .store-simple-header p { color: #6b6b6b; font-family: 'Inter', sans-serif !important; font-size: clamp(13px, 3.5vw, 15px) !important; }
 
-.theme-r2 .cat-chip { background: #fff; border: 1.5px solid #111; border-radius: 0; color: #111; }
-.theme-r2 .cat-chip.cat-active { background: #111; color: #fff; }
+.theme-r2 .cat-chip { background: transparent; border: 0; border-bottom: 1px solid transparent; border-radius: 0; color: #6b6b6b; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 2px; margin-right: 14px; }
+.theme-r2 .cat-chip.cat-active { background: transparent; color: #111; border-bottom-color: #111; }
 
-.theme-r2 .product-card { background: #fff; border: 2px solid #111; border-radius: 0; box-shadow: none; }
-.theme-r2 .product-image { background: #F0F0F0; border-radius: 0; border-bottom: 2px solid #111; margin-left: -20px; margin-right: -20px; margin-top: -20px; width: calc(100% + 40px); }
-.theme-r2 .product-name { color: #111; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em; margin-top: 12px; }
-.theme-r2 .product-price { color: #111; font-weight: 800; font-size: 15px; }
+.theme-r2 .product-card { background: transparent; border: 0; border-radius: 0; box-shadow: none; padding: 0; }
+.theme-r2 .product-image { background: #f5f5f3; border-radius: 0; }
+.theme-r2 .product-name { color: #111; font-weight: 500; font-size: 14px; letter-spacing: 0; margin-top: 10px; }
+.theme-r2 .product-price { color: #111; font-weight: 500; font-size: 14px; }
 .theme-r2 .more-btn { background: #111; color: #fff; border-radius: 0; }
 
-.theme-r2 .popup-card, .theme-r2 .checkout-overlay-card { background: #fff; color: #111; border-radius: 0; border: 2px solid #111; }
-.theme-r2 .popup-backdrop, .theme-r2 .checkout-overlay-backdrop { background: rgba(0,0,0,0.5); }
-.theme-r2 .popup-close, .theme-r2 .checkout-close { background: #111; color: #fff; border-radius: 0; }
-.theme-r2 .popup-image { background: #F0F0F0; border-radius: 0; }
+.theme-r2 .popup-card, .theme-r2 .checkout-overlay-card { background: #fff; color: #111; border-radius: 2px; border: 1px solid #e8e8e8; }
+.theme-r2 .popup-backdrop, .theme-r2 .checkout-overlay-backdrop { background: rgba(17, 17, 17, 0.4); }
+.theme-r2 .popup-close, .theme-r2 .checkout-close { background: #f5f5f3; color: #111; border-radius: 0; }
+.theme-r2 .popup-image { background: #f5f5f3; border-radius: 0; }
+.theme-r2 .popup-desc { color: #6b6b6b; }
 .theme-r2 .checkout-badge { background: #111; color: #fff; border-radius: 0; }
+.theme-r2 .checkout-head h2 { font-weight: 500; letter-spacing: -0.01em; }
 
-.theme-r2 .form-group input, .theme-r2 .form-group textarea, .theme-r2 .form-group select {
-  background: #fff; border: 1.5px solid #111; border-radius: 0;
-}
-.theme-r2 .total-box { background: #fff; border: 2px dashed #111; border-radius: 0; }
-.theme-r2 .upload-ui { background: #fff; border: 1.5px dashed #111; border-radius: 0; }
-.theme-r2 .send-btn { background: #111; border-radius: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+.theme-r2 .form-group input, .theme-r2 .form-group textarea, .theme-r2 .form-group select { background: #fff; border: 1px solid #dcdcdc; border-radius: 2px; }
+.theme-r2 .form-group input:focus, .theme-r2 .form-group textarea:focus, .theme-r2 .form-group select:focus { border-color: #111; outline: none; }
+.theme-r2 .total-box { background: #f5f5f3; border: 0; border-radius: 2px; }
+.theme-r2 .upload-ui { background: #fff; border: 1px dashed #c8c8c8; border-radius: 2px; }
+.theme-r2 .send-btn { background: #111; border-radius: 0; text-transform: uppercase; letter-spacing: 0.12em; font-size: 12.5px; font-weight: 500; }
 
-.theme-r2 .cart-bar { background: #111; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
-.theme-r2 .cart-bar-checkout-label { background: #fff; color: #111; border-radius: 4px; }
+.theme-r2 .cart-bar { background: #111; border-radius: 2px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18); }
+.theme-r2 .cart-bar-checkout-label { background: #fff; color: #111; border-radius: 0; }
+
+/* ---------- R2 full-store chrome ---------- */
+.theme-r2.sf-chrome { --sf-primary: #111111; --sf-primary-ink: #ffffff; font-family: 'Inter', sans-serif; }
+.theme-r2.sf-chrome .sf-header { background: #fff; border-bottom: 1px solid #e8e8e8; }
+.theme-r2.sf-chrome .sf-brand { font-weight: 500; font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; }
+.theme-r2.sf-chrome .sf-logo { border-radius: 0; }
+.theme-r2.sf-chrome .sf-nav a { font-size: 12px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6b6b; }
+.theme-r2.sf-chrome .sf-nav a:hover { background: transparent; color: #111; }
+.theme-r2.sf-chrome .sf-icon-btn:hover { background: #f5f5f3; }
+.theme-r2.sf-chrome .sf-search input, .theme-r2.sf-chrome .sf-search select { border-radius: 2px; background: #fff; border-color: #dcdcdc; }
+.theme-r2.sf-chrome .sf-hero { padding-top: 56px; padding-bottom: 20px; }
+.theme-r2.sf-chrome .sf-hero .store-simple-header h1 { font-size: clamp(32px, 9vw, 60px) !important; line-height: 1.05; letter-spacing: -0.035em; }
+.theme-r2.sf-chrome .sf-hero .store-simple-header p { margin-top: 14px; font-size: clamp(14px, 3.8vw, 17px) !important; }
+.theme-r2.sf-chrome .sf-tagline { margin-top: 6px; letter-spacing: 0.02em; }
+.theme-r2.sf-chrome .sf-btn { border-radius: 0; font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; padding: 0 30px; min-height: 48px; }
+.theme-r2.sf-chrome .sf-btn-ghost { color: #111; border-color: #111; }
+.theme-r2.sf-chrome .sf-h2 { font-weight: 500; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: #6b6b6b; }
+.theme-r2.sf-chrome .sf-card-media { aspect-ratio: 4 / 5; }
+.theme-r2.sf-chrome .sf-card-body { padding: 12px 0 0; }
+.theme-r2.sf-chrome .sf-card-name { font-weight: 500; font-size: 14px; margin: 0; }
+.theme-r2.sf-chrome .sf-card .product-price { font-size: 14px; }
+.theme-r2.sf-chrome .sf-add { background: transparent; color: #111; border: 1px solid #111; border-radius: 0; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; min-height: 40px; }
+.theme-r2.sf-chrome .sf-add:hover:not(:disabled) { background: #111; color: #fff; }
+.theme-r2.sf-chrome .product-qty-badge { border-radius: 0; }
+.theme-r2.sf-chrome .sf-stock { border-radius: 0; }
+.theme-r2.sf-chrome .sf-feat-img { border-radius: 0; background: #f5f5f3; }
+.theme-r2.sf-chrome .sf-footer { background: #fff; border-top: 1px solid #e8e8e8; padding-top: 44px; }
+.theme-r2.sf-chrome .sf-ft-name { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 500; }
+.theme-r2.sf-chrome .sf-drawer-panel { border-radius: 0; }
+.theme-r2.sf-chrome .sf-line-ctl button:not(.sf-remove) { border-radius: 0; background: #f5f5f3; color: #111; }
+.theme-r2.sf-chrome .sf-line-img { border-radius: 0; }
