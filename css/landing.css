@@ -186,14 +186,14 @@ h3{font-size:16.5px;font-weight:800;margin-bottom:6px}
 
 /* store showcase strip */
 .tstrip { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 6px 22px 18px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
-.tslide { flex: none; width: 176px; margin: 0; scroll-snap-align: start; }
+.tslide { flex: none; width: 272px; margin: 0; scroll-snap-align: start; }
 .tslide figcaption { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
 .tslide figcaption b { font-size: 15px; }
 .tslide figcaption span { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
 .tslide figcaption small { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 @media (min-width: 900px) {
   .tstrip { flex-wrap: wrap; overflow: visible; justify-content: center; max-width: 1100px; margin: 0 auto; gap: 28px 22px; scroll-snap-type: none; }
-  .tslide { width: 188px; }
+  .tslide { width: 320px; }
 }
 
 /* illustrated phone (pure HTML/CSS, no images) */
@@ -272,3 +272,8 @@ h3{font-size:16.5px;font-weight:800;margin-bottom:6px}
 .tm-r9 .tm-tile { border: 0; }
 .tm-r9 .tm-wide { background: #c2410c; }
 .tm-r9 .tm-wide .tm-price { background: #fff; }
+
+/* real store previews (rendered from the actual themes with sample products) */
+.tshot { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 18px; border: 1px solid var(--border); background: var(--surface-elevated); }
+.hero-shot { display: block; width: 100%; max-width: 440px; height: auto; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 22px; }
+.hero-visual .ill-note { text-align: center; }
