@@ -5,7 +5,7 @@ compatibility_date = "2024-11-01"
 
 # Non-secret settings. Replace every REPLACE_ME. IDs below are the ones already used by the X-Redro frontend.
 [vars]
-TELEGRAM_BOT_USERNAME = "REPLACE_ME_BOT_USERNAME"          # without the @, e.g. XRedroOrdersBot
+TELEGRAM_BOT_USERNAME = "Xredro_bot"          # without the @, e.g. XRedroOrdersBot
 APPWRITE_ENDPOINT = "https://nyc.cloud.appwrite.io/v1"
 APPWRITE_PROJECT_ID = "695981480033c7a4eb0d"
 APPWRITE_DATABASE_ID = "695c4fce0039f513dc83"
@@ -16,9 +16,9 @@ APPWRITE_REVIEWS_COLLECTION_ID = "order_reviews"
 APPWRITE_TG_CONNECTIONS_COLLECTION_ID = "telegram_connections"
 APPWRITE_TG_EVENTS_COLLECTION_ID = "telegram_events"
 # Comma-separated list of the exact web origins allowed to call /api/*. No trailing slashes.
-ALLOWED_ORIGINS = "REPLACE_ME_https://your-xredro-site.pages.dev"
+ALLOWED_ORIGINS = "xredro.pages.dev"
 # Link shown at the bottom of notifications (optional).
-DASHBOARD_URL = "REPLACE_ME_https://your-xredro-site.pages.dev/orders.html"
+DASHBOARD_URL = "xredro.pages.dev/orders.html"
 
 # SECRETS (never put these in this file). Set each with:  npx wrangler secret put NAME
 #   TELEGRAM_TOKEN            the bot token from @BotFather
