@@ -40,3 +40,21 @@
 .dash-modal-card .xr-btn { margin-top: var(--xr-s-4); }
 
 @media (max-width: 599px) { .dash-values { grid-template-columns: minmax(0, 1fr); } }
+
+/* setup checklist card (js/setup-checklist.js) */
+.setup { padding: var(--xr-s-4); }
+.setup__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--xr-s-3); }
+.setup__bar { height: 8px; border-radius: 999px; background: var(--xr-border, #e7e8e6); margin: var(--xr-s-2) 0 var(--xr-s-3); overflow: hidden; }
+.setup__bar span { display: block; height: 100%; background: var(--xr-green); border-radius: inherit; }
+.setup__label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--xr-text-2, #5f6469); margin: 0 0 4px; }
+.setup__title { margin: 0 0 4px; font-size: 18px; }
+.setup__next { padding: var(--xr-s-3); border: 1px solid var(--xr-border, #e7e8e6); border-radius: var(--xr-r-md, 12px); }
+.setup__next .xr-row { margin-top: var(--xr-s-3); }
+.setup__all { margin-top: var(--xr-s-3); }
+.setup__all summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.setup__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.setup__list li { display: flex; gap: 10px; align-items: center; }
+.setup__tick { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--xr-border-strong); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--xr-surface, #fff); }
+.setup__list li.is-done .setup__tick { background: var(--xr-green-text); border-color: var(--xr-green-text); }
+.setup__list li.is-done { color: var(--xr-text-2, #5f6469); }
+.setup__list li.is-next { font-weight: 700; }

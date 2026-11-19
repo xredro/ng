@@ -97,3 +97,9 @@
 .bld .product-tile.is-soldout .product-tile-image, .bld .product-tile.is-soldout .product-tile-name { opacity: 0.55; }
 .bld .product-tile-toggle { width: 100%; min-height: 36px; margin-top: 6px; padding: 0 6px; border: 1px solid var(--xr-border-strong); border-radius: var(--xr-r-pill); background: var(--xr-surface); color: var(--xr-text); font-size: 12px; white-space: nowrap; font-weight: var(--xr-fw-bold); cursor: pointer; }
 .bld .product-tile-toggle.is-soldout { background: var(--xr-neutral-bg); color: var(--xr-neutral-text); border-color: transparent; }
+
+/* quick start (starter stores) */
+.bld-quick { padding: var(--xr-s-4); margin-bottom: var(--xr-s-4); }
+.bld-quick__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--xr-s-2); margin: var(--xr-s-3) 0; }
+.bld-quick__btn { min-height: 56px; justify-content: center; text-align: center; }
+.bld-quick__btn { padding: 8px 10px; font-size: 15px; line-height: 1.25; white-space: normal; }
