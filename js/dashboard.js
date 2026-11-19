@@ -381,6 +381,7 @@ async function copyFormLink(platform = "current") {
   const link = getPublicFormLink(user.$id, platform);
   try {
     await copyTextCompat(link);
+    if (window.XrSetup) { XrSetup.markShared(user.$id); const c = document.getElementById("setupCard"); if (c && !c.hidden && typeof loadSetupCard === "function") loadSetupCard(user.$id); }
     showToast(`${platform === "cloudflare" ? "Cloudflare" : platform === "github" ? "GitHub" : "Customer form"} link copied`, "success");
   } catch (e) {
     showToast(e?.message || "Could not copy the link. Please copy it manually.", "error");
@@ -456,6 +457,22 @@ function viewPaymentImage(fileId) {
 }
 
 /* =========================
+SETUP CHECKLIST (new sellers)
+Shows one "next step" card from what is already saved. Failure here must never affect the dashboard, so everything is caught.
+========================= */
+async function loadSetupCard(userId) {
+  const el = document.getElementById("setupCard");
+  if (!el || !window.XrSetup) return;
+  let form = null, orderCount = 0;
+  try { form = await databases.getDocument(DB_ID, FORMS, userId); } catch (e) { form = null; /* no store saved yet */ }
+  try { orderCount = (await databases.listDocuments(DB_ID, ORDERS, [Query.equal("userId", userId), Query.limit(1)])).total || 0; } catch (e) { orderCount = 0; }
+  const draw = () => XrSetup.render(el, XrSetup.compute({ form, orderCount, shared: XrSetup.isShared(userId), storeUrl: getPublicFormLink(userId) }), {
+    share: async () => { await copyFormLink(); XrSetup.markShared(userId); draw(); }
+  });
+  draw();
+}
+
+/* =========================
 INITIALIZATION / BOOTSTRAP LOGIC
 ========================= */
 async function initDashboard() {
@@ -511,6 +528,7 @@ async function initDashboard() {
     const pendingCount = await loadStats(user.$id);
     await loadLatestOrders(user.$id);
     updateAttention(pendingCount);
+    loadSetupCard(user.$id);
   } catch (err) {
     console.error(err);
     showLoadError("We could not reach the server. Check your connection and reload the page.");

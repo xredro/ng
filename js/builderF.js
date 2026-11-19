@@ -339,6 +339,13 @@ async function saveForm() {
     }
   }
 
+  // a starter store still has samples or a placeholder name: say so before customers can order them
+  const leftovers = [];
+  const sampleCount = productFields.reduce((n, f) => n + f.products.filter(p => p && p.sample === true).length, 0);
+  if (sampleCount) leftovers.push(sampleCount + " sample product" + (sampleCount === 1 ? "" : "s"));
+  if (window.XrStarter && (!formTitle.trim() || formTitle.trim() === XrStarter.TITLE_PLACEHOLDER)) leftovers.push("a placeholder store name");
+  if (leftovers.length && !window.confirm("Your store still has " + leftovers.join(" and ") + ". Customers who open your link can order sample products. Save anyway?")) return;
+
   setSaving(true);
   try {
     const safeFields = fields.map(f => JSON.stringify(f));
@@ -808,6 +815,7 @@ async function uploadProductImage(fieldId, index, input) {
 
   product.imageId = uploaded.$id;
   product.imageUrl = previewUrl;
+  delete product.sample; // a real photo makes it the seller's own product
 
   renderFields();
 }
@@ -906,6 +914,8 @@ function normalizeFee(field){
 function updateProduct(fieldId, index, key, value) {
   const field = fields.find(f => f.id === fieldId);
   field.products[index][key] = value;
+  // editing the name or price makes a starter-store sample the seller's own product
+  if (key === "name" || key === "price") delete field.products[index].sample;
 }
 
 function removeProduct(fieldId, index) {
@@ -1131,13 +1141,17 @@ async function initBuilder() {
       showToast("Could not load your store. Check your connection and reload the page.", "error");
       return;
     }
-    await databases.createDocument(DB_ID, FORMS, user.$id, {
+    const created = await databases.createDocument(DB_ID, FORMS, user.$id, {
       userId: user.$id,
       fields: [],
       $createdAt: new Date().toISOString()
     });
     fields = [];
     formId = user.$id;
+    // a brand-new store knows straight away whether the storeConfig field exists, so Store details work without a reload
+    storeConfigSupported = !!created && Object.prototype.hasOwnProperty.call(created, "storeConfig");
+    storeConfig = storefrontNormalizeConfig(created && created.storeConfig);
+    fillStoreDetails();
   }
   
   if (!res.documents.length) return;    
@@ -1145,6 +1159,46 @@ async function initBuilder() {
   renderFields();
   setupFormLink();
   markSaved();
+  setupQuickStart();
+}
+
+/* =========================
+QUICK START (starter stores, js/starter-kits.js)
+A new seller picks what they sell and gets a ready store with sample products. Nothing is saved until they press Save.
+========================= */
+function setupQuickStart() {
+  const box = document.getElementById("quickStart");
+  if (!box || !window.XrStarter) return;
+  const isNew = fields.length === 0 && !String(formTitle || "").trim();
+  const forced = /[?&]quickstart=1\b/.test(window.location.search);
+  if (!isNew && !forced) return;
+  document.getElementById("qsGrid").innerHTML = XrStarter.STARTERS.map(s =>
+    `<button type="button" class="xr-btn xr-btn--secondary bld-quick__btn" data-starter="${s.key}">${escapeHtml(s.label)}</button>`).join("");
+  box.querySelectorAll("[data-starter]").forEach(b => b.addEventListener("click", () => applyStarter(b.getAttribute("data-starter"))));
+  document.getElementById("qsSkip").addEventListener("click", () => { box.hidden = true; });
+  box.hidden = false;
+}
+
+function applyStarter(key) {
+  const hasContent = fields.length > 0 || String(formTitle || "").trim();
+  if (hasContent && !window.confirm("This replaces your current products and store details with a starter store. Continue?")) return;
+  const uid = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : "f" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
+  const built = XrStarter.build(key, uid, path => new URL(path, document.baseURI).href);
+  if (!built) return;
+  fields.forEach(f => (f.products || []).forEach(p => { if (p && p.imageId) imagesMarkedForDeletion.push(p.imageId); }));
+  fields = built.fields;
+  fields.forEach(f => { if (f.type === "product") normalizeProducts(f); });
+  formTitle = built.title; formSubtitle = built.subtitle;
+  document.getElementById("titleInput").value = formTitle;
+  document.getElementById("subtitleInput").value = formSubtitle;
+  selectStoreTheme(built.theme);
+  if (storeConfigSupported) { storeConfig = Object.assign({}, storeConfig, built.storeConfig); fillStoreDetails(); }
+  renderFields();
+  document.getElementById("quickStart").hidden = true;
+  showToast("Your starter store is ready. Replace the samples with your products, then press Save.", "success");
+  const t = document.getElementById("titleInput");
+  if (t && t.scrollIntoView) t.scrollIntoView({ behavior: "smooth", block: "center" });
+  refreshDirty();
 }
 
 initBuilder();
