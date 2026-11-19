@@ -92,6 +92,9 @@
     </div>
   </div>
 
+  <!-- SETUP CHECKLIST: one "next step" card until the seller is set up (js/setup-checklist.js) -->
+  <section id="setupCard" class="setup xr-card dash-section" aria-labelledby="setupH" hidden></section>
+
   <section id="stats" class="xr-grid xr-grid--4 dash-section" aria-label="Order summary">
     <div class="xr-stat xr-stat--dark"><span class="xr-stat__value" id="totalOrders">&ndash;</span><span class="xr-stat__label">Total orders</span></div>
     <div class="xr-stat xr-stat--info"><span class="xr-stat__value" id="deliveredOrders">&ndash;</span><span class="xr-stat__label">Delivered</span></div>
@@ -157,6 +160,9 @@
 <script src="js/alert.js"></script>
 <script src="js/themeF.js"></script>
 <script src="js/time-left.js"></script>
+<script src="js/starter-kits.js"></script>
+<script src="js/help-config.js"></script>
+<script src="js/setup-checklist.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
   const burger = document.querySelector('.burger');
