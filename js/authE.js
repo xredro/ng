@@ -112,6 +112,7 @@ async function signup() {
     await account.createEmailSession(email, password);
     sessionCreated = true;
     await account.createVerification(new URL("verify.html", window.location.href).href);
+    try { sessionStorage.setItem("xr_just_signed_up", "1"); } catch (e) { /* tracking only */ }
     window.location.replace("verifyInfo.html");
   } catch (err) {
     console.error("SIGNUP ERROR:", err);
@@ -120,6 +121,7 @@ async function signup() {
     // user to the resend-verification screen instead of leaving a dead-end.
     if (sessionCreated) {
       showToast("Your account was created, but we couldn't send the verification email. You can request another one on the next screen.", "warning");
+      try { sessionStorage.setItem("xr_just_signed_up", "1"); } catch (e) { /* tracking only */ }
       setTimeout(() => window.location.replace("verifyInfo.html"), 900);
     } else if (accountCreated) {
       showToast("Your account was created. Log in to request the verification email again.", "warning");
@@ -246,6 +248,9 @@ async function ensureUserProvisioned(user) {
     try {
       await databases.createDocument(DB_ID, FORMS, user.$id, {
         userId: user.$id,
+        title: "My Business Name",
+        subtitle: "Welcome to X-Redro, place your order",
+        fields: defaultFields.map(f => JSON.stringify(f)),
         isActive: true,
         whatsappNumber: "",
         whatsappOrderRedirectEnabled: false
