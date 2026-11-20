@@ -248,9 +248,6 @@ async function ensureUserProvisioned(user) {
     try {
       await databases.createDocument(DB_ID, FORMS, user.$id, {
         userId: user.$id,
-        title: "My Business Name",
-        subtitle: "Welcome to X-Redro, place your order",
-        fields: defaultFields.map(f => JSON.stringify(f)),
         isActive: true,
         whatsappNumber: "",
         whatsappOrderRedirectEnabled: false
