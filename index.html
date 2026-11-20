@@ -32,6 +32,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap">
 <link rel="stylesheet" href="css/nav-shared.css">
 <link rel="stylesheet" href="css/landing.css">
+<link rel="stylesheet" href="css/support.css">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"X Redro","url":"https://xredro.github.io/ng/","logo":"https://xredro.github.io/ng/assets/logo-light.png","contactPoint":[{"@type":"ContactPoint","contactType":"customer support","email":"xredrocontact@gmail.com","telephone":"+2347055274048","areaServed":"NG","availableLanguage":"English"}]}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"X Redro","url":"https://xredro.github.io/ng/","inLanguage":"en-NG"}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"X Redro","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://xredro.github.io/ng/","description":"Create your online store in minutes. Pick one of nine designs, add products, share one link and manage orders and payment proof in one place. Free 7-day trial.","areaServed":"NG","offers":[{"@type":"Offer","name":"7 days","price":"1000","priceCurrency":"NGN"},{"@type":"Offer","name":"30 days","price":"3000","priceCurrency":"NGN"}]}</script>
@@ -45,7 +46,7 @@
 
     <div class="nav-actions">
       <a href="login.html" class="login">Log in</a>
-      <a href="signup.html" class="signup">Start Free Trial</a>
+      <a href="signup.html" class="signup" data-track="Lead">Start Free Trial</a>
     </div>
   </div>
 </nav>
@@ -57,10 +58,10 @@
       <h1>Your online store for WhatsApp and Instagram sellers in Nigeria</h1>
       <p class="lede">Pick a store design, add your products and share one link. Customers browse, add to cart and send their order with payment proof. You manage everything from one dashboard.</p>
       <div class="cta-row">
-        <a class="btn btn-lime" href="signup.html">Start free 7-day trial</a>
+        <a class="btn btn-lime" href="signup.html" data-track="Lead">Start free 7-day trial</a>
         <a class="btn btn-ghost" href="#stores">See the nine stores</a>
       </div>
-      <p class="fine">No website and no CAC needed. Works on any phone.</p>
+      <p class="fine">No website and no CAC needed. Works on any phone. <a href="demo.html?niche=fashion"><u>Try a demo store</u></a></p>
     </div>
     <div class="hero-visual">
       <img class="hero-shot" src="assets/themes/store-r5.webp" width="760" height="760" decoding="async" fetchpriority="high" alt="Two phone screens of an example fashion store: the home page, and the product list with prices and Add buttons">
@@ -172,8 +173,8 @@
     <div class="sec-head"><h2 id="price-h">Simple pricing in naira</h2>
     <p class="lede">Try it free for 7 days. Then pick the period that suits your selling.</p></div>
     <div class="plans">
-      <div class="card plan"><h3>7 days</h3><div class="price">&#8358;1,000</div><p>Good for a single drop or a trial run.</p><a class="btn btn-ghost" href="signup.html">Start free trial</a></div>
-      <div class="card plan dark"><h3>30 days</h3><div class="price">&#8358;3,000</div><p>For sellers taking orders all month.</p><a class="btn btn-lime" href="signup.html">Start free trial</a></div>
+      <div class="card plan"><h3>7 days</h3><div class="price">&#8358;1,000</div><p>Good for a single drop or a trial run.</p><a class="btn btn-ghost" href="signup.html" data-track="Lead">Start free trial</a></div>
+      <div class="card plan dark"><h3>30 days</h3><div class="price">&#8358;3,000</div><p>For sellers taking orders all month.</p><a class="btn btn-lime" href="signup.html" data-track="Lead">Start free trial</a></div>
     </div>
   </div>
 </section>
@@ -222,7 +223,7 @@
   <div class="final">
     <h2>Your store, your link, your orders</h2>
     <p>Create your store today and try it free for 7 days.</p>
-    <a class="btn btn-lime" href="signup.html">Start free trial</a>
+    <a class="btn btn-lime" href="signup.html" data-track="Lead">Start free trial</a>
   </div>
 </section>
 </main>
@@ -234,9 +235,15 @@
     <a href="#how">How it works</a>
     <a href="#pricing">Pricing</a>
     <a href="guides/">Guides</a>
+    <a href="demo.html">Demo store</a>
+    <a href="for-beauty.html">Beauty sellers</a>
+    <a href="for-fashion.html">Fashion sellers</a>
     <a href="#contact">Contact</a>
     <a href="login.html">Log in</a>
   </nav>
 </div></footer>
+<script src="js/site-config.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/support-button.js"></script>
 </body>
 </html>

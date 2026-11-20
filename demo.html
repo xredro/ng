@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en-NG">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo store | X Redro</title>
+  <meta name="description" content="Try a demo X Redro store with sample products. Browse, add to cart and see what your customers will see. No sign-up needed.">
+  <link rel="icon" href="assets/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/png" href="assets/favicon.png" sizes="512x512">
+  <link rel="stylesheet" href="css/form.shared.css">
+  <link rel="stylesheet" href="css/storefront-base.css">
+  <link rel="stylesheet" href="css/alert.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Space+Grotesk:wght@400;500&family=Archivo+Black&family=Inter:wght@400;500&family=Quicksand:wght@500;700&family=Sora:wght@600;700&family=Playfair+Display:wght@400;500&family=Roboto+Condensed:wght@400;700&family=Poppins:wght@500;700;800&family=Cormorant+Garamond:wght@500;600&family=Fredoka:wght@600;700&display=swap">
+  <link rel="stylesheet" href="css/theme-r1.css">
+  <link rel="stylesheet" href="css/theme-r2.css">
+  <link rel="stylesheet" href="css/theme-r3.css">
+  <link rel="stylesheet" href="css/theme-r4.css">
+  <link rel="stylesheet" href="css/theme-r5.css">
+  <link rel="stylesheet" href="css/theme-r6.css">
+  <link rel="stylesheet" href="css/theme-r7.css">
+  <link rel="stylesheet" href="css/theme-r8.css">
+  <link rel="stylesheet" href="css/theme-r9.css">
+  <link rel="stylesheet" href="css/demo.css">
+  <link rel="stylesheet" href="css/support.css">
+</head>
+<body data-support-offset="84">
+  <div class="demo-bar" id="demoBar">
+    <span><b>Demo store.</b> Sample products. Nothing is sent or saved.</span>
+    <span class="demo-chips" id="demoChips" aria-label="Choose a demo"></span>
+    <a class="demo-cta" href="signup.html" data-track="Lead">Start free 7-day trial</a>
+  </div>
+  <div id="root"></div>
+  <div id="toast-container"></div>
+  <div class="demo-modal" id="demoModal" role="dialog" aria-modal="true" aria-labelledby="demoModalH" hidden>
+    <div class="demo-modal__card">
+      <h2 id="demoModalH">This is where your customer sends their order</h2>
+      <p>In a real store, the customer then:</p>
+      <ul><li>enters the details you ask for</li><li>pays by bank transfer and uploads their payment proof</li><li>downloads an order card they can use to find their order again</li></ul>
+      <p>You see the order, with the proof attached, in your dashboard.</p>
+      <div class="demo-modal__row"><a class="primary" href="signup.html" data-track="Lead">Start free 7-day trial</a><button type="button" id="demoClose">Keep browsing</button></div>
+    </div>
+  </div>
+  <script src="js/site-config.js"></script>
+  <script src="js/analytics.js"></script>
+  <script src="js/alert.js"></script>
+  <script src="js/storefront-render.js"></script>
+  <script src="js/storefront-chrome.js"></script>
+  <script src="js/starter-kits.js"></script>
+  <script>
+  (function () {
+    var key = new URLSearchParams(location.search).get("niche");
+    var s = XrStarter.find(key) || XrStarter.STARTERS[1]; key = s.key;
+    var n = 0, built = XrStarter.build(key, function () { return "d" + (++n); }, function (p) { return new URL(p, document.baseURI).href; });
+    // the product pictures are the starter pictures; samples are labelled by the demo bar, not by changing prices
+    window.__PREVIEW__ = { fields: built.fields, formTitle: s.label.split(" &")[0] + " demo", formSubtitle: "A demo with sample products. Orders are not sent.",
+      themeClass: "theme-" + built.theme, storeConfig: built.storeConfig };
+    document.title = s.label + " demo store | X Redro";
+    document.getElementById("demoChips").innerHTML = XrStarter.STARTERS.map(function (x) {
+      return '<a href="demo.html?niche=' + x.key + '"' + (x.key === key ? ' aria-current="page"' : '') + '>' + x.label + '</a>'; }).join("");
+  })();
+  </script>
+  <script src="js/preview-runtime.js"></script>
+  <script>
+  (function () {
+    var modal = document.getElementById("demoModal"), closeBtn = document.getElementById("demoClose");
+    window.previewNoSubmit = function () { modal.hidden = false; closeBtn.focus(); if (window.xrTrack) window.xrTrack("ViewContent"); };
+    function close() { modal.hidden = true; }
+    closeBtn.addEventListener("click", close);
+    modal.addEventListener("click", function (e) { if (e.target === modal) close(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+    // this page has no real contact details, so tapping call/email links would only confuse
+  })();
+  </script>
+  <script src="js/support-button.js"></script>
+</body>
+</html>
