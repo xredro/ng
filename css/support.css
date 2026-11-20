@@ -1,0 +1,4 @@
+.xr-support { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 18px; border-radius: 999px; background: #1f7a3d; color: #fff; font: 700 15px/1 Manrope, Inter, system-ui, sans-serif; text-decoration: none; box-shadow: 0 6px 18px rgba(0,0,0,.22); }
+.xr-support:hover { background: #196632; }
+.xr-support:focus-visible { outline: 3px solid #9bdd78; outline-offset: 3px; }
+@media print { .xr-support { display: none; } }

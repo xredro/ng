@@ -1,0 +1,15 @@
+/* Demo store page (demo.html): a strip above a real store rendered by the same code customers see */
+.demo-bar { background: #16181A; color: #fff; padding: 10px 14px; font: 500 14px/1.4 Inter, system-ui, sans-serif; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: center; text-align: center; }
+.demo-bar b { font-weight: 700; }
+.demo-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.demo-chips a { color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 999px; padding: 6px 12px; min-height: 32px; display: inline-flex; align-items: center; text-decoration: none; font-size: 13px; }
+.demo-chips a[aria-current="page"] { background: #9bdd78; color: #14210f; border-color: #9bdd78; font-weight: 700; }
+.demo-cta { background: #9bdd78; color: #14210f; font-weight: 700; border-radius: 999px; padding: 8px 16px; text-decoration: none; min-height: 36px; display: inline-flex; align-items: center; }
+.demo-modal { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.demo-modal[hidden] { display: none; }
+.demo-modal__card { background: #fff; color: #16181A; border-radius: 18px; padding: 22px; max-width: 420px; width: 100%; font: 500 15px/1.5 Inter, system-ui, sans-serif; }
+.demo-modal__card h2 { margin: 0 0 8px; font-size: 20px; }
+.demo-modal__card ul { margin: 8px 0 14px; padding-left: 20px; }
+.demo-modal__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.demo-modal__row a, .demo-modal__row button { min-height: 44px; padding: 0 16px; border-radius: 999px; font: 700 15px Inter, system-ui, sans-serif; border: 1px solid #c9cdc7; background: #fff; color: #16181A; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+.demo-modal__row a.primary { background: #9bdd78; border-color: #9bdd78; color: #14210f; }
