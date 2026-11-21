@@ -71,7 +71,8 @@
       <div class="setup__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-labelledby="setupH"><span style="width:${pct}%"></span></div>
       <div class="setup__next"><p class="setup__label">Next step</p><h3 class="setup__title">${esc(n.title)}</h3><p class="xr-text-2">${esc(n.why)}</p>
         <div class="xr-row">${btn(n, true)}${vid ? `<a class="xr-btn xr-btn--ghost xr-btn--sm" href="${esc(vid)}" target="_blank" rel="noopener">Watch the video</a>` : ""}</div></div>
-      <details class="setup__all"><summary>See all steps</summary><ol class="setup__list">${list}</ol></details>`;
+      <details class="setup__all"><summary>See all steps</summary><ol class="setup__list">${list}</ol></details>
+      <p class="setup__help xr-small"><a href="help.html">Help and videos</a></p>`;
     el.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => handlers && handlers[b.getAttribute("data-run")] && handlers[b.getAttribute("data-run")]()));
   }
 
