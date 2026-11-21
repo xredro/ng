@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en-NG">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="PO_G1d7GQKYRvvJaNFhzYdlIFsoD7_JkDKQg-AFDdRg">
+<title>X Redro has moved</title>
+<script>
+/* Old address: https://xredro.github.io/ng/<page>?<query>#<hash>  ->  New address: https://xredro.pages.dev/<page>?<query>#<hash>
+   Every old link keeps working (store links, order links, email verification and password-reset links). */
+(function () {
+  var NEW = "https://xredro.pages.dev";
+  if (location.hostname === "xredro.pages.dev") return;                    // never loop
+  var path = location.pathname.replace(/^\/ng(\/|$)/, "/");                  // drop the old /ng folder
+  location.replace(NEW + path + location.search + location.hash);
+})();
+</script>
+</head>
+<body>
+<p>X Redro has moved. <a id="go" href="https://xredro.pages.dev/">Continue to xredro.pages.dev</a></p>
+<script>document.getElementById("go").href = "https://xredro.pages.dev" + location.pathname.replace(/^\/ng(\/|$)/, "/") + location.search + location.hash;</script>
+</body>
+</html>
