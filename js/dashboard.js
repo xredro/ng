@@ -467,9 +467,19 @@ async function loadSetupCard(userId) {
   try { form = await databases.getDocument(DB_ID, FORMS, userId); } catch (e) { form = null; /* no store saved yet */ }
   try { orderCount = (await databases.listDocuments(DB_ID, ORDERS, [Query.equal("userId", userId), Query.limit(1)])).total || 0; } catch (e) { orderCount = 0; }
   const draw = () => XrSetup.render(el, XrSetup.compute({ form, orderCount, shared: XrSetup.isShared(userId), storeUrl: getPublicFormLink(userId) }), {
-    share: async () => { await copyFormLink(); XrSetup.markShared(userId); draw(); }
+    share: () => openShareKit()
   });
   draw();
+}
+
+/* =========================
+SHARE KIT (js/share-kit.js): a share image and captions from the seller's own store
+========================= */
+async function openShareKit() {
+  if (!window.XrShare || !user) return;
+  let form = null;
+  try { form = await databases.getDocument(DB_ID, FORMS, user.$id); } catch (e) { form = null; /* no store saved yet */ }
+  XrShare.open({ form, link: getPublicFormLink(user.$id), onShared: () => { if (window.XrSetup) { XrSetup.markShared(user.$id); loadSetupCard(user.$id); } } });
 }
 
 /* =========================

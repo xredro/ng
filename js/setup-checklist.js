@@ -39,8 +39,8 @@
         done: contactDone, action: { label: "Add WhatsApp number", href: "settings.html#waH" } },
       { id: "test", title: "Place a test order", why: "Order from your own store as a customer to see exactly what your customers see. You can delete it afterwards.",
         done: Number(i.orderCount) > 0, action: { label: "Open my store", href: i.storeUrl || "#", external: true } },
-      { id: "share", title: "Share your store link", why: "Post it on WhatsApp Status, your Instagram bio and in your DMs.",
-        done: i.shared === true, action: { label: "Copy my link", run: "share" } }
+      { id: "share", title: "Share your store link", why: "Get a ready share image and captions for WhatsApp Status, Instagram and your DMs.",
+        done: i.shared === true, action: { label: "Open share kit", run: "share" } }
     ];
     const done = steps.filter(s => s.done).length;
     return { steps, done, total: steps.length, next: steps.find(s => !s.done) || null, complete: done === steps.length };
