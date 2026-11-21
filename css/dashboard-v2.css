@@ -60,3 +60,13 @@
 .setup__list li.is-next { font-weight: 700; }
 .setup__help { margin: var(--xr-s-3) 0 0; }
 .setup__help a { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; }
+
+/* share kit sheet */
+.share { display: grid; gap: var(--xr-s-3); }
+.share__head { display: flex; align-items: center; justify-content: space-between; gap: var(--xr-s-3); }
+.share__fmt, .share__tabs { display: flex; flex-wrap: wrap; gap: var(--xr-s-2); }
+.share [aria-pressed="true"] { background: var(--xr-text); color: var(--xr-surface); border-color: var(--xr-text); }
+.share__stage { display: flex; justify-content: center; padding: var(--xr-s-3); background: var(--xr-surface-2); border-radius: var(--xr-r-lg); }
+.share__stage canvas { display: block; width: 100%; max-width: 260px; height: auto; border-radius: 12px; box-shadow: var(--xr-shadow-md, 0 4px 14px rgba(0,0,0,.18)); }
+.share__h { margin: var(--xr-s-2) 0 0; }
+.share .xr-textarea { min-height: 150px; }
