@@ -69,7 +69,7 @@
 
 /* product editor: a bottom sheet on phones, a dialog from 600px */
 .product-editor-overlay { position: fixed; inset: 0; z-index: var(--xr-z-sheet); display: flex; align-items: flex-end; justify-content: center; background: var(--xr-overlay); }
-.product-editor-card { display: flex; flex-direction: column; gap: var(--xr-s-4); width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; padding: var(--xr-s-5) var(--xr-s-5) calc(var(--xr-s-5) + env(safe-area-inset-bottom, 0px)); border-radius: var(--xr-r-xl) var(--xr-r-xl) 0 0; background: var(--xr-surface); color: var(--xr-text); box-shadow: var(--xr-shadow-lg); }
+.product-editor-card { display: flex; flex-direction: column; gap: var(--xr-s-4); width: 100%; max-width: 520px; max-height: 92vh; max-height: 92dvh; overflow-y: auto; padding: var(--xr-s-5) var(--xr-s-5) calc(var(--xr-s-5) + env(safe-area-inset-bottom, 0px)); border-radius: var(--xr-r-xl) var(--xr-r-xl) 0 0; background: var(--xr-surface); color: var(--xr-text); box-shadow: var(--xr-shadow-lg); }
 @media (min-width: 600px) { .product-editor-overlay { align-items: center; padding: var(--xr-s-4); } .product-editor-card { border-radius: var(--xr-r-xl); } }
 .product-editor-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--xr-fs-lg); }
 .product-editor-close { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--xr-surface-2); color: var(--xr-text); font-size: 24px; line-height: 1; cursor: pointer; }
@@ -103,3 +103,8 @@
 .bld-quick__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--xr-s-2); margin: var(--xr-s-3) 0; }
 .bld-quick__btn { min-height: 56px; justify-content: center; text-align: center; }
 .bld-quick__btn { padding: 8px 10px; font-size: 15px; line-height: 1.25; white-space: normal; }
+
+/* Short screens: the card scrolls instead of squeezing its parts. Without this the picture box shrank to 0 px tall
+   (it hides its overflow), which clipped the "Upload image / Change image" button so it could not be tapped. */
+.product-editor-card > * { flex-shrink: 0; }
+.product-editor-image { min-height: 128px; }
