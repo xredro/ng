@@ -51,8 +51,8 @@
   function markShared(uid) { try { localStorage.setItem(sharedKey(uid), "1"); } catch (e) { /* storage blocked: the step simply stays open */ } }
 
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  // help videos are optional: a step only shows "Watch" when the seller's platform owner has set a link in js/help-config.js
-  function videoFor(id) { const h = root.XR_HELP; return h && h.videos && /^https:\/\//.test(h.videos[id] || "") ? h.videos[id] : ""; }
+  // help videos are optional: a step only shows "Watch" when js/help-config.js has an https:// link or a path under assets/videos/
+  function videoFor(id) { const h = root.XR_HELP; const v = h && h.videos ? String(h.videos[id] || "") : ""; return /^https:\/\//.test(v) || /^assets\/videos\/[\w.-]+$/.test(v) ? v : ""; }
 
   function render(el, state, handlers) {
     if (!el) return;
@@ -70,7 +70,7 @@
     el.innerHTML = `<div class="setup__top"><h2 class="xr-h3" id="setupH">Get your store ready</h2><span class="xr-small xr-text-2">${state.done} of ${state.total} done</span></div>
       <div class="setup__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-labelledby="setupH"><span style="width:${pct}%"></span></div>
       <div class="setup__next"><p class="setup__label">Next step</p><h3 class="setup__title">${esc(n.title)}</h3><p class="xr-text-2">${esc(n.why)}</p>
-        <div class="xr-row">${btn(n, true)}${vid ? `<a class="xr-btn xr-btn--ghost xr-btn--sm" href="${esc(vid)}" target="_blank" rel="noopener">Watch (30 seconds)</a>` : ""}</div></div>
+        <div class="xr-row">${btn(n, true)}${vid ? `<a class="xr-btn xr-btn--ghost xr-btn--sm" href="${esc(vid)}" target="_blank" rel="noopener">Watch the video</a>` : ""}</div></div>
       <details class="setup__all"><summary>See all steps</summary><ol class="setup__list">${list}</ol></details>`;
     el.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", () => handlers && handlers[b.getAttribute("data-run")] && handlers[b.getAttribute("data-run")]()));
   }
