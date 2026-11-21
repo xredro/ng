@@ -27,7 +27,7 @@
   <div class="demo-bar" id="demoBar">
     <span><b>Demo store.</b> Sample products. Nothing is sent or saved.</span>
     <span class="demo-chips" id="demoChips" aria-label="Choose a demo"></span>
-    <a class="demo-cta" href="signup.html" data-track="Lead">Start free 7-day trial</a>
+    <a class="demo-cta" href="signup.html">Start free 7-day trial</a>
   </div>
   <div id="root"></div>
   <div id="toast-container"></div>
@@ -37,12 +37,11 @@
       <p>In a real store, the customer then:</p>
       <ul><li>enters the details you ask for</li><li>pays by bank transfer and uploads their payment proof</li><li>downloads an order card they can use to find their order again</li></ul>
       <p>You see the order, with the proof attached, in your dashboard.</p>
-      <div class="demo-modal__row"><a class="primary" href="signup.html" data-track="Lead">Start free 7-day trial</a><button type="button" id="demoClose">Keep browsing</button></div>
+      <div class="demo-modal__row"><a class="primary" href="signup.html">Start free 7-day trial</a><button type="button" id="demoClose">Keep browsing</button></div>
     </div>
   </div>
   <script src="js/site-config.js"></script>
-  <script src="js/analytics.js"></script>
-  <script src="js/alert.js"></script>
+    <script src="js/alert.js"></script>
   <script src="js/storefront-render.js"></script>
   <script src="js/storefront-chrome.js"></script>
   <script src="js/starter-kits.js"></script>
@@ -63,7 +62,7 @@
   <script>
   (function () {
     var modal = document.getElementById("demoModal"), closeBtn = document.getElementById("demoClose");
-    window.previewNoSubmit = function () { modal.hidden = false; closeBtn.focus(); if (window.xrTrack) window.xrTrack("ViewContent"); };
+    window.previewNoSubmit = function () { modal.hidden = false; closeBtn.focus(); };
     function close() { modal.hidden = true; }
     closeBtn.addEventListener("click", close);
     modal.addEventListener("click", function (e) { if (e.target === modal) close(); });
