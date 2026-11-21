@@ -75,6 +75,7 @@
     </div>
     <div class="xr-row">
       <button type="button" class="xr-btn xr-btn--primary" onclick="copyFormLink()">Copy store link</button>
+      <button type="button" class="xr-btn xr-btn--secondary" id="shareKitBtn" onclick="openShareKit()">Share kit</button>
       <a class="xr-btn xr-btn--secondary" id="viewStoreLink" href="#" target="_blank" rel="noopener">View store</a>
     </div>
   </header>
@@ -146,6 +147,33 @@
 
 <div id="paymentImageModal" class="modal hidden" onclick="this.classList.add('hidden')"></div>
 
+<!-- SHARE KIT: image + captions built from the seller's own store (js/share-kit.js) -->
+<div id="shareModal" class="xr-modal" hidden>
+  <div class="xr-modal__backdrop" data-close></div>
+  <div class="xr-modal__dialog share" role="dialog" aria-modal="true" aria-labelledby="shareH">
+    <div class="share__head"><h2 class="xr-h3" id="shareH">Share your store</h2><button type="button" class="xr-btn xr-btn--ghost xr-btn--sm" data-close>Close</button></div>
+    <p id="shareWarn" class="xr-error" role="alert" hidden></p>
+    <div id="shareCapture">
+      <div class="share__fmt" id="shareFmt" role="group" aria-label="Image size">
+        <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" data-fmt="status" aria-pressed="true">Status (tall)</button>
+        <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" data-fmt="post" aria-pressed="false">Post (square)</button>
+      </div>
+      <div class="share__stage"><canvas id="shareCanvas" role="img" aria-label="Preview of your share image"></canvas></div>
+      <p id="shareNote" class="xr-small xr-text-2" aria-live="polite"></p>
+      <div class="xr-row"><button type="button" class="xr-btn xr-btn--primary" id="shareImgBtn">Share image</button><button type="button" class="xr-btn xr-btn--secondary" id="shareDl">Download image</button></div>
+    </div>
+    <h3 class="xr-h4 share__h">Captions</h3>
+    <div class="share__tabs" role="group" aria-label="Caption type">
+      <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" data-cap="status" aria-pressed="true">WhatsApp Status</button>
+      <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" data-cap="post" aria-pressed="false">Instagram post</button>
+      <button type="button" class="xr-btn xr-btn--secondary xr-btn--sm" data-cap="dm" aria-pressed="false">Reply to a customer</button>
+    </div>
+    <label class="xr-sr-only" for="shareCaption">Caption (you can edit it)</label>
+    <textarea id="shareCaption" class="xr-textarea" rows="8"></textarea>
+    <div class="xr-row"><button type="button" class="xr-btn xr-btn--primary" id="shareCopyCap">Copy caption</button><button type="button" class="xr-btn xr-btn--secondary" id="shareCopyLink">Copy link</button></div>
+  </div>
+</div>
+
 <div id="subscriptionModal" class="modal hidden">
   <div class="xr-card dash-modal-card" role="dialog" aria-modal="true" aria-labelledby="subTitle">
     <h2 class="xr-h2" id="subTitle">Your subscription has expired</h2>
@@ -164,6 +192,7 @@
 <script src="js/starter-kits.js"></script>
 <script src="js/help-config.js"></script>
 <script src="js/setup-checklist.js"></script>
+<script src="js/share-kit.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
   const burger = document.querySelector('.burger');
