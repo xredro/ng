@@ -16,3 +16,6 @@
 /* older settings.css rules make every button wide and every label grey; restore the components */
 .set .xr-card__head .xr-btn { width: auto; flex: none; }
 .set .set-switch, .set .xr-label { color: var(--xr-text); }
+
+.set-helplink { margin-top: var(--xr-s-4); }
+.set-helplink a { font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }

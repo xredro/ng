@@ -58,3 +58,5 @@
 .setup__list li.is-done .setup__tick { background: var(--xr-green-text); border-color: var(--xr-green-text); }
 .setup__list li.is-done { color: var(--xr-text-2, #5f6469); }
 .setup__list li.is-next { font-weight: 700; }
+.setup__help { margin: var(--xr-s-3) 0 0; }
+.setup__help a { min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; }

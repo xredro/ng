@@ -1,0 +1,12 @@
+/* Help page (help.html) */
+.hero--help { padding-block: 40px 20px; }
+.hv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; align-items: start; }
+.hv { padding: 16px; }
+.hv h3 { margin: 0 0 2px; font-size: 18px; }
+.hv__len { margin: 0 0 10px; font-size: 13px; color: var(--text-muted); }
+.hv video { display: block; width: 100%; max-width: 300px; height: auto; aspect-ratio: 390 / 844; margin: 0 auto 12px; border-radius: 14px; background: #16181A; border: 1px solid var(--border); }
+.hv details { margin-top: 8px; }
+.hv summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
+.hv ol { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.hf__grp { margin: 28px 0 8px; font-size: 18px; }
+.hf__grp:first-child { margin-top: 0; }
